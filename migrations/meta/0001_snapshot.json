@@ -1,0 +1,189 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "bb5718b4-8138-44d0-b19c-1153c525c911",
+  "prevId": "9794b546-922e-42a5-99cd-099668a724bb",
+  "tables": {
+    "lanes": {
+      "name": "lanes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "range_id": {
+          "name": "range_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "number": {
+          "name": "number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "lanes_range_number_unique": {
+          "name": "lanes_range_number_unique",
+          "columns": [
+            "range_id",
+            "number"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "lanes_range_id_ranges_id_fk": {
+          "name": "lanes_range_id_ranges_id_fk",
+          "tableFrom": "lanes",
+          "tableTo": "ranges",
+          "columnsFrom": [
+            "range_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "lanes_number_positive_integer": {
+          "name": "lanes_number_positive_integer",
+          "value": "\"lanes\".\"number\" > 0 AND typeof(\"lanes\".\"number\") = 'integer'"
+        }
+      }
+    },
+    "range_distances": {
+      "name": "range_distances",
+      "columns": {
+        "range_id": {
+          "name": "range_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "distance_meters": {
+          "name": "distance_meters",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "range_distances_range_id_ranges_id_fk": {
+          "name": "range_distances_range_id_ranges_id_fk",
+          "tableFrom": "range_distances",
+          "tableTo": "ranges",
+          "columnsFrom": [
+            "range_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "range_distances_range_id_distance_meters_pk": {
+          "columns": [
+            "range_id",
+            "distance_meters"
+          ],
+          "name": "range_distances_range_id_distance_meters_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "range_distances_positive": {
+          "name": "range_distances_positive",
+          "value": "\"range_distances\".\"distance_meters\" > 0"
+        }
+      }
+    },
+    "ranges": {
+      "name": "ranges",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ranges_name_not_blank": {
+          "name": "ranges_name_not_blank",
+          "value": "length(trim(\"ranges\".\"name\")) > 0"
+        }
+      }
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'admin'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

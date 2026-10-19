@@ -1,0 +1,1 @@
+ALTER TABLE `competition_participants` ADD `bow_type` text REFERENCES bow_types(name);

@@ -21,5 +21,6 @@ try {
   await app.listen({ host, port });
 } catch (error) {
   app.log.error(error);
+  await app.close();
   process.exitCode = 1;
 }
