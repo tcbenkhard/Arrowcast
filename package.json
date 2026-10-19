@@ -1,0 +1,20 @@
+{
+  "name": "arrowcast",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": { "node": ">=24.13.0 <25", "npm": ">=11 <12" },
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@arrowcast/web",
+    "dev:api": "npm run dev --workspace=@arrowcast/api",
+    "build": "npm run build --workspaces",
+    "build:web": "npm run build --workspace=@arrowcast/web",
+    "build:api": "npm run build --workspace=@arrowcast/api",
+    "typecheck": "npm run typecheck --workspaces",
+    "start:api": "npm run start --workspace=@arrowcast/api"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}
