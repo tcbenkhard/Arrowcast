@@ -1,0 +1,22 @@
+[Unit]
+Description=Assign IP addresses to ArrowCast Wi-Fi clients
+Wants=arrowcast-hotspot.service
+After=arrowcast-hotspot.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/arrowcast/dnsmasq.conf --pid-file=
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=arrowcast-dhcp
+# dnsmasq drops to nobody after opening its DHCP sockets.
+RuntimeDirectoryMode=0775
+ExecStartPre=/usr/bin/chown nobody:nogroup /run/arrowcast-dhcp
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/run/arrowcast-dhcp
+
+[Install]
+WantedBy=multi-user.target

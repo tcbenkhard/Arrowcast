@@ -1,5 +1,11 @@
 # Projecthandoff: eenvoudige boogschietcompetitiewebsite
 
+> Deploymentbesluit (20 oktober 2026): het
+> [Raspberry Pi-installatie- en updateplan](RASPBERRY-PI-PLAN.md) vervangt de
+> Docker/Compose-deploymentvoorstellen in dit document. De Pi-image bevat de
+> applicatie en Node.js; systemd beheert de processen en SQLite blijft de database.
+> De Docker-voorbeelden hieronder zijn historische voorstellen.
+
 ## 1. Doel en context
 
 Bouw een nieuwe, zelfstandige website voor het organiseren en scoren van

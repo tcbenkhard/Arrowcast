@@ -452,6 +452,17 @@ TanStack Query, Tailwind, TypeBox, gebruikersbeheer en
 scoreberekening worden toegevoegd bij de bijbehorende implementatie.
 Score entry is available through the lane QR links described below.
 
-Ook Docker/Compose, het serveren van frontendbestanden door Fastify, healthchecks,
-het persistente volume en ARM64-validatie volgen later. De huidige basis is nog
-geen productiedeployment; de architectuuroverdracht blijft daarvoor leidend.
+De workflow [Raspberry Pi image](.github/workflows/pi-image.yml) bouwt een native
+ARM64 SD-kaartimage met nginx, Node.js, systemd en SQLite, zonder Docker.
+Zie [bouwen, downloaden en installeren](docs/pi-image.md). Handmatig starten maakt
+een downloadbaar Actions-artifact; een versietag maakt ook een conceptrelease.
+Een fysieke Pi-bootcheck is vereist voordat die release wordt gepubliceerd.
+De image zendt het open wifi-netwerk **ArrowCast** uit. Verbind zonder
+wifi-wachtwoord en open `http://10.42.0.1/admin`; Ethernet blijft ook beschikbaar.
+Het unieke beheerwachtwoord wordt op HDMI getoond.
+De standaard ontwikkellogin `admin` / `admin` geldt niet voor deze image.
+
+Het [Raspberry Pi-installatie- en updateplan](RASPBERRY-PI-PLAN.md) beschrijft
+de verdere browsergestuurde eerste installatie, back-ups, herstel en updates
+zonder kennis van Docker of Linux. Deze functies volgen later; dit plan vervangt
+het eerdere Docker-voorstel uit de architectuuroverdracht.

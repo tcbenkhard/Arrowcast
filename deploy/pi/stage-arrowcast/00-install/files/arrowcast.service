@@ -1,0 +1,28 @@
+[Unit]
+Description=Arrowcast website and API
+Requires=arrowcast-first-boot.service
+After=arrowcast-first-boot.service network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=arrowcast
+Group=arrowcast
+WorkingDirectory=/opt/arrowcast
+EnvironmentFile=/etc/arrowcast/arrowcast.env
+ExecStart=/opt/arrowcast/runtime/bin/node apps/api/dist/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+UMask=0027
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/arrowcast
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

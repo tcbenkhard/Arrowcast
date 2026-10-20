@@ -1,0 +1,20 @@
+[Unit]
+Description=Show Arrowcast address and device password on HDMI
+Requires=arrowcast-first-boot.service
+After=arrowcast-first-boot.service network-online.target
+Wants=network-online.target
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/arrowcast/console.sh
+RemainAfterExit=yes
+StandardInput=null
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=multi-user.target

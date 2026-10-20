@@ -1,0 +1,20 @@
+IMG_NAME='arrowcast-arm64'
+RELEASE='trixie'
+PI_GEN_RELEASE='Arrowcast Raspberry Pi appliance'
+DEPLOY_COMPRESSION='xz'
+COMPRESSION_LEVEL=6
+TARGET_HOSTNAME='arrowcast'
+LOCALE_DEFAULT='en_GB.UTF-8'
+KEYBOARD_KEYMAP='gb'
+KEYBOARD_LAYOUT='English (UK)'
+TIMEZONE_DEFAULT='Europe/Amsterdam'
+# Wi-Fi regulatory domain. Change this before building for another country.
+WPA_COUNTRY='NL'
+FIRST_USER_NAME='pi'
+# This account is locked in our final stage. No shared OS password is shipped.
+FIRST_USER_PASS='image-build-only-account-locked-before-export'
+DISABLE_FIRST_BOOT_USER_RENAME=1
+PASSWORDLESS_SUDO=0
+ENABLE_SSH=0
+ENABLE_CLOUD_INIT=0
+STAGE_LIST='stage0 stage1 stage2 stage-arrowcast'

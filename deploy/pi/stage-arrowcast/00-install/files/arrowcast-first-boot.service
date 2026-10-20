@@ -1,0 +1,13 @@
+[Unit]
+Description=Initialise Arrowcast device secrets and storage
+Before=arrowcast.service arrowcast-console.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/arrowcast/first-boot.sh
+RemainAfterExit=yes
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+[Unit]
+Description=Broadcast the open ArrowCast Wi-Fi network
+Requires=NetworkManager.service
+After=NetworkManager.service
+Before=arrowcast-dhcp.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/rfkill unblock wifi
+ExecStart=/usr/bin/nmcli radio wifi on
+ExecStart=/usr/bin/nmcli --wait 60 connection up uuid e9f2d6bd-75ab-4b2f-9a48-1f67de407cd9
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

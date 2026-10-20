@@ -1,0 +1,10 @@
+nginx-light
+network-manager
+dnsmasq-base
+rfkill
+ca-certificates
+curl
+xz-utils
+python3
+make
+g++

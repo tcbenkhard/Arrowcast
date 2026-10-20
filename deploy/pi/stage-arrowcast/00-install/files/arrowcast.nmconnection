@@ -1,0 +1,25 @@
+[connection]
+id=ArrowCast
+uuid=e9f2d6bd-75ab-4b2f-9a48-1f67de407cd9
+type=wifi
+interface-name=wlan0
+autoconnect=true
+autoconnect-priority=100
+autoconnect-retries=0
+
+[wifi]
+mode=ap
+ssid=ArrowCast
+band=bg
+channel=6
+hidden=false
+powersave=2
+
+# No wifi-security section: intentionally open, with no WPA password.
+[ipv4]
+method=manual
+address1=10.42.0.1/24
+never-default=true
+
+[ipv6]
+method=disabled
