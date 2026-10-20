@@ -77,8 +77,11 @@ validation are still required before claiming these as supported minimums.
   to the wrong Pi. Custom network names/subnets are not yet exposed in a UI.
 
 The credentials screen is available on HDMI at each boot. It is deliberately
-not a Linux login prompt. There is no shared Linux password, SSH is disabled,
-and the build does not include application secrets or a populated database.
+not a Linux login prompt. SSH is enabled: run `ssh pi@10.42.0.1` on the hotspot
+and use the initial administrator password shown on HDMI. The `pi` account has
+sudo access; use `passwd` to change its SSH password independently of the website.
+There is no shared Linux password, and the build does not include application
+secrets or a populated database. SSH host keys are generated on the device.
 First boot generates the password and JWT secret on the Pi. Existing databases
 and passwords survive subsequent boots. There is currently no password-change
 or password-recovery UI; keep the generated password safe. Anyone with physical

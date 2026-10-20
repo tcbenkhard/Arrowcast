@@ -18,3 +18,12 @@ JS
 fi
 chown root:arrowcast /etc/arrowcast/arrowcast.env
 chmod 0640 /etc/arrowcast/arrowcast.env
+# Set the initial SSH password once; preserve later changes made with passwd.
+if [[ ! -f /etc/arrowcast/ssh-password-initialised ]]; then
+  # shellcheck source=/dev/null
+  source /etc/arrowcast/arrowcast.env
+  printf 'pi:%s\n' "$INITIAL_ADMIN_PASSWORD" | chpasswd
+  touch /etc/arrowcast/ssh-password-initialised
+fi
+# The image contains no shared host keys.
+ssh-keygen -A

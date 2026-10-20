@@ -11,10 +11,10 @@ TIMEZONE_DEFAULT='Europe/Amsterdam'
 # Wi-Fi regulatory domain. Change this before building for another country.
 WPA_COUNTRY='NL'
 FIRST_USER_NAME='pi'
-# This account is locked in our final stage. No shared OS password is shipped.
+# Locked during build; first boot sets the per-device password shown on HDMI.
 FIRST_USER_PASS='image-build-only-account-locked-before-export'
 DISABLE_FIRST_BOOT_USER_RENAME=1
 PASSWORDLESS_SUDO=0
-ENABLE_SSH=0
+ENABLE_SSH=1
 ENABLE_CLOUD_INIT=0
 STAGE_LIST='stage0 stage1 stage2 stage-arrowcast'

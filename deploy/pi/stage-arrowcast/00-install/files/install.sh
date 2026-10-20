@@ -41,8 +41,8 @@ groupadd --system arrowcast
 useradd --system --gid arrowcast --home-dir /var/lib/arrowcast --shell /usr/sbin/nologin arrowcast
 install -d -m 0750 -o arrowcast -g arrowcast /var/lib/arrowcast
 install -d -m 0750 -o root -g arrowcast /etc/arrowcast
-# Never ship the build-time Linux account password or permit interactive login.
-usermod --lock --shell /usr/sbin/nologin pi
+# Keep the account locked until first boot replaces the build-time password.
+usermod --lock --shell /bin/bash pi
 ln -sf /etc/nginx/sites-available/arrowcast /etc/nginx/sites-enabled/arrowcast
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
@@ -51,7 +51,14 @@ nmcli --offline connection modify connection.id ArrowCast \
 dnsmasq --test --conf-file=/etc/arrowcast/dnsmasq.conf
 systemctl enable arrowcast-first-boot.service arrowcast.service arrowcast-console.service nginx avahi-daemon
 systemctl enable NetworkManager arrowcast-hotspot.service arrowcast-dhcp.service
-systemctl disable ssh
+mkdir -p /etc/systemd/system/ssh.service.d /etc/ssh/sshd_config.d
+cat > /etc/systemd/system/ssh.service.d/arrowcast.conf <<'SSH'
+[Unit]
+Requires=arrowcast-first-boot.service
+After=arrowcast-first-boot.service
+SSH
+printf 'PasswordAuthentication yes\n' > /etc/ssh/sshd_config.d/00-arrowcast.conf
+systemctl enable ssh
 systemctl mask getty@tty1.service
 # Keep unattended package activity from restarting services during competition use.
 systemctl disable apt-daily.timer apt-daily-upgrade.timer
