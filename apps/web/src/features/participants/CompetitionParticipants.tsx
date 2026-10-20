@@ -15,6 +15,12 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
   const canAdd = status === 'Scheduled';
   const canSelect = status === 'Scheduled';
   const [people, setPeople] = useState<Participant[]>([]);
+  const [participantFilter, setParticipantFilter] = useState('');
+  const filterTerms = checkingIn ? participantFilter.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean) : [];
+  const visiblePeople = people.filter((person) => {
+    const searchable = `${person.name} ${person.federationNumber} ${person.clubNumber} ${person.clubName}`.toLocaleLowerCase();
+    return filterTerms.every((term) => searchable.includes(term));
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -177,19 +183,24 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
         <p className="error" role="alert">{removeError}</p>
         <button className="secondary retry-button" disabled={!canRemove || busy || !selectedIds.size} onClick={() => { void unregisterSelected(); }}>Opnieuw proberen</button>
       </div>}
+      {checkingIn && <div className="participant-search-field participant-filter">
+        <label htmlFor="check-in-participant-filter">Filter participants</label>
+        <input id="check-in-participant-filter" type="search" placeholder="Name, federation number or club"
+          value={participantFilter} onChange={(event) => setParticipantFilter(event.target.value)} />
+      </div>}
       <div className="table-scroll"><table className="participants-table" aria-label="Competition participants">
       <thead><tr>{canSelect && <th scope="col"><label className="lane-selection">
         <input ref={selectAll} type="checkbox" aria-label="Select all participants" checked={allSelected} disabled={busy || !people.length}
           onChange={(event) => { setSelectedIds(event.target.checked ? new Set(people.map((person) => person.id)) : new Set()); setRemoveError(''); setTargetError(''); setNotice(''); }} />
       </label></th>}{['#', 'Name', 'Club', 'Bow type', 'Target', ...(checkingIn ? ['Assignment', 'Check-in'] : [])].map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead>
-      <tbody>{people.length ? people.map((person) => <tr key={person.id} className={canSelect && selectedIds.has(person.id) ? 'lane-selected' : undefined}>
+      <tbody>{visiblePeople.length ? visiblePeople.map((person) => <tr key={person.id} className={canSelect && selectedIds.has(person.id) ? 'lane-selected' : undefined}>
         {canSelect && <td><input type="checkbox" className="lane-select-checkbox" aria-label={`Select participant ${person.name} (${person.federationNumber})`}
           checked={selectedIds.has(person.id)} disabled={busy} onChange={(event) => selectPerson(person.id, event.target.checked)} /></td>}
         <td>{person.federationNumber}</td><th scope="row">{person.name}</th><td>[{person.clubNumber}] {person.clubName}</td><td>{person.bowType ?? '—'}</td><td>{person.targetType ?? '\u2014'}</td>
         {checkingIn && <><td>{person.laneId && person.targetLetter ? `Lane ${lanes.find((l) => l.laneId === person.laneId)?.number ?? '?'} ${person.targetLetter}` : '\u2014'}</td>
         <td><input type="checkbox" aria-label={`Check in ${person.name} (${person.federationNumber})`} checked={person.checkedIn ?? false}
           disabled={busy} onChange={() => { void updateAssignment(person); }} /></td></>}
-      </tr>) : <tr><td colSpan={5 + (canSelect ? 1 : 0) + (checkingIn ? 2 : 0)}>No participants yet.</td></tr>}</tbody>
+      </tr>) : <tr><td colSpan={6 + (canSelect ? 1 : 0) + (checkingIn ? 2 : 0)}>{people.length ? 'No matching participants.' : 'No participants yet.'}</td></tr>}</tbody>
     </table></div></>}
     </div>
     {canAdd && open && <ParticipantModal defaultTargetType={defaultTargetType} token={token} onUnauthorized={onUnauthorized} url={url} onClose={close} onAdded={(person) => {
@@ -210,7 +221,6 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
   const [selected, setSelected] = useState<Participant | null>(null);
   const [bowTypes, setBowTypes] = useState<string[]>([]);
   const [bowType, setBowType] = useState('');
-  const [bowConfirmed, setBowConfirmed] = useState(false);
   const [bowsLoading, setBowsLoading] = useState(true);
   const [bowsError, setBowsError] = useState('');
   const [targetTypes, setTargetTypes] = useState<string[]>([]);
@@ -300,7 +310,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
 
   async function save(body: { participantId: string } | { name: string; federationNumber: string; clubNumber: string }) {
     if (saving.current) return;
-    if (!bowConfirmed || !bowTypes.includes(bowType)) { setError('Select and confirm a bow type.'); return; }
+    if (!bowTypes.includes(bowType)) { setError('Select a bow type.'); return; }
     if (!targetTypes.includes(targetType)) { setError('Select a target.'); return; }
     saving.current = true; setPending(true); setError(''); setNotice('');
     try {
@@ -314,7 +324,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
       const person = await response.json() as Participant;
       onAdded(person);
       setQuery(''); setResults([]); setActive(0); setSearchError('');
-      setSelected(null); setBowType(''); setBowConfirmed(false); setTargetType(defaultTargetType ?? '');
+      setSelected(null); setBowType(''); setTargetType(defaultTargetType ?? '');
       setCreating(false); setName(''); setFederationNumber(''); setClubNumber('');
       setNotice(`${person.name} added.`);
       setFocusVersion((value) => value + 1);
@@ -344,9 +354,8 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
     event.preventDefault();
     void save({ name: name.trim(), federationNumber: federationNumber.trim(), clubNumber });
   }
-  const bowField = <BowTypeField types={bowTypes} value={bowType} confirmed={bowConfirmed} disabled={pending || bowsLoading || !!bowsError}
-    onChange={(value) => { setBowType(value); setBowConfirmed(false); setError(''); }}
-    onConfirm={(value) => { setBowType(value); setBowConfirmed(true); setError(''); }}
+  const bowField = <BowTypeField types={bowTypes} value={bowType} disabled={pending || bowsLoading || !!bowsError}
+    onChange={(value) => { setBowType(value); setError(''); }}
     />;
   const targetField = <div className="participant-search-field">
     <label htmlFor="participant-target-type">Target</label>
@@ -391,7 +400,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
       {notice && <p className="success" role="status">{notice}</p>}
       {pending && <p role="status">Adding participant...</p>}
       <div className="modal-actions"><button className="secondary" disabled={pending} onClick={onClose}>Cancel</button>
-        <button disabled={pending || !selected || !bowConfirmed || !targetType || bowsLoading || !!bowsError}
+        <button disabled={pending || !selected || !bowType || !targetType || bowsLoading || !!bowsError}
           onClick={() => { if (selected) void save({ participantId: selected.id }); }}>Add participant</button>
       </div>
     </div> : <form onSubmit={submit} aria-busy={pending}>
@@ -417,7 +426,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
       <div className="modal-actions">
         <button type="button" className="secondary" disabled={pending} onClick={() => { setCreating(false); setError(''); }}>Back</button>
         <button type="button" className="secondary" disabled={pending} onClick={onClose}>Cancel</button>
-        <button type="submit" disabled={pending || clubsLoading || !!clubsError || !clubs.length || !bowConfirmed || !targetType || bowsLoading || !!bowsError}>{pending ? 'Adding...' : 'Add participant'}</button>
+        <button type="submit" disabled={pending || clubsLoading || !!clubsError || !clubs.length || !bowType || !targetType || bowsLoading || !!bowsError}>{pending ? 'Adding...' : 'Add participant'}</button>
       </div>
     </form>}
   </dialog>;

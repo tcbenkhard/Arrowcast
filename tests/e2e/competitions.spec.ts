@@ -573,6 +573,8 @@ test('check-in controls persist, show assignments and refresh after reassignment
   const section = page.getByRole('region', { name: 'Participants', exact: true });
   const checkIn = section.getByRole('checkbox', { name: 'Check in Shooter 0 (0)', exact: true });
   const reassign = section.getByRole('button', { name: 'Reassign checked-in participants', exact: true });
+  const filter = section.getByRole('searchbox', { name: 'Filter participants', exact: true });
+  await expect(filter).toHaveCount(0);
   await expect(checkIn).toHaveCount(0);
   await expect(section.getByRole('columnheader', { name: 'Assignment', exact: true })).toHaveCount(0);
   await expect(section.getByRole('columnheader', { name: 'Check-in', exact: true })).toHaveCount(0);
@@ -581,11 +583,23 @@ test('check-in controls persist, show assignments and refresh after reassignment
   await expect(section.getByRole('row', { name: /Shooter 0/ })).toContainText('Lane 1 A');
   await expect(section.getByRole('row', { name: /Shooter 1/ })).toContainText('Lane 1 B');
   await expect(reassign).toBeDisabled();
+  await filter.fill('  sHoOtEr 0  ');
+  await expect(section.getByRole('row', { name: /Shooter 0/ })).toBeVisible();
+  await expect(section.getByRole('row', { name: /Shooter 1/ })).toHaveCount(0);
   await checkIn.click();
   await expect(section.getByRole('alert')).toHaveText('Check-in failed.');
   await expect(checkIn).not.toBeChecked();
   failCheckIn = false;
   await checkIn.click();
+  await expect(checkIn).toBeChecked();
+  await filter.fill('missing participant');
+  await expect(section).toContainText('No matching participants.');
+  await expect(reassign).toBeEnabled();
+  await filter.fill('1');
+  await expect(section.getByRole('row', { name: /Shooter 1/ })).toBeVisible();
+  await filter.fill('CLUB');
+  await expect(section.getByRole('row', { name: /Shooter/ })).toHaveCount(2);
+  await filter.fill('');
   await expect(checkIn).toBeChecked();
   await page.reload();
   await expect(checkIn).toBeChecked();
@@ -614,6 +628,7 @@ test('check-in controls persist, show assignments and refresh after reassignment
     await expect(section.getByRole('row', { name: /Shooter 0/ })).toBeVisible();
     await expect(checkIn).toHaveCount(0);
     await expect(reassign).toHaveCount(0);
+    await expect(filter).toHaveCount(0);
     await expect(section.getByRole('columnheader', { name: 'Assignment', exact: true })).toHaveCount(0);
     await expect(section.getByRole('columnheader', { name: 'Check-in', exact: true })).toHaveCount(0);
   }
@@ -663,8 +678,7 @@ test('competition default initializes lanes and participant targets while allowi
     await expect(modal.getByLabel('Target', { exact: true })).toHaveValue('Browser default face');
     await modal.getByLabel('Federation number', { exact: true }).fill(`default-browser-${index}`);
     await modal.getByLabel('Club', { exact: true }).selectOption('e2e-club');
-    await modal.getByRole('combobox', { name: 'Bow type', exact: true }).fill(bows[0]!);
-    await modal.getByRole('option', { name: bows[0]!, exact: true }).click();
+    await modal.getByRole('combobox', { name: 'Bow type', exact: true }).selectOption(bows[0]!);
     if (index === 1) await modal.getByLabel('Target', { exact: true }).selectOption(target);
     await modal.getByRole('button', { name: 'Add participant', exact: true }).click();
     await expect(modal.getByRole('status')).toContainText(`Default browser archer ${index} added.`);

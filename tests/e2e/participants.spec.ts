@@ -111,8 +111,11 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await search.press('Tab');
   await expect(bow).toBeFocused();
   expect(people).toHaveLength(0);
-  await bow.fill('rec');
-  await bow.press('Enter');
+  const modalSize = await modal.boundingBox();
+  await bow.click();
+  expect(await modal.boundingBox()).toEqual(modalSize);
+  await bow.press('Escape');
+  await bow.selectOption('Recurve');
   await expect(bow).toHaveValue('Recurve');
   expect(people).toHaveLength(0);
   await expect(modal.getByRole('listbox')).toHaveCount(0);
@@ -135,8 +138,7 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await expect(modal.getByLabel('Full name', { exact: true })).toHaveValue('New Archer');
   await modal.getByLabel('Federation number', { exact: true }).fill('000124');
   await modal.getByLabel('Club', { exact: true }).selectOption('0012');
-  await bow.fill('comp');
-  await bow.press('Enter');
+  await bow.selectOption('Compound');
   await expect(bow).toHaveValue('Compound');
   await modal.getByLabel('Target', { exact: true }).selectOption('Custom face');
   fail = true;
