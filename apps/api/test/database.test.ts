@@ -52,7 +52,7 @@ test('migrations run once and the admin seed never resets an existing account', 
     assert.equal(otherUser.statusCode, 200);
     const client = new SQLite(path);
     try {
-      assert.equal((client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count, 19);
+      assert.equal((client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count, 20);
       assert.equal((client.prepare('SELECT count(*) AS count FROM users').get() as { count: number }).count, 2);
       client.prepare('DELETE FROM users WHERE username = ?').run('another-admin');
       const removedUser = await app.inject({ url: '/api/v1/admin/me',
@@ -80,6 +80,18 @@ test('seed preserves an existing admin account with a different role', async () 
   } finally {
     database.close();
   }
+});
+
+test('renaming the initial administrator does not recreate default credentials on startup', async () => {
+  const database = openDatabase(':memory:');
+  try {
+    await seedAdmin(database.db);
+    database.db.update(users).set({ username: 'renamed-admin', name: 'Renamed Administrator' }).where(eq(users.username, 'admin')).run();
+    await seedAdmin(database.db);
+    const accounts = database.db.select().from(users).all();
+    assert.equal(accounts.length, 1);
+    assert.equal(accounts[0]!.username, 'renamed-admin');
+  } finally { database.close(); }
 });
 
 test('participants preserve membership numbers and reference an existing club', () => {

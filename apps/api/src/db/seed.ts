@@ -14,8 +14,10 @@ export async function seedAdmin(db: AppDatabase): Promise<void> {
     }
     return;
   }
+  // Renaming the original administrator must not recreate its default credentials.
+  if (db.select({ username: users.username }).from(users).limit(1).get()) return;
   const password = process.env.INITIAL_ADMIN_PASSWORD || 'admin';
   const passwordHash = await hashPassword(password);
-  db.insert(users).values({ username: 'admin', passwordHash, role: 'admin', forceChangePassword: true })
+  db.insert(users).values({ username: 'admin', name: 'Administrator', passwordHash, role: 'admin', forceChangePassword: true })
     .onConflictDoNothing({ target: users.username }).run();
 }

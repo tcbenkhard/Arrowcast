@@ -14,11 +14,12 @@ import { participantManagementRoutes } from '../participants/management.js';
 import { adminScoringRoutes, scoringRoutes } from '../scoring/routes.js';
 import { updateRoutes } from '../updates/routes.js';
 import { networkRoutes } from '../network/routes.js';
+import { userRoutes } from './users.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { sub: string; role: 'admin'; sessionVersion?: number };
-    user: { sub: string; role: 'admin'; exp: number; sessionVersion?: number };
+    payload: { sub: string; role: 'admin' | 'competition_manager'; sessionVersion?: number };
+    user: { sub: string; role: 'admin' | 'competition_manager'; exp: number; sessionVersion?: number };
   }
 }
 
@@ -54,7 +55,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
     // Always derive the hash, including for unknown usernames.
     const user = findUser(request.body.username);
     const passwordValid = await verifyPassword(request.body.password, user?.passwordHash ?? dummyHash);
-    if (!passwordValid || !user || user.role !== 'admin') {
+    if (!passwordValid || !user || !['admin', 'competition_manager'].includes(user.role)) {
       return reply.code(401).send({ message: 'Gebruikersnaam of wachtwoord is onjuist.' });
     }
     const token = await reply.jwtSign({ sub: user.username, role: user.role, sessionVersion: user.sessionVersion });
@@ -69,7 +70,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
       try {
         await request.jwtVerify();
         const user = typeof request.user.sub === 'string' ? findUser(request.user.sub) : undefined;
-        if (request.user.role !== 'admin' || user?.role !== 'admin'
+        if (!user || !['admin', 'competition_manager'].includes(user.role) || request.user.role !== user.role
           || !Number.isFinite(request.user.exp)
           || (request.user.sessionVersion ?? 0) !== user.sessionVersion) {
           return reply.code(401).send({ message: 'Log opnieuw in om verder te gaan.' });
@@ -77,12 +78,20 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
         if (user.forceChangePassword && !['/api/v1/admin/me', '/api/v1/admin/password'].includes(request.routeOptions.url ?? '')) {
           return reply.code(403).send({ code: 'PASSWORD_CHANGE_REQUIRED', message: 'Wijzig eerst je wachtwoord.' });
         }
+        const route = request.routeOptions.url ?? '';
+        const settingsOnly = ['/users', '/updates', '/network', '/participants/import']
+          .some((path) => route === `/api/v1/admin${path}` || route.startsWith(`/api/v1/admin${path}/`))
+          || (request.method !== 'GET' && ['/ranges', '/target-types'].some((path) => route === `/api/v1/admin${path}`));
+        if (settingsOnly && user.role !== 'admin') {
+          return reply.code(403).send({ message: 'Only administrators can access settings.' });
+        }
       } catch {
         return reply.code(401).send({ message: 'Log opnieuw in om verder te gaan.' });
       }
     });
     admin.get('/me', async (request) => ({
       username: request.user.sub,
+      name: findUser(request.user.sub)!.name,
       role: request.user.role,
       expiresAt: request.user.exp * 1000,
       forceChangePassword: findUser(request.user.sub)!.forceChangePassword,
@@ -113,6 +122,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
       const token = await reply.jwtSign({ sub: changed.username, role: changed.role, sessionVersion: changed.sessionVersion });
       return { token, expiresAt: app.jwt.decode<{ exp: number }>(token)!.exp * 1000, forceChangePassword: false };
     });
+    await admin.register(userRoutes, { db: config.db });
     await admin.register(rangeRoutes, { db: config.db });
     await admin.register(updateRoutes);
     await admin.register(networkRoutes);

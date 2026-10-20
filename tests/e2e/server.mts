@@ -26,6 +26,8 @@ const accounts = openDatabase(databasePath);
 accounts.db.update(users).set({ forceChangePassword: false }).where(eq(users.username, 'admin')).run();
 accounts.db.insert(users).values({ username: 'first-login', passwordHash: await hashPassword('admin'),
   role: 'admin', forceChangePassword: true }).run();
+accounts.db.insert(users).values({ username: 'profile-user', passwordHash: await hashPassword('admin'),
+  role: 'admin', forceChangePassword: false }).run();
 accounts.close();
 await app.listen({ host: '127.0.0.1', port: Number(process.env.ARROWCAST_E2E_API_PORT ?? 3000) });
 async function shutdown() {

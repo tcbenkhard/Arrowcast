@@ -5,6 +5,7 @@ import { SettingsCard } from './SettingsCard';
 import { ArrowcastHostname } from './ArrowcastHostname';
 import { Updates } from './Updates';
 import { Network } from './Network';
+import { Users } from './Users';
 
 interface ImportState {
   status: 'idle' | 'running' | 'completed' | 'failed';
@@ -74,9 +75,12 @@ export function SettingsPage({ token, onUnauthorized }: {
   return <section className="settings-page" aria-labelledby="settings-heading">
     <h2 id="settings-heading">Settings</h2>
     <div className="settings-cards">
-      <ArrowcastHostname />
-      <Network token={token} onUnauthorized={onUnauthorized} />
+      <RangesPage token={token} onUnauthorized={onUnauthorized} />
+      <TargetTypesPage token={token} onUnauthorized={onUnauthorized} />
+      <Users token={token} onUnauthorized={onUnauthorized} />
       <Updates token={token} onUnauthorized={onUnauthorized} />
+      <Network token={token} onUnauthorized={onUnauthorized} />
+      <ArrowcastHostname />
       <SettingsCard id="participant-import" title="Deelnemers importeren">
         <p>Importeer deelnemers en verenigingen uit de nieuwste regiocompetities van Handboogsport.
           Bestaande deelnemers worden bijgewerkt. De import kan enkele minuten duren en gaat door als je deze pagina verlaat.</p>
@@ -94,8 +98,6 @@ export function SettingsPage({ token, onUnauthorized }: {
           <button className="secondary retry-button" onClick={() => { setError(''); setRetry((value) => value + 1); }}>Importstatus opnieuw ophalen</button>
         </div>}
       </SettingsCard>
-      <RangesPage token={token} onUnauthorized={onUnauthorized} />
-      <TargetTypesPage token={token} onUnauthorized={onUnauthorized} />
     </div>
   </section>;
 }

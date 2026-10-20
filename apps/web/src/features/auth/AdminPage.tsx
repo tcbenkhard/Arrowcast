@@ -24,6 +24,8 @@ function storeToken(token: string | null) {
 
 interface Session {
   username: string;
+  name: string;
+  role: 'admin' | 'competition_manager';
   expiresAt: number;
   forceChangePassword: boolean;
 }
@@ -34,6 +36,7 @@ export function AdminPage() {
   const [loginError, setLoginError] = useState('');
   const [checkError, setCheckError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const logout = useCallback((message = '') => {
     storeToken(null);
@@ -41,6 +44,7 @@ export function AdminPage() {
     setSession(null);
     setLoginError(message);
     setCheckError('');
+    setChangingPassword(false);
   }, []);
 
   useEffect(() => {
@@ -106,9 +110,12 @@ export function AdminPage() {
     );
   }
 
-  if (session.forceChangePassword) {
-    return <PasswordChangeForm token={token} onLogout={logout} onChanged={(newToken) => {
+  if (session.forceChangePassword || changingPassword) {
+    return <PasswordChangeForm token={token} onLogout={logout}
+      onCancel={session.forceChangePassword ? undefined : () => setChangingPassword(false)}
+      onChanged={(newToken) => {
       storeToken(newToken);
+      setChangingPassword(false);
       setSession(null);
       setToken(newToken);
     }} />;
@@ -118,14 +125,17 @@ export function AdminPage() {
     <main>
       <header className="admin-header">
         <h1>ArrowCast</h1>
-        <button className="secondary" onClick={() => logout()}>Uitloggen</button>
+        <ProfileMenu username={session.username} onLogout={() => logout()}
+          onChangePassword={() => setChangingPassword(true)} />
       </header>
       <nav className="admin-nav" aria-label="Admin navigation">
         <NavLink to="/admin/competitions">Competitions</NavLink>
-        <NavLink className="settings-tab" to="/admin/settings">Settings</NavLink>
+        {session.role === 'admin' && <NavLink className="settings-tab" to="/admin/settings">Settings</NavLink>}
       </nav>
       <Routes>
-        <Route path="settings" element={<SettingsPage token={token} onUnauthorized={logout} />} />
+        <Route path="settings" element={session.role === 'admin'
+          ? <SettingsPage token={token} onUnauthorized={logout} />
+          : <Navigate to="/admin/competitions" replace />} />
         <Route index element={<Navigate to="/admin/competitions" replace />} />
         <Route path="target-types" element={<Navigate to="/admin/settings" replace />} />
         <Route path="ranges" element={<Navigate to="/admin/settings" replace />} />
@@ -136,6 +146,22 @@ export function AdminPage() {
       </Routes>
     </main>
   );
+}
+
+function ProfileMenu({ username, onLogout, onChangePassword }: {
+  username: string; onLogout: () => void; onChangePassword: () => void;
+}) {
+  return <div className="profile-menu">
+    <button className="profile-avatar" popoverTarget="profile-dropdown"
+      aria-label={`Profile: ${username}`} title={username}>
+      {Array.from(username.trim())[0]?.toLocaleUpperCase() || '?'}
+    </button>
+    <div id="profile-dropdown" className="profile-dropdown" popover="auto">
+      <button onClick={onChangePassword}>Change password</button>
+      <hr />
+      <button onClick={onLogout}>Logoff</button>
+    </div>
+  </div>;
 }
 
 function LoginForm({ error, onLogin }: { error: string; onLogin: (token: string) => void }) {

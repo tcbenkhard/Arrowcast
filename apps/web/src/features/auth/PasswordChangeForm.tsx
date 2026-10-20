@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
-export function PasswordChangeForm({ token, onChanged, onLogout }: {
+export function PasswordChangeForm({ token, onChanged, onLogout, onCancel }: {
   token: string; onChanged: (token: string) => void; onLogout: (message?: string) => void;
+  onCancel?: (() => void) | undefined;
 }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
@@ -34,7 +35,7 @@ export function PasswordChangeForm({ token, onChanged, onLogout }: {
 
   return <main className="auth-card">
     <h1>Wachtwoord wijzigen</h1>
-    <p>Stel eerst een nieuw wachtwoord in om het beheerportal te openen. Gebruik minstens 8 tekens.</p>
+    <p>{onCancel ? 'Kies een nieuw wachtwoord.' : 'Stel eerst een nieuw wachtwoord in om het beheerportal te openen.'} Gebruik minstens 8 tekens.</p>
     <form onSubmit={(event) => { void submit(event); }} aria-busy={pending}>
       <label htmlFor="current-password">Huidig wachtwoord</label>
       <input id="current-password" type="password" autoComplete="current-password" required maxLength={1024}
@@ -48,6 +49,7 @@ export function PasswordChangeForm({ token, onChanged, onLogout }: {
       {error && <p className="error" role="alert">{error}</p>}
       <button type="submit" disabled={pending}>{pending ? 'Opslaan…' : 'Wachtwoord opslaan'}</button>
     </form>
+    {onCancel && <button className="secondary" disabled={pending} onClick={onCancel}>Cancel</button>}
     <button className="secondary" disabled={pending} onClick={() => onLogout()}>Uitloggen</button>
   </main>;
 }

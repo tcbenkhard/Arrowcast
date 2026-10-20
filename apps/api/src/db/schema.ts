@@ -3,8 +3,9 @@ import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text,
 
 export const users = sqliteTable('users', {
   username: text('username').primaryKey(),
+  name: text('name').notNull().default(''),
   passwordHash: text('password_hash').notNull(),
-  role: text('role', { enum: ['admin'] }).notNull().default('admin'),
+  role: text('role', { enum: ['admin', 'competition_manager'] }).notNull().default('admin'),
   forceChangePassword: integer('force_change_password', { mode: 'boolean' }).notNull().default(false),
   sessionVersion: integer('session_version').notNull().default(0),
 });

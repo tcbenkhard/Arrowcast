@@ -165,7 +165,6 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
       <button className="secondary retry-button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
     </> : <>
       {assignmentError && <p className="error" role="alert">{assignmentError}</p>}
-      {assignmentBusy && <p role="status">Saving shooting assignments...</p>}
       {canSelect && selectedIds.size > 0 && <div className="lane-bulk-controls" role="group" aria-label="Doe met selectie">
         <p>{selectedIds.size} geselecteerd</p>
         <select aria-label="Target for selected participants" value="" disabled={busy}

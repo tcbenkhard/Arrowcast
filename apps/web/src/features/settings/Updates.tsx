@@ -48,7 +48,9 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not start update.'); }
     finally { setPending(false); }
   }
-  return <SettingsCard id="updates" title="Updates" defaultExpanded>
+  const updateActive = state?.status === 'installing' ||
+    (!!state?.availableVersion && ['available', 'failed'].includes(state.status));
+  return <SettingsCard id="updates" title="Updates" forceExpanded={updateActive}>
     {state && <p>Installed version: {state.currentVersion}</p>}
     <div aria-live="polite">
       {!state && !error && <p>Reading update status…</p>}

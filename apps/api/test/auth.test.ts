@@ -25,7 +25,7 @@ test('login issues a JWT that grants access to the protected admin endpoint', as
   assert.ok(expiresAt > Date.now() && expiresAt <= Date.now() + 3600000);
   const me = await app.inject({ url: '/api/v1/admin/me', headers: { authorization: `Bearer ${token}` } });
   assert.equal(me.statusCode, 200);
-  assert.deepEqual(me.json(), { username: 'admin', role: 'admin', expiresAt, forceChangePassword: true });
+  assert.deepEqual(me.json(), { username: 'admin', name: 'Administrator', role: 'admin', expiresAt, forceChangePassword: true });
 });
 
 test('invalid credentials have the same generic response', async (t) => {
