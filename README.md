@@ -32,6 +32,7 @@ geldig JWT-geheim. Bewaar `.env` buiten versiebeheer.
 
 Bij het starten worden openstaande databasemigraties uitgevoerd en wordt de
 eerste beheerder aangemaakt: gebruikersnaam `admin`, wachtwoord `admin`.
+Bij de eerste login moet je een nieuw wachtwoord van minstens 8 tekens kiezen.
 Als die gebruiker al bestaat, blijven het wachtwoord en de rol behouden.
 
 Start daarna in twee terminals:
@@ -121,15 +122,22 @@ moet naast de apps worden meegeleverd bij een deployment.
 
 De adminseed draait na de migraties. Alleen een ontbrekende gebruiker met
 gebruikersnaam `admin` wordt toegevoegd, met een scrypt-hash van `admin`.
-Herstarten overschrijft geen bestaande accounts of wachtwoorden.
+Herstarten overschrijft geen bestaande accounts of wachtwoorden. Accounts die nog
+het standaardwachtwoord gebruiken, moeten dit voor beheeracties wijzigen.
 
 ## Authenticatie
 
 - `POST /api/v1/auth/login` ontvangt JSON `{ "username": "…", "password": "…" }`.
-  Bij succes bevat de response `{ "token": "…", "expiresAt": 1234567890000 }`;
+  Bij succes bevat de response `{ "token": "…", "expiresAt": 1234567890000, "forceChangePassword": true }`;
   `expiresAt` is een Unix-tijdstip in milliseconden.
 - `GET /api/v1/admin/me` vereist `Authorization: Bearer <token>` en retourneert
-  `{ "username": "…", "role": "admin", "expiresAt": 1234567890000 }`.
+  `{ "username": "…", "role": "admin", "expiresAt": 1234567890000, "forceChangePassword": true }`.
+- `POST /api/v1/admin/password` ontvangt `{ "currentPassword": "admin", "newPassword": "een-lang-nieuw-wachtwoord" }`.
+  Het nieuwe wachtwoord moet anders zijn en minstens 8 tekens bevatten. De API
+  zet `force_change_password` uit en geeft een nieuwe JWT terug. Alle eerdere
+  tokens van deze gebruiker worden ongeldig via `session_version`. Zolang
+  `forceChangePassword` waar is, zijn alleen `/admin/me` en `/admin/password`
+  toegankelijk; andere beheeracties geven `403 PASSWORD_CHANGE_REQUIRED`.
 - JWT's zijn één uur geldig, ondertekend met HS256 en gebonden aan de beheerapp
   via issuer en audience. De server controleert de adminrol en gebruikersnaam.
   Nieuwe beheer-API-routes horen in de beveiligde `/admin`-scope in `routes.ts`.
@@ -142,8 +150,8 @@ Herstarten overschrijft geen bestaande accounts of wachtwoorden.
   bij het openen of verversen van `/admin` via de backend. Verlopen of ongeldige
   tokens verwijderen de toegang; verbindingsfouten bieden een nieuwe poging.
 - Uitloggen verwijdert de JWT uit het tabblad. Een eerder gekopieerde JWT blijft
-  geldig tot het verstrijken van het uur; er is nog geen server-side intrekking
-  of refreshmechanisme. Rotatie van `JWT_SECRET` maakt alle bestaande JWT's ongeldig.
+  geldig tot het verstrijken van het uur of totdat het wachtwoord wordt gewijzigd.
+  Rotatie van `JWT_SECRET` maakt alle bestaande JWT's ongeldig.
 - De eerste beheerder wordt automatisch geseed met `admin` / `admin`.
   Gebruik HTTPS buiten lokale ontwikkeling om wachtwoorden en tokens te beschermen.
   De JWT-keuze uit deze implementatie vervangt het sessievoorstel uit de handoff.
@@ -459,8 +467,8 @@ een downloadbaar Actions-artifact; een versietag maakt ook een conceptrelease.
 Een fysieke Pi-bootcheck is vereist voordat die release wordt gepubliceerd.
 De image zendt het open wifi-netwerk **ArrowCast** uit. Verbind zonder
 wifi-wachtwoord en open `http://10.42.0.1/admin`; Ethernet blijft ook beschikbaar.
-Het unieke beheerwachtwoord wordt op HDMI getoond.
-De standaard ontwikkellogin `admin` / `admin` geldt niet voor deze image.
+Log in met `admin` / `admin` en kies bij de eerste login een nieuw wachtwoord.
+De beheerportal blijft geblokkeerd totdat het wachtwoord is gewijzigd.
 
 Het [Raspberry Pi-installatie- en updateplan](RASPBERRY-PI-PLAN.md) beschrijft
 de verdere browsergestuurde eerste installatie, back-ups, herstel en updates

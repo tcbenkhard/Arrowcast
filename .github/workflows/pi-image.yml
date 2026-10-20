@@ -21,6 +21,20 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Validate signing configuration for releases
+        if: github.ref_type == 'tag'
+        env:
+          ARROWCAST_UPDATE_PRIVATE_KEY: ${{ secrets.ARROWCAST_UPDATE_PRIVATE_KEY }}
+          ARROWCAST_UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 deploy/pi/signing.py --require-private
+          [[ "$RELEASE_TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+      - name: Validate public key for manual image builds
+        if: github.ref_type != 'tag' && vars.ARROWCAST_UPDATE_PUBLIC_KEY != ''
+        env:
+          ARROWCAST_UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
+        run: python3 deploy/pi/signing.py
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -39,6 +53,8 @@ jobs:
           shellcheck -x deploy/pi/build-image.sh deploy/pi/stage-arrowcast/prerun.sh \
             deploy/pi/stage-arrowcast/00-install/00-run.sh \
             deploy/pi/stage-arrowcast/00-install/files/*.sh
+      - name: Test update broker
+        run: python3 -m unittest discover -s deploy/pi/tests -v
 
   image:
     needs: check
@@ -54,12 +70,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             coreutils quilt parted qemu-user-binfmt debootstrap zerofree zip \
             dosfstools e2fsprogs libcap2-bin grep rsync xz-utils file git curl bc \
-            gpg pigz xxd arch-test bmap-tools kmod
+            gpg pigz xxd arch-test bmap-tools kmod openssl python3
           df -h .
       - name: Build native ARM64 appliance image
         env:
           IMAGE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
-        run: sudo env ARROWCAST_IMAGE_VERSION="$IMAGE_VERSION" bash deploy/pi/build-image.sh
+          UPDATE_REPOSITORY: ${{ github.repository }}
+          UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
+        run: |
+          sudo env ARROWCAST_IMAGE_VERSION="$IMAGE_VERSION" \
+            ARROWCAST_UPDATE_REPOSITORY="$UPDATE_REPOSITORY" \
+            ARROWCAST_UPDATE_PUBLIC_KEY="$UPDATE_PUBLIC_KEY" bash deploy/pi/build-image.sh
       - name: Upload installation image
         uses: actions/upload-artifact@v4
         with:
@@ -87,10 +108,38 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: arrowcast-pi-${{ github.sha }}
           path: image
+      - name: Sign application update manifest
+        env:
+          ARROWCAST_UPDATE_PRIVATE_KEY: ${{ secrets.ARROWCAST_UPDATE_PRIVATE_KEY }}
+          ARROWCAST_UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          umask 077
+          key_file="$(mktemp)"
+          trap 'rm -f "$key_file" public.pem' EXIT
+          python3 deploy/pi/signing.py --private-output "$key_file" --public-output public.pem
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          package = Path('image/arrowcast-update.tar.xz')
+          manifest = {'format': 1, 'platform': 'raspios-trixie-arm64',
+                      'version': os.environ['RELEASE_TAG'], 'file': package.name,
+                      'size': package.stat().st_size,
+                      'sha256': hashlib.file_digest(package.open('rb'), 'sha256').hexdigest()}
+          Path('image/update.json').write_text(json.dumps(manifest) + '\n')
+          PY
+          openssl dgst -sha256 -sign "$key_file" -out image/update.sig image/update.json
+          openssl dgst -sha256 -verify public.pem -signature image/update.sig image/update.json
       - name: Create draft release and attach image
         env:
           GH_TOKEN: ${{ github.token }}
@@ -108,7 +157,7 @@ jobs:
 
           Download the .img.xz file and use Raspberry Pi Imager's Use Custom option.
           Join the open ArrowCast Wi-Fi and open http://10.42.0.1/admin.
-          Connect an HDMI screen for the per-device administrator password.
+          Log in with admin / admin and choose a new password before continuing.
           See INSTALLATION.md for instructions and current limitations.
 
           Maintainer: test this exact image on Pi 4 and Pi 5 before publishing.

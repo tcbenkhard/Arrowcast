@@ -6,5 +6,6 @@ ca-certificates
 curl
 xz-utils
 python3
+openssl
 make
 g++

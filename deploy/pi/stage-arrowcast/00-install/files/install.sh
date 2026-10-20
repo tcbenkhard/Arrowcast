@@ -31,6 +31,14 @@ try {
   const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
     payload: { username: 'admin', password: process.env.INITIAL_ADMIN_PASSWORD } });
   assert.equal(response.statusCode, 200);
+  assert.equal(response.json().forceChangePassword, true);
+  const headers = { authorization: `Bearer ${response.json().token}` };
+  const blocked = await app.inject({ url: '/api/v1/admin/ranges', headers });
+  assert.equal(blocked.statusCode, 403);
+  const changed = await app.inject({ method: 'POST', url: '/api/v1/admin/password', headers,
+    payload: { currentPassword: process.env.INITIAL_ADMIN_PASSWORD, newPassword: 'build-smoke-changed-password' } });
+  assert.equal(changed.statusCode, 200);
+  assert.equal(changed.json().forceChangePassword, false);
   const denied = await app.inject('/api/v1/admin/me');
   assert.equal(denied.statusCode, 401);
 } finally { await app.close(); }
@@ -41,17 +49,46 @@ groupadd --system arrowcast
 useradd --system --gid arrowcast --home-dir /var/lib/arrowcast --shell /usr/sbin/nologin arrowcast
 install -d -m 0750 -o arrowcast -g arrowcast /var/lib/arrowcast
 install -d -m 0750 -o root -g arrowcast /etc/arrowcast
-# Never ship the build-time Linux account password or permit interactive login.
-usermod --lock --shell /usr/sbin/nologin pi
+# Keep the account locked until first boot replaces the build-time password.
+usermod --lock --shell /bin/bash pi
 ln -sf /etc/nginx/sites-available/arrowcast /etc/nginx/sites-enabled/arrowcast
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 nmcli --offline connection modify connection.id ArrowCast \
   < /etc/NetworkManager/system-connections/arrowcast.nmconnection > /dev/null
+python3 <<'PY'
+import importlib.util
+import subprocess
+spec = importlib.util.spec_from_file_location('network', '/usr/local/lib/arrowcast/network.py')
+network = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(network)
+for ssid, password in [('Club Wi-Fi', ''), ('Club; [wifi]', r'pass\word with spaces'),
+                       ('Hidden network', 'a' * 64)]:
+    subprocess.run(['nmcli', '--offline', 'connection', 'modify', 'connection.id', 'Arrowcast test'],
+                   input=network.profile_content(ssid, password), text=True, check=True,
+                   stdout=subprocess.DEVNULL)
+PY
 dnsmasq --test --conf-file=/etc/arrowcast/dnsmasq.conf
+# Keep each application's working directory intact when current changes.
+mkdir -p /opt/arrowcast-factory
+find /opt/arrowcast -mindepth 1 -maxdepth 1 -exec mv -t /opt/arrowcast-factory -- {} +
+mkdir -p /opt/arrowcast/releases
+mv /opt/arrowcast-factory /opt/arrowcast/releases/factory
+ln -s releases/factory /opt/arrowcast/current
+# First-boot tooling uses this stable runtime path.
+ln -s current/runtime /opt/arrowcast/runtime
+install -d -m 0755 /var/lib/arrowcast-update
+systemctl enable arrowcast-update.service
 systemctl enable arrowcast-first-boot.service arrowcast.service arrowcast-console.service nginx avahi-daemon
-systemctl enable NetworkManager arrowcast-hotspot.service arrowcast-dhcp.service
-systemctl disable ssh
+systemctl enable NetworkManager arrowcast-network.service
+mkdir -p /etc/systemd/system/ssh.service.d /etc/ssh/sshd_config.d
+cat > /etc/systemd/system/ssh.service.d/arrowcast.conf <<'SSH'
+[Unit]
+Requires=arrowcast-first-boot.service
+After=arrowcast-first-boot.service
+SSH
+printf 'PasswordAuthentication yes\n' > /etc/ssh/sshd_config.d/00-arrowcast.conf
+systemctl enable ssh
 systemctl mask getty@tty1.service
 # Keep unattended package activity from restarting services during competition use.
 systemctl disable apt-daily.timer apt-daily-upgrade.timer

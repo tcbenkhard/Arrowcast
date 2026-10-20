@@ -3,7 +3,7 @@ id=ArrowCast
 uuid=e9f2d6bd-75ab-4b2f-9a48-1f67de407cd9
 type=wifi
 interface-name=wlan0
-autoconnect=true
+autoconnect=false
 autoconnect-priority=100
 autoconnect-retries=0
 

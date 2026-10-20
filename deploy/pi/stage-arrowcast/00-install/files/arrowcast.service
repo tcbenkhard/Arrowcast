@@ -1,7 +1,8 @@
 [Unit]
 Description=Arrowcast website and API
 Requires=arrowcast-first-boot.service
-After=arrowcast-first-boot.service network.target
+Wants=arrowcast-update.service
+After=arrowcast-first-boot.service arrowcast-update.service network.target
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
@@ -9,9 +10,9 @@ StartLimitBurst=5
 Type=exec
 User=arrowcast
 Group=arrowcast
-WorkingDirectory=/opt/arrowcast
+WorkingDirectory=/opt/arrowcast/current
 EnvironmentFile=/etc/arrowcast/arrowcast.env
-ExecStart=/opt/arrowcast/runtime/bin/node apps/api/dist/server.js
+ExecStart=/opt/arrowcast/current/runtime/bin/node apps/api/dist/server.js
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=60

@@ -1,3 +1,4 @@
+import { loginAdmin } from './helpers.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,7 +21,7 @@ test('competitions require authentication, validate assignments, sort chronologi
     for (const method of ['GET', 'POST'] as const) {
       assert.equal((await app.inject({ method, url: '/api/v1/admin/competitions' })).statusCode, 401);
     }
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const headers = { authorization: `Bearer ${login.json().token}` };
     const createRange = async (name: string) => (await app.inject({ method: 'POST', url: '/api/v1/admin/ranges', headers,
       payload: { name, supportedDistancesMeters: [18, 25], lanes: [{ number: 1 }, { number: 2 }] } })).json();
@@ -194,7 +195,7 @@ test('default target migration fills unset counts, preserves configured counts a
 test('competition statuses advance in order, allow moving back, reject invalid transitions and persist', async () => {
   const app = buildApp({ jwtSecret, databasePath: ':memory:' });
   try {
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const headers = { authorization: `Bearer ${login.json().token}` };
     const range = (await app.inject({ method: 'POST', url: '/api/v1/admin/ranges', headers,
       payload: { name: 'Status range', supportedDistancesMeters: [18], lanes: [{ number: 1 }] } })).json();

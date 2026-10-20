@@ -1,3 +1,4 @@
+import { loginAdmin } from './helpers.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -62,7 +63,7 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
   const app = buildApp({ jwtSecret: 'assignments-secret-with-at-least-thirty-two-bytes', databasePath });
   const base = '/api/v1/admin/competitions/competition';
   try {
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const headers = { authorization: `Bearer ${login.json().token}` };
     const status = (value: string) => app.inject({ method: 'PATCH', url: `${base}/status`, headers, payload: { status: value } });
     const getPeople = async () => (await app.inject({ url: `${base}/participants`, headers })).json();

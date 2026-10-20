@@ -5,6 +5,8 @@ export const users = sqliteTable('users', {
   username: text('username').primaryKey(),
   passwordHash: text('password_hash').notNull(),
   role: text('role', { enum: ['admin'] }).notNull().default('admin'),
+  forceChangePassword: integer('force_change_password', { mode: 'boolean' }).notNull().default(false),
+  sessionVersion: integer('session_version').notNull().default(0),
 });
 
 export const clubs = sqliteTable('clubs', {

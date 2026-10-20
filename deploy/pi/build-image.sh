@@ -14,6 +14,12 @@ fi
 build_dir="$repo_dir/.pi-build"
 generator_dir="$build_dir/pi-gen"
 mkdir -p "$build_dir" "$build_dir/output"
+# Fail on invalid configuration before fetching pi-gen or building its rootfs.
+if [[ -n ${ARROWCAST_UPDATE_PUBLIC_KEY:-} ]]; then
+  python3 "$repo_dir/deploy/pi/signing.py" --public-output "$build_dir/update-public.pem"
+else
+  : > "$build_dir/update-public.pem"
+fi
 if [[ -e $generator_dir ]]; then
   echo 'Use a fresh checkout: .pi-build/pi-gen already exists.' >&2
   exit 1
@@ -28,6 +34,12 @@ git -C "$generator_dir" checkout --detach FETCH_HEAD
 
 cp "$repo_dir/deploy/pi/config" "$generator_dir/config"
 cp -a "$repo_dir/deploy/pi/stage-arrowcast" "$generator_dir/"
+python3 - "$generator_dir/stage-arrowcast/00-install/files/update.json" <<'PY'
+import json, os, sys
+with open(sys.argv[1], 'w') as stream:
+    json.dump({'repository': os.environ.get('ARROWCAST_UPDATE_REPOSITORY', '')}, stream)
+PY
+cp "$build_dir/update-public.pem" "$generator_dir/stage-arrowcast/00-install/files/update-public.pem"
 find "$generator_dir/stage-arrowcast" -name '*.sh' -exec chmod +x {} +
 touch "$generator_dir/stage2/SKIP_IMAGES"
 # ENABLE_CLOUD_INIT alone does not skip the stage's package installation.
@@ -49,6 +61,9 @@ version="${ARROWCAST_IMAGE_VERSION:-${source_revision:0:12}}"
 printf '%s\n' "$version" > "$source_dir/VERSION"
 cd "$generator_dir"
 ./build.sh
+mapfile -t packages < <(find work -path '*/stage-arrowcast/arrowcast-update.tar.xz' -type f)
+[[ ${#packages[@]} == 1 ]]
+cp "${packages[0]}" "$build_dir/output/arrowcast-update.tar.xz"
 shopt -s nullglob
 images=(deploy/*.img.xz)
 [[ ${#images[@]} == 1 ]]

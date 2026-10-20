@@ -1,3 +1,4 @@
+import { loginAdmin } from './helpers.js';
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'node:test';
@@ -24,7 +25,7 @@ test('import endpoints require admin authentication', async () => {
       assert.equal((await app.inject({ url: `/api/v1/admin${path}` })).statusCode, 401);
     }
     assert.equal((await app.inject({ method: 'DELETE', url: '/api/v1/admin/competitions/test/participants', payload: { participantIds: ['test'] } })).statusCode, 401);
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const status = await app.inject({ url: `/api/v1/admin${url}`, headers: { authorization: `Bearer ${login.json().token}` } });
     assert.equal(status.statusCode, 200);
     assert.equal(status.json().status, 'idle');
@@ -71,5 +72,32 @@ test('a failed import leaves the database unchanged and allows retry', async () 
     assert.equal((await app.inject({ method: 'POST', url })).statusCode, 202);
     await setImmediate();
     assert.equal((await app.inject({ url })).json().status, 'completed');
+  } finally { await app.close(); database.close(); }
+});
+
+test('imports require internet access and become available after reconnection', async () => {
+  const database = openDatabase(':memory:');
+  const app = Fastify();
+  let online = false;
+  let calls = 0;
+  await app.register(participantRoutes, { db: database.db, canImport: async () => online,
+    scrape: async () => { calls++; return data; } });
+  try {
+    const offline = (await app.inject({ url })).json();
+    assert.equal(offline.available, false);
+    assert.match(offline.message, /internet/);
+    assert.equal((await app.inject({ method: 'POST', url })).statusCode, 503);
+    assert.equal(calls, 0);
+    assert.equal(database.db.select().from(participants).all().length, 0);
+    online = true;
+    assert.equal((await app.inject({ url })).json().available, true);
+    assert.equal((await app.inject({ method: 'POST', url })).statusCode, 202);
+    await setImmediate();
+    online = false;
+    const completed = (await app.inject({ url })).json();
+    assert.equal(completed.status, 'completed');
+    assert.equal(completed.result.participants, 1);
+    assert.equal(completed.available, false);
+    assert.equal(calls, 1);
   } finally { await app.close(); database.close(); }
 });
