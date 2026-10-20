@@ -56,6 +56,7 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
   const navigate = useNavigate();
   const [detailsAction, setDetailsAction] = useState<'edit' | 'remove' | null>(null);
   const [detailsNotice, setDetailsNotice] = useState('');
+  const [configurationRevision, setConfigurationRevision] = useState(0);
   const editButton = useRef<HTMLButtonElement>(null);
   const removeButton = useRef<HTMLButtonElement>(null);
   const restoreDetailsFocus = useRef<'edit' | 'remove' | null>(null);
@@ -215,7 +216,8 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
       {detailsAction && <CompetitionDetailsModal key={`${competition.id}-${detailsAction}`} mode={detailsAction} competition={competition}
         token={token} onUnauthorized={onUnauthorized} onClose={closeDetailsModal}
         onSaved={(updated) => {
-          if (updated.range.id !== competition.range.id) { setLaneSnapshot(undefined); setParticipantSnapshot(undefined); }
+          setLaneSnapshot(undefined); setParticipantSnapshot(undefined);
+          setConfigurationRevision((value) => value + 1);
           setCompetition(updated); closeDetailsModal(); setDetailsNotice('Competition details saved.');
         }}
         onRemoved={() => { void navigate('/admin/competitions'); }} />}
@@ -224,8 +226,8 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
       {competition.status === 'Active' && <LaneScoringCodes
         key={`scoring-codes-${competition.id}`} competitionId={competition.id} name={competition.name} status={competition.status}
         codes={qrCodes} onCodesChange={setQrCodes} token={token} onUnauthorized={onUnauthorized} />}
-      <CompetitionLanes status={competition.status} onChange={onLanesChange} key={`${competition.id}-${competition.range.id}`} competitionId={competition.id} token={token} onUnauthorized={onUnauthorized} />
-      <CompetitionParticipants defaultTargetType={competition.defaultTargetType} onChange={onParticipantsChange} status={competition.status} lanes={laneSnapshot?.data ?? []} key={`participants-${competition.id}-${competition.range.id}-${competition.status}`} competitionId={competition.id} token={token} onUnauthorized={onUnauthorized} />
+      <CompetitionLanes status={competition.status} onChange={onLanesChange} key={`${competition.id}-${competition.range.id}-${configurationRevision}`} competitionId={competition.id} token={token} onUnauthorized={onUnauthorized} />
+      <CompetitionParticipants defaultTargetType={competition.defaultTargetType} onChange={onParticipantsChange} status={competition.status} lanes={laneSnapshot?.data ?? []} key={`participants-${competition.id}-${competition.range.id}-${competition.status}-${configurationRevision}`} competitionId={competition.id} token={token} onUnauthorized={onUnauthorized} />
     </>}
   </>;
 }

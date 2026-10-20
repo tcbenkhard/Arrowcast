@@ -143,6 +143,8 @@ button.distance-link { padding: 0; border: 0; background: transparent; color: #1
 .settings-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; align-items: start; }
 .settings-cards > .panel { margin-top: 0; min-width: 0; }
 .settings-cards h3 { margin-top: 0; }
+.update-available { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.update-available button { flex-shrink: 0; }
 .settings-cards .target-type-create-fields { flex-wrap: wrap; }
 .settings-cards .target-type-create-fields input { flex-basis: 14rem; }
 

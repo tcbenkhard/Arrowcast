@@ -21,7 +21,10 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
   const [ranges, setRanges] = useState<Range[]>([]);
   const [rangeId, setRangeId] = useState(competition.range.id);
   const [assignments, setAssignments] = useState<Record<string, number>>({});
+  const [initialAssignments, setInitialAssignments] = useState<Record<string, number>>({});
   const rangeChanged = rangeId !== competition.range.id;
+  const lanesChanged = rangeChanged || Object.keys(assignments).length !== Object.keys(initialAssignments).length
+    || Object.entries(assignments).some(([laneId, distance]) => initialAssignments[laneId] !== distance);
   const range = ranges.find((value) => value.id === rangeId);
   const [loading, setLoading] = useState(mode === 'edit');
   const [loadError, setLoadError] = useState('');
@@ -37,16 +40,21 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
     setLoading(true); setLoadError('');
     void (async () => {
       try {
-        const responses = await Promise.all(['/api/v1/admin/target-types', '/api/v1/admin/ranges'].map((url) => fetch(url, {
+        const responses = await Promise.all(['/api/v1/admin/target-types', '/api/v1/admin/ranges',
+          `/api/v1/admin/competitions/${encodeURIComponent(competition.id)}/lanes`].map((url) => fetch(url, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         })));
         if (controller.signal.aborted) return;
         if (responses.some((response) => response.status === 401)) { onUnauthorized('Je sessie is verlopen of ongeldig. Log opnieuw in.'); return; }
         if (responses.some((response) => !response.ok)) throw new Error('Loading failed');
         const [types, loadedRanges] = await Promise.all([responses[0]!.json() as Promise<string[]>, responses[1]!.json() as Promise<Range[]>]);
+        const loadedLanes = await responses[2]!.json() as { laneId: string; distanceMeters: number }[];
         if (!controller.signal.aborted) {
           setTargetTypes(types.sort((a, b) => a.localeCompare(b, 'nl', { numeric: true })));
           setRanges(loadedRanges);
+          const savedAssignments = Object.fromEntries(loadedLanes.map((lane) => [lane.laneId, lane.distanceMeters]));
+          setInitialAssignments(savedAssignments);
+          setAssignments(savedAssignments);
         }
       } catch {
         if (!controller.signal.aborted) setLoadError('Could not load ranges and target types. Please try again.');
@@ -55,7 +63,7 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
       }
     })();
     return () => controller.abort();
-  }, [mode, token, onUnauthorized, retry]);
+  }, [mode, token, onUnauthorized, retry, competition.id]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,8 +72,8 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
     if (!removing) {
       if (!draft.name.trim()) { setError('Enter a competition name.'); return; }
       if (draft.endingTime <= draft.startingTime) { setError('Ending time must be after starting time on the competition date.'); return; }
-      if (rangeChanged && (!range || Object.keys(assignments).length === 0)) {
-        setError('Select at least one lane with a distance for the new range.'); return;
+      if (!range || Object.keys(assignments).length === 0) {
+        setError('Select at least one lane with a distance.'); return;
       }
     }
     setPending(true);
@@ -74,7 +82,7 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
         method: removing ? 'DELETE' : 'PATCH',
         headers: { Authorization: `Bearer ${token}`, ...(!removing ? { 'Content-Type': 'application/json' } : {}) },
         ...(!removing ? { body: JSON.stringify({ ...draft, name: draft.name.trim(), defaultTargetType: draft.defaultTargetType || null,
-          ...(rangeChanged ? { rangeId, lanes: Object.entries(assignments).map(([laneId, distanceMeters]) => ({ laneId, distanceMeters })) } : {}),
+          ...(lanesChanged ? { rangeId, lanes: Object.entries(assignments).map(([laneId, distanceMeters]) => ({ laneId, distanceMeters })) } : {}),
         }) } : {}),
       });
       if (response.status === 401) { onUnauthorized('Je sessie is verlopen of ongeldig. Log opnieuw in.'); return; }
@@ -136,13 +144,17 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
           <button type="button" className="secondary" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>}
         <label htmlFor="edit-competition-range">Range</label>
         <select id="edit-competition-range" required disabled={loading || !!loadError || competition.status !== 'Scheduled'} value={rangeId}
-          onChange={(event) => { setRangeId(event.target.value); setAssignments({}); }}>
+          onChange={(event) => {
+            setRangeId(event.target.value);
+            setAssignments(event.target.value === competition.range.id ? { ...initialAssignments } : {});
+          }}>
           {!ranges.some((value) => value.id === competition.range.id) && <option value={competition.range.id}>{competition.range.name}</option>}
           {ranges.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
         </select>
         {competition.status !== 'Scheduled' && <p className="muted">The range is locked after check-in starts.</p>}
-        {rangeChanged && range && <fieldset className="competition-lanes"><legend>Lanes and distances</legend>
-          <p className="muted">Assign lanes for the new range. Existing participant placements will be cleared.</p>
+        {range && !loading && !loadError && <fieldset className="competition-lanes" disabled={competition.status !== 'Scheduled'}><legend>Lanes and distances</legend>
+          <p className="muted">Choose a distance to include a lane. Leave unused lanes unassigned.
+            {lanesChanged && ' Changing lanes or distances will clear existing participant placements.'}</p>
           <div className="distance-list" role="group" aria-label="Set distance for all lanes">
             <span>Set all lanes to:</span>
             {range.supportedDistancesMeters.map((distance) => <button key={distance} type="button" className="distance-link"

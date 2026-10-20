@@ -53,7 +53,7 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
     <div aria-live="polite">
       {!state && !error && <p>Reading update status…</p>}
       {state?.status === 'idle' && <p>No updates available</p>}
-      {state?.availableVersion && ['available', 'failed'].includes(state.status) && <p>Update available ({state.availableVersion}){' '}
+      {state?.availableVersion && ['available', 'failed'].includes(state.status) && <p className="update-available">Update available ({state.availableVersion}){' '}
         <button disabled={pending || !!error} onClick={() => { void install(); }}>Update</button></p>}
       {state && !['idle', 'available'].includes(state.status) && <p>{state.message}</p>}
     </div>

@@ -34,7 +34,9 @@ test('edit competition details, keep input on failure and confirm removal', asyn
   await expect(edit.getByLabel('Name', { exact: true })).toBeFocused();
   await expect(edit.getByLabel('Name', { exact: true })).toHaveValue('Editable browser competition');
   await expect(edit.getByLabel('Range', { exact: true })).toHaveValue(rangeId);
-  await expect(edit.getByRole('group', { name: 'Lanes and distances' })).toHaveCount(0);
+  await expect(edit.getByRole('group', { name: 'Lanes and distances' })).toBeVisible();
+  await expect(edit.getByLabel('Lane 1', { exact: true })).toHaveValue('18');
+  await expect(edit.getByLabel('Lane 2', { exact: true })).toHaveValue('');
   await edit.getByLabel('Name', { exact: true }).fill('Updated browser competition');
   await edit.getByLabel('Date', { exact: true }).fill('2026-12-02');
   await edit.getByLabel('Starting time').fill('10:00');
@@ -86,7 +88,7 @@ test('edit competition details, keep input on failure and confirm removal', asyn
   expect((await request.get(`/api/v1/admin/competitions/${competition.id}`, { headers })).status()).toBe(404);
 });
 
-test('editing only shows lane assignments for a changed range and refreshes saved lanes', async ({ page, request }) => {
+test('editing shows lanes for the selected range and refreshes saved lanes', async ({ page, request }) => {
   const headers = { Authorization: `Bearer ${token}` };
   const rangesResponse = await request.get('/api/v1/admin/ranges', { headers });
   const range = (await rangesResponse.json()).find((value: { id: string }) => value.id === rangeId);
@@ -105,7 +107,8 @@ test('editing only shows lane assignments for a changed range and refreshes save
     const assignments = edit.getByRole('group', { name: 'Lanes and distances' });
     const selectRange = edit.getByLabel('Range', { exact: true });
     await expect(selectRange).toHaveValue(rangeId);
-    await expect(assignments).toHaveCount(0);
+    await expect(assignments).toBeVisible();
+    await expect(edit.getByLabel('Lane 1', { exact: true })).toHaveValue('18');
     await selectRange.selectOption(other.id);
     await expect(assignments).toBeVisible();
     await edit.getByRole('button', { name: 'Save changes' }).click();
@@ -115,7 +118,8 @@ test('editing only shows lane assignments for a changed range and refreshes save
     await selectRange.selectOption(third.id);
     await expect(edit.getByLabel('Lane 10', { exact: true })).toHaveValue('');
     await selectRange.selectOption(rangeId);
-    await expect(assignments).toHaveCount(0);
+    await expect(assignments).toBeVisible();
+    await expect(edit.getByLabel('Lane 1', { exact: true })).toHaveValue('18');
     await selectRange.selectOption(other.id);
     await expect(edit.getByLabel('Lane 8', { exact: true })).toHaveValue('');
     await edit.getByLabel('Lane 8', { exact: true }).selectOption('25');
@@ -135,7 +139,48 @@ test('editing only shows lane assignments for a changed range and refreshes save
     await expect(page.getByRole('row', { name: 'Lane 8 configuration' })).toContainText('50 m');
     await details.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(selectRange).toHaveValue(other.id);
-    await expect(assignments).toHaveCount(0);
+    await expect(assignments).toBeVisible();
+    await expect(edit.getByLabel('Lane 8', { exact: true })).toHaveValue('50');
+  } finally {
+    await request.delete(`/api/v1/admin/competitions/${competition.id}`, { headers });
+  }
+});
+
+test('editing the current range adds and removes lanes and persists distances', async ({ page, request }) => {
+  const headers = { Authorization: `Bearer ${token}` };
+  const range = (await (await request.get('/api/v1/admin/ranges', { headers })).json())
+    .find((value: { id: string }) => value.id === rangeId);
+  const competition = await (await request.post('/api/v1/admin/competitions', { headers, data: {
+    name: 'Editable lane selection', date: '2026-12-05', startingTime: '09:00', endingTime: '12:00', rangeId,
+    lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
+  } })).json();
+  try {
+    await page.goto(`/admin/competitions/${competition.id}`);
+    const details = page.getByRole('region', { name: 'Details', exact: true });
+    const edit = page.getByRole('dialog', { name: 'Edit competition' });
+    await details.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(edit.getByLabel('Lane 1', { exact: true })).toHaveValue('18');
+    await expect(edit.getByLabel('Lane 2', { exact: true })).toHaveValue('');
+    await edit.getByLabel('Lane 2', { exact: true }).selectOption('25');
+    await edit.getByRole('button', { name: 'Save changes' }).click();
+    await expect(edit).not.toBeVisible();
+    await expect(page.getByRole('row', { name: 'Lane 2 configuration' })).toContainText('25 m');
+    await details.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(edit.getByLabel('Lane 2', { exact: true })).toHaveValue('25');
+    await edit.getByLabel('Lane 1', { exact: true }).selectOption('');
+    await edit.getByLabel('Lane 2', { exact: true }).selectOption('');
+    await edit.getByRole('button', { name: 'Save changes' }).click();
+    await expect(edit.getByRole('alert')).toContainText('at least one lane');
+    await edit.getByLabel('Lane 2', { exact: true }).selectOption('18');
+    await edit.getByRole('button', { name: 'Save changes' }).click();
+    await expect(edit).not.toBeVisible();
+    await expect(page.getByRole('row', { name: 'Lane 1 configuration' })).toHaveCount(0);
+    await expect(page.getByRole('row', { name: 'Lane 2 configuration' })).toContainText('18 m');
+    await page.reload();
+    await expect(page.getByRole('row', { name: 'Lane 2 configuration' })).toContainText('18 m');
+    await details.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(edit.getByLabel('Lane 1', { exact: true })).toHaveValue('');
+    await expect(edit.getByLabel('Lane 2', { exact: true })).toHaveValue('18');
   } finally {
     await request.delete(`/api/v1/admin/competitions/${competition.id}`, { headers });
   }

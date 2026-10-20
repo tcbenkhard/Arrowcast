@@ -122,17 +122,17 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
       return reply.code(400).send({ message: 'Select an existing default target type.' });
     }
     const rangeChanged = body.rangeId !== undefined && body.rangeId !== competition.range.id;
-    if (!rangeChanged && body.lanes !== undefined) {
-      return reply.code(400).send({ message: 'Lane assignments are only accepted when changing the range.' });
-    }
-    if (rangeChanged) {
-      if (competition.status !== 'Scheduled' || db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, competition.id)).get()) {
-        return reply.code(409).send({ message: 'Change the range before check-in and before any scores exist.' });
+    const currentLanes = assignedLanes(competition.id);
+    const lanesChanged = rangeChanged || (body.lanes !== undefined && (body.lanes.length !== currentLanes.length
+      || body.lanes.some((lane) => !currentLanes.some((current) => current.laneId === lane.laneId && current.distanceMeters === lane.distanceMeters))));
+    if (rangeChanged || body.lanes !== undefined) {
+      if (lanesChanged && (competition.status !== 'Scheduled' || db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, competition.id)).get())) {
+        return reply.code(409).send({ message: 'Change the range or lanes before check-in and before any scores exist.' });
       }
       if (!body.lanes?.length || new Set(body.lanes.map((lane) => lane.laneId)).size !== body.lanes.length) {
         return reply.code(400).send({ message: 'Select at least one lane and select each lane only once.' });
       }
-      const range = db.select().from(ranges).where(eq(ranges.id, body.rangeId!)).get();
+      const range = db.select().from(ranges).where(eq(ranges.id, body.rangeId ?? competition.range.id)).get();
       if (!range) return reply.code(400).send({ message: 'Select an existing range.' });
       const availableLanes = new Set(db.select({ id: lanes.id }).from(lanes).where(eq(lanes.rangeId, range.id)).all().map((lane) => lane.id));
       const distances = new Set(db.select().from(rangeDistances).where(eq(rangeDistances.rangeId, range.id)).all().map((value) => value.distanceMeters));
@@ -141,7 +141,7 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
       }
     }
     db.transaction((tx) => {
-      if (rangeChanged) {
+      if (lanesChanged) {
         const grants = tx.select({ id: laneScoringGrants.id }).from(laneScoringGrants).where(eq(laneScoringGrants.competitionId, competition.id));
         const sessions = tx.select({ id: scoringSessions.id }).from(scoringSessions).where(inArray(scoringSessions.grantId, grants));
         tx.delete(scoringMutations).where(inArray(scoringMutations.sessionId, sessions)).run();
@@ -155,9 +155,12 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
       tx.update(competitions).set({ ...details, name: body.name.trim(), defaultTargetType,
         ...(rangeChanged ? { rangeId } : {}),
       }).where(eq(competitions.id, competition.id)).run();
-      if (rangeChanged) {
+      if (lanesChanged) {
         for (const lane of body.lanes!) {
-          tx.insert(competitionLanes).values({ competitionId: competition.id, rangeId: body.rangeId!, ...lane, targetType: defaultTargetType }).run();
+          const retained = currentLanes.find((current) => current.laneId === lane.laneId);
+          tx.insert(competitionLanes).values({ competitionId: competition.id, rangeId: body.rangeId ?? competition.range.id, ...lane,
+            targetType: retained ? retained.targetType : defaultTargetType,
+            numberOfTargets: retained?.numberOfTargets ?? 1 }).run();
         }
       }
     });

@@ -45,7 +45,6 @@ test('competition details validate, persist and preserve assigned lanes', async 
       { rangeId: other.id, lanes: [validLane, validLane] },
       { rangeId: other.id, lanes: [{ ...validLane, distanceMeters: 18 }] },
       { rangeId: other.id, lanes: [{ laneId: range.lanes[0].id, distanceMeters: 25 }] },
-      { rangeId: range.id, lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }] },
     ]) {
       const failed = await app.inject({ method: 'PATCH', url, headers, payload: { ...updatedDetails, ...invalid } });
       assert.equal(failed.statusCode, 400, failed.body);
@@ -60,5 +59,54 @@ test('competition details validate, persist and preserve assigned lanes', async 
     assert.equal((await app.inject({ url, headers })).statusCode, 404);
     assert.deepEqual((await app.inject({ url: '/api/v1/admin/competitions', headers })).json(), []);
     assert.equal((await app.inject({ url: '/api/v1/admin/ranges', headers })).json()[0].id, range.id);
+  } finally { await app.close(); }
+});
+
+test('current range lanes can be added, removed and resized while keeping retained target settings', async () => {
+  const app = buildApp({ jwtSecret: 'competition-lanes-secret-at-least-thirty-two-bytes', databasePath: ':memory:' });
+  try {
+    const login = await loginAdmin(app);
+    const headers = { authorization: `Bearer ${login.json().token}` };
+    for (const name of ['Default face', 'Custom face']) {
+      await app.inject({ method: 'POST', url: '/api/v1/admin/target-types', headers, payload: { name } });
+    }
+    const range = (await app.inject({ method: 'POST', url: '/api/v1/admin/ranges', headers,
+      payload: { name: 'Lane editing range', supportedDistancesMeters: [18, 25], lanes: [{ number: 1 }, { number: 2 }] } })).json();
+    const first = { laneId: range.lanes[0].id, distanceMeters: 18 };
+    const second = { laneId: range.lanes[1].id, distanceMeters: 25 };
+    const details = { name: 'Lane editing', date: '2026-12-01', startingTime: '09:00', endingTime: '12:00',
+      defaultTargetType: 'Default face', numberOfRounds: 10, arrowsPerRound: 3 };
+    const created = (await app.inject({ method: 'POST', url: '/api/v1/admin/competitions', headers,
+      payload: { ...details, rangeId: range.id, lanes: [first] } })).json();
+    const url = `/api/v1/admin/competitions/${created.id}`;
+    const getLanes = async () => (await app.inject({ url: `${url}/lanes`, headers })).json();
+    const patch = (lanes: { laneId: string; distanceMeters: number }[]) => app.inject({ method: 'PATCH', url, headers,
+      payload: { ...details, lanes } });
+    assert.equal((await app.inject({ method: 'PUT', url: `${url}/lanes/${first.laneId}`, headers,
+      payload: { targetType: 'Custom face', numberOfTargets: 2 } })).statusCode, 200);
+    const initial = await getLanes();
+    for (const invalid of [[], [first, first], [second, { ...first, distanceMeters: 50 }],
+      [first, { laneId: 'missing', distanceMeters: 18 }]]) {
+      const response = await patch(invalid);
+      assert.equal(response.statusCode, 400, response.body);
+      assert.deepEqual(await getLanes(), initial);
+    }
+    assert.equal((await patch([first, second])).statusCode, 200);
+    assert.deepEqual(await getLanes(), [initial[0], { ...second, number: 2, targetType: 'Default face', numberOfTargets: 1 }]);
+    // Duplicate IDs must also be rejected when the array length equals the existing lane count.
+    assert.equal((await patch([first, first])).statusCode, 400);
+    const changedDistance = { ...first, distanceMeters: 25 };
+    assert.equal((await patch([changedDistance, second])).statusCode, 200);
+    assert.deepEqual((await getLanes())[0], { ...initial[0], distanceMeters: 25 });
+    assert.equal((await patch([changedDistance])).statusCode, 200);
+    assert.deepEqual(await getLanes(), [{ ...initial[0], distanceMeters: 25 }]);
+    assert.equal((await app.inject({ method: 'PATCH', url: `${url}/status`, headers, payload: { status: 'Check-in' } })).statusCode, 200);
+    const lockedLanes = await getLanes();
+    for (const lanes of [[changedDistance, second], [first]]) {
+      const response = await patch(lanes);
+      assert.equal(response.statusCode, 409, response.body);
+      assert.deepEqual(await getLanes(), lockedLanes);
+    }
+    assert.equal((await patch([changedDistance])).statusCode, 200);
   } finally { await app.close(); }
 });
