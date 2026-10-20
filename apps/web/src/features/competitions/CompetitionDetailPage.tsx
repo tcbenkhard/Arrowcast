@@ -321,7 +321,6 @@ function CompetitionLanes({ competitionId, token, onUnauthorized, onChange, stat
           <thead><tr>{!readOnly && <th scope="col"><label className="lane-selection">
             <input ref={selectAll} type="checkbox" aria-label="Select all lanes" checked={allSelected}
               onChange={(event) => setSelectedLanes(event.target.checked ? new Set(lanes.map((lane) => lane.laneId)) : new Set())} />
-            Select all
           </label></th>}<th scope="col">Lane</th><th scope="col">Distance</th>
             <th scope="col">Target type</th><th scope="col">Number of targets</th></tr></thead>
           <tbody>{lanes.map((lane) =>

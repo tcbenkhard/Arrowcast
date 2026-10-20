@@ -276,7 +276,7 @@ test('competition details load lanes separately and persist target configuration
   const lane = page.getByRole('row', { name: 'Lane 1 configuration' });
   await expect(lane.getByLabel('Target type')).toHaveValue('');
   await expect(lane.getByLabel('Number of targets')).toHaveValue('1');
-  await expect(lanes.getByRole('columnheader')).toHaveText(['Select all', 'Lane', 'Distance', 'Target type', 'Number of targets']);
+  await expect(lanes.getByRole('columnheader')).toHaveText(['', 'Lane', 'Distance', 'Target type', 'Number of targets']);
   await page.clock.install();
   await page.clock.pauseAt(new Date(Date.now() + 1000));
   const immediateSave = page.waitForResponse((response) => response.request().method() === 'PUT'
