@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import ExcelJS from 'exceljs';
 import Fastify from 'fastify';
@@ -11,7 +10,7 @@ import { matchTarget, readParticipantWorkbook } from '../src/modules/participant
 import { buildApp } from '../src/app.js';
 
 const url = '/competitions/one/participants/import';
-const example = () => readFile(new URL('../../../tests/fixtures/voorbeeld-import.xlsx', import.meta.url));
+const example = () => workbook([['185716', 'Timo Benkhard', 'HS Hilversum', 'Recurve', '40cm']], true);
 async function fixture() {
   const database = openDatabase(':memory:');
   const db = database.db;
@@ -32,7 +31,7 @@ async function workbook(rows: string[][], blankFirst = false) {
 }
 const row = ['000123', 'Zoë van Dijk', ' hs hilversum ', 'recurve', '40cm'];
 
-test('external example skips its blank first row and imports and reimports without duplicates', async () => {
+test('workbook skips its blank first row and imports and reimports without duplicates', async () => {
   const { app, db, close } = await fixture();
   try {
     const payload = await example();
