@@ -14,6 +14,7 @@ SOURCE = Path(__file__).resolve().parents[1] / 'stage-arrowcast/00-install/files
 spec = importlib.util.spec_from_file_location('updater', SOURCE)
 updater = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(updater)
+probe_connection = updater.updates_connected
 
 
 class UpdaterTests(unittest.TestCase):
@@ -47,6 +48,77 @@ class UpdaterTests(unittest.TestCase):
             db.execute("INSERT INTO competitions VALUES ('Closed')")
         updater.candidate = None
         updater.busy = False
+        updater.last_check = 0
+        updater.status = {'status': 'checking', 'message': '', 'availableVersion': None}
+        override = patch.object(updater, 'updates_connected', return_value=True)
+        override.start()
+        self.addCleanup(override.stop)
+
+    def test_network_probe_uses_internet_reachability_regardless_of_mode(self):
+        for mode, available in [('hotspot', False), ('hotspot', True), ('wifi', False), ('wifi', True),
+                                ('ethernet', False), ('ethernet', True)]:
+            with self.subTest(mode=mode, available=available), patch.object(updater.http.client, 'HTTPConnection') as http, \
+                    patch.object(updater.socket, 'socket'), \
+                    patch.object(updater.socket, 'AF_UNIX', 1, create=True):
+                response = http.return_value.getresponse.return_value
+                response.status = 200
+                response.read.return_value = json.dumps({'mode': mode, 'internetAvailable': available}).encode()
+                self.assertEqual(probe_connection(), available)
+                http.return_value.close.assert_called_once()
+
+    def test_network_service_unavailable_skips_checks(self):
+        with patch.object(updater.http.client, 'HTTPConnection') as http, \
+                patch.object(updater.socket, 'socket') as sock, \
+                patch.object(updater.socket, 'AF_UNIX', 1, create=True):
+            sock.return_value.connect.side_effect = OSError('not ready')
+            self.assertFalse(probe_connection())
+            http.return_value.request.assert_not_called()
+            http.return_value.close.assert_called_once()
+
+    def test_no_internet_never_checks_or_downloads_updates(self):
+        updater.candidate = {'version': 'v1.1.0'}
+        with patch.object(updater, 'updates_connected', return_value=False), \
+                patch.object(updater, 'release_candidate') as release, \
+                patch.object(updater, 'download') as download:
+            updater.check()
+            self.assertEqual(updater.status['status'], 'offline')
+            self.assertIsNone(updater.candidate)
+            updater.install()
+            release.assert_not_called()
+            download.assert_not_called()
+
+    def test_no_internet_status_hides_cached_update_and_rejects_installation(self):
+        updater.status = {'status': 'available', 'message': '', 'availableVersion': 'v1.1.0'}
+        updater.candidate = {'version': 'v1.1.0'}
+        handler = object.__new__(updater.Handler)
+        responses = []
+        handler.respond = lambda code, value: responses.append((code, value))
+        with patch.object(updater, 'updates_connected', return_value=False), \
+                patch.object(updater, 'current_version', return_value='v1.0.0'), \
+                patch.object(updater.threading.Thread, 'start') as start:
+            handler.path = '/status'
+            handler.do_GET()
+            handler.path = '/install'
+            handler.do_POST()
+            start.assert_not_called()
+        self.assertEqual([code for code, _ in responses], [200, 503])
+        for _, result in responses:
+            self.assertEqual(result['currentVersion'], 'v1.0.0')
+            self.assertEqual(result['status'], 'offline')
+            self.assertIsNone(result['availableVersion'])
+
+    def test_reconnecting_checks_immediately_despite_recent_cached_check(self):
+        updater.status = {'status': 'offline', 'message': updater.OFFLINE_MESSAGE, 'availableVersion': None}
+        updater.last_check = updater.time.monotonic()
+        handler = object.__new__(updater.Handler)
+        handler.path = '/status'
+        responses = []
+        handler.respond = lambda code, value: responses.append(value)
+        with patch.object(updater, 'current_version', return_value='v1.0.0'), \
+                patch.object(updater.threading.Thread, 'start') as start:
+            handler.do_GET()
+            start.assert_called_once()
+        self.assertEqual(responses[0]['status'], 'checking')
 
     def require_symlinks(self):
         if not self.symlinks:

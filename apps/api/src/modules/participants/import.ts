@@ -122,11 +122,12 @@ export function saveParticipants(db: AppDatabase, data: ImportData) {
   });
 }
 
-export function createPageFetcher(): FetchPage {
+export function createPageFetcher(canFetch: () => Promise<boolean> = async () => true): FetchPage {
   let lastRequest = 0;
   return async (url) => {
     // Sequential requests, at most two per second; stop on HTTP errors.
     await setTimeout(Math.max(0, 500 - (Date.now() - lastRequest)));
+    if (!await canFetch()) throw new Error('Internetverbinding niet beschikbaar; deelnemersimport gestopt.');
     lastRequest = Date.now();
     const response = await fetch(sourceUrl(url), {
       headers: { 'User-Agent': 'ArrowcastParticipantImport/1.0', Accept: 'text/html' },

@@ -1,7 +1,6 @@
 [Unit]
 Description=Assign IP addresses to ArrowCast Wi-Fi clients
-Wants=arrowcast-hotspot.service
-After=arrowcast-hotspot.service
+After=NetworkManager.service
 StartLimitIntervalSec=0
 
 [Service]

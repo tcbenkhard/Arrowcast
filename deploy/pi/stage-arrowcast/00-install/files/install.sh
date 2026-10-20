@@ -56,6 +56,18 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 nmcli --offline connection modify connection.id ArrowCast \
   < /etc/NetworkManager/system-connections/arrowcast.nmconnection > /dev/null
+python3 <<'PY'
+import importlib.util
+import subprocess
+spec = importlib.util.spec_from_file_location('network', '/usr/local/lib/arrowcast/network.py')
+network = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(network)
+for ssid, password in [('Club Wi-Fi', ''), ('Club; [wifi]', r'pass\word with spaces'),
+                       ('Hidden network', 'a' * 64)]:
+    subprocess.run(['nmcli', '--offline', 'connection', 'modify', 'connection.id', 'Arrowcast test'],
+                   input=network.profile_content(ssid, password), text=True, check=True,
+                   stdout=subprocess.DEVNULL)
+PY
 dnsmasq --test --conf-file=/etc/arrowcast/dnsmasq.conf
 # Keep each application's working directory intact when current changes.
 mkdir -p /opt/arrowcast-factory
@@ -68,7 +80,7 @@ ln -s current/runtime /opt/arrowcast/runtime
 install -d -m 0755 /var/lib/arrowcast-update
 systemctl enable arrowcast-update.service
 systemctl enable arrowcast-first-boot.service arrowcast.service arrowcast-console.service nginx avahi-daemon
-systemctl enable NetworkManager arrowcast-hotspot.service arrowcast-dhcp.service
+systemctl enable NetworkManager arrowcast-network.service
 mkdir -p /etc/systemd/system/ssh.service.d /etc/ssh/sshd_config.d
 cat > /etc/systemd/system/ssh.service.d/arrowcast.conf <<'SSH'
 [Unit]

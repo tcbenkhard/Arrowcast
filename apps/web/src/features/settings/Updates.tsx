@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { SettingsCard } from './SettingsCard';
 
 interface UpdateState {
-  status: 'checking' | 'idle' | 'available' | 'installing' | 'failed' | 'disabled';
+  status: 'checking' | 'idle' | 'available' | 'installing' | 'failed' | 'disabled' | 'offline';
   currentVersion: string;
   availableVersion: string | null;
   message: string;
@@ -51,7 +51,7 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
   return <SettingsCard id="updates" title="Updates" defaultExpanded>
     {state && <p>Installed version: {state.currentVersion}</p>}
     <div aria-live="polite">
-      {!state && !error && <p>Checking for updates…</p>}
+      {!state && !error && <p>Reading update status…</p>}
       {state?.status === 'idle' && <p>No updates available</p>}
       {state?.availableVersion && ['available', 'failed'].includes(state.status) && <p>Update available ({state.availableVersion}){' '}
         <button disabled={pending || !!error} onClick={() => { void install(); }}>Update</button></p>}

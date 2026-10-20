@@ -4,12 +4,15 @@ import { RangesPage } from '../ranges/RangesPage';
 import { SettingsCard } from './SettingsCard';
 import { ArrowcastHostname } from './ArrowcastHostname';
 import { Updates } from './Updates';
+import { Network } from './Network';
 
 interface ImportState {
   status: 'idle' | 'running' | 'completed' | 'failed';
   progress: string | null;
   result: { season: string; participants: number; clubs: number } | null;
   error: string | null;
+  available?: boolean;
+  message?: string | null;
 }
 
 export function SettingsPage({ token, onUnauthorized }: {
@@ -35,7 +38,7 @@ export function SettingsPage({ token, onUnauthorized }: {
         const result = await response.json() as ImportState;
         if (controller.signal.aborted) return;
         setState(result); setError('');
-        if (result.status === 'running') timer = setTimeout(() => { void refresh(); }, 1500);
+        timer = setTimeout(() => { void refresh(); }, result.status === 'running' ? 1500 : 3000);
       } catch {
         if (!controller.signal.aborted) setError('De importstatus kon niet worden opgehaald. Controleer de verbinding en probeer opnieuw.');
       }
@@ -45,7 +48,7 @@ export function SettingsPage({ token, onUnauthorized }: {
   }, [token, onUnauthorized, retry]);
 
   async function startImport() {
-    if (starting.current || state?.status === 'running') return;
+    if (starting.current || state?.status === 'running' || state?.available === false) return;
     starting.current = true;
     setPending(true); setError('');
     try {
@@ -53,6 +56,10 @@ export function SettingsPage({ token, onUnauthorized }: {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 401) { onUnauthorized('Je sessie is verlopen of ongeldig. Log opnieuw in.'); return; }
+      if (response.status === 503) {
+        const result = await response.json() as ImportState;
+        if (result.available === false) { setState(result); setRetry((value) => value + 1); return; }
+      }
       if (!response.ok && response.status !== 409) throw new Error('Import start failed');
       setState({ status: 'running', progress: 'De import wordt gestart.', result: null, error: null });
       setRetry((value) => value + 1);
@@ -68,13 +75,15 @@ export function SettingsPage({ token, onUnauthorized }: {
     <h2 id="settings-heading">Settings</h2>
     <div className="settings-cards">
       <ArrowcastHostname />
+      <Network token={token} onUnauthorized={onUnauthorized} />
       <Updates token={token} onUnauthorized={onUnauthorized} />
       <SettingsCard id="participant-import" title="Deelnemers importeren">
         <p>Importeer deelnemers en verenigingen uit de nieuwste regiocompetities van Handboogsport.
           Bestaande deelnemers worden bijgewerkt. De import kan enkele minuten duren en gaat door als je deze pagina verlaat.</p>
-        <button disabled={!state || pending || running || !!error} onClick={() => { void startImport(); }}>
+        <button disabled={!state || state.available === false || pending || running || !!error} onClick={() => { void startImport(); }}>
           Importeer deelnemers uit handboogsport
         </button>
+        {state?.available === false && <p role="status">{state.message}</p>}
         {(!state && !error) && <p role="status">Importstatus ophalen...</p>}
         {(running || pending) && <p role="status" aria-live="polite">Bezig met importeren... {state?.progress}</p>}
         {state?.status === 'completed' && state.result && <p className="success" role="status">

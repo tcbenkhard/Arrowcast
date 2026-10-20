@@ -1,6 +1,26 @@
 import { expect, test } from '@playwright/test';
 import { testAdminToken } from './admin';
 
+test('no internet shows installed version and guidance, then resumes checks after reconnecting', async ({ page }) => {
+  let online = false;
+  await page.route('**/api/v1/admin/updates', (route) => route.fulfill({ json: {
+    status: online ? 'available' : 'offline', currentVersion: 'v1.0.0',
+    availableVersion: online ? 'v1.1.0' : null,
+    message: online ? '' : 'Arrowcast must be connected to the internet to check for updates.',
+  } }));
+  await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
+  await page.goto('/admin/settings');
+  const updates = page.getByRole('region', { name: 'Updates', exact: true });
+  await expect(updates.getByText('Installed version: v1.0.0', { exact: true })).toBeVisible();
+  await expect(updates.getByText(/must be connected to the internet/)).toBeVisible();
+  await expect(updates.getByRole('button', { name: 'Update', exact: true })).toHaveCount(0);
+  await expect(updates.getByText('No updates available', { exact: true })).toHaveCount(0);
+  await expect(updates.getByRole('alert')).toHaveCount(0);
+  online = true;
+  await expect(updates.getByRole('button', { name: 'Update', exact: true })).toBeVisible();
+  await expect(updates.getByText(/must be connected to the internet/)).toHaveCount(0);
+});
+
 test('settings checks updates and installs only after confirmation', async ({ page }) => {
   let available = false;
   let installing = false;
