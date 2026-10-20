@@ -6,6 +6,7 @@ export const users = sqliteTable('users', {
   name: text('name').notNull().default(''),
   passwordHash: text('password_hash').notNull(),
   role: text('role', { enum: ['admin', 'competition_manager'] }).notNull().default('admin'),
+  language: text('language', { enum: ['nl', 'en'] }).notNull().default('nl'),
   forceChangePassword: integer('force_change_password', { mode: 'boolean' }).notNull().default(false),
   sessionVersion: integer('session_version').notNull().default(0),
 });

@@ -52,7 +52,7 @@ test('migrations run once and the admin seed never resets an existing account', 
     assert.equal(otherUser.statusCode, 200);
     const client = new SQLite(path);
     try {
-      assert.equal((client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count, 20);
+      assert.equal((client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count, 21);
       assert.equal((client.prepare('SELECT count(*) AS count FROM users').get() as { count: number }).count, 2);
       client.prepare('DELETE FROM users WHERE username = ?').run('another-admin');
       const removedUser = await app.inject({ url: '/api/v1/admin/me',

@@ -4,6 +4,13 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import type { LaneQrCode, ScoringContext } from '../../packages/contracts/src/index';
 import { testAdminToken } from './admin';
 
+test.beforeEach(async ({ context, request }) => {
+  await context.addInitScript(() => localStorage.setItem('arrowcast.language', 'en'));
+  await request.patch('/api/v1/admin/me/language', {
+    headers: { Authorization: `Bearer ${testAdminToken()}` }, data: { language: 'en' },
+  });
+});
+
 async function fixture(request: APIRequestContext, arrowsPerRound = 2) {
   const token = testAdminToken(); const headers = { Authorization: `Bearer ${token}` };
   const range = await (await request.post('/api/v1/admin/ranges', { headers, data: {
@@ -35,10 +42,45 @@ async function save(page: Page) {
   await expect(page.locator('.scoring-notice')).toContainText(/Scores saved|All rounds saved/);
 }
 
+test('live scores stay up to date in fullscreen and return to the competition screen', async ({ page, request }) => {
+  const f = await fixture(request);
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
+  await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
+  let totalScore = 10;
+  await page.route(`**${f.base}/scoring-standings`, (route) => route.fulfill({ json: [{
+    participantId: 'fullscreen-archer', name: 'Fullscreen archer', laneNumber: 1, targetLetter: 'A', enteredRounds: 1,
+    totalRounds: 2, totalScore, averageScore: totalScore / 2,
+  }] }));
+  await page.goto(`/admin/competitions/${f.competition.id}`);
+  const scores = page.getByRole('region', { name: 'Live scoring', exact: true });
+  const table = scores.getByRole('table', { name: 'Scoring standings' });
+  await expect(table.getByRole('columnheader')).toHaveText(['Participant', 'Assignment', 'Round', 'Total score', 'Average score']);
+  await expect(table.getByRole('cell', { name: '1 A', exact: true })).toBeVisible();
+  await expect(table.getByRole('cell', { name: '10', exact: true })).toBeVisible();
+  await scores.getByRole('button', { name: 'Show live scores in fullscreen' }).click();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('live-score-panel'))).toBe(true);
+  await expect(scores.getByRole('button', { name: 'Pause scoring', exact: true })).toBeHidden();
+  await expect(table.getByRole('cell', { name: '1 A', exact: true })).toBeVisible();
+  totalScore = 20;
+  await expect(table.getByRole('cell', { name: '20', exact: true })).toBeVisible({ timeout: 10_000 });
+  await scores.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+  await expect(scores.getByRole('button', { name: 'Pause scoring', exact: true })).toBeVisible();
+  await expect(scores.getByRole('button', { name: 'Show live scores in fullscreen' })).toBeFocused();
+  await scores.getByRole('button', { name: 'Show live scores in fullscreen' }).click();
+  await expect(scores.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
+  await page.evaluate(() => document.exitFullscreen());
+  await expect(scores.getByRole('button', { name: 'Show live scores in fullscreen' })).toHaveAttribute('aria-pressed', 'false');
+  expect((await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Closed' } })).ok()).toBeTruthy();
+  await page.reload();
+  await expect(table.getByRole('columnheader')).toHaveText(['Participant', 'Round', 'Total score', 'Average score']);
+});
+
 test('correcting the second arrow with backspace selects the next arrow in drafts and submitted rounds', async ({ page, request }) => {
   const f = await fixture(request, 3);
-  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
-  const started = await (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } })).json();
+  const started = await (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })).json();
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   await page.goto((started.qrCodes[0] as LaneQrCode).path);
   const participant = page.getByRole('group', { name: 'Lane participants', exact: true }).locator('.scoring-participant-toggle').first();
   const secondArrow = page.getByRole('button', { name: /^Arrow 2:/ });
@@ -64,25 +106,19 @@ test('correcting the second arrow with backspace selects the next arrow in draft
   await expect(page.locator('.scoring-notice')).toHaveText('Correction saved.');
 });
 
-test('start, print lane QRs, enter on a phone, resume on another device and wrap through all rounds', async ({ page, request, browser }) => {
+test('print lane QRs during check-in, start, enter on a phone, resume on another device and wrap through all rounds', async ({ page, request, browser }) => {
   const f = await fixture(request);
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
   await page.goto(`/admin/competitions/${f.competition.id}`);
-  const settings = page.getByRole('region', { name: 'Scoring', exact: true });
+  const settings = page.getByRole('region', { name: 'Live scoring', exact: true });
   await expect(page.getByRole('region', { name: 'Details', exact: true })).toContainText(f.competition.name);
   await expect(settings).toHaveCount(0);
   await page.getByRole('button', { name: 'Start check-in', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start competition', exact: true })).toBeVisible();
   await expect(settings).toHaveCount(0);
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Start competition', exact: true }).click();
-  await expect(settings).toBeVisible();
-  await expect(settings.getByRole('spinbutton')).toHaveCount(0);
-  await expect(settings.getByRole('button', { name: 'Save scoring format' })).toHaveCount(0);
   const qr = page.getByRole('region', { name: 'Lane scoring QR codes' });
   await expect(qr.getByRole('button', { name: 'Expand lane scoring QR codes' })).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByRole('button', { name: 'Expand participants', exact: true })).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByRole('button', { name: 'Expand lanes', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('button', { name: 'Expand: lanes', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await qr.getByRole('button', { name: 'Expand lane scoring QR codes' }).click();
   await expect(qr.getByRole('img')).toHaveCount(2);
   const links = qr.getByRole('link'); const urls = await links.evaluateAll((elements) => elements.map((link) => (link as HTMLAnchorElement).href));
@@ -92,13 +128,20 @@ test('start, print lane QRs, enter on a phone, resume on another device and wrap
   await qr.getByRole('button', { name: 'Expand lane scoring QR codes' }).click();
   await expect(qr.getByRole('img').first()).toBeVisible();
   expect(await qr.getByRole('link').evaluateAll((elements) => elements.map((link) => (link as HTMLAnchorElement).href))).toEqual(urls);
-  await expect(settings.getByRole('table', { name: 'Scoring standings' }).getByRole('row')).toHaveCount(5);
   await page.emulateMedia({ media: 'print' });
   await expect(page.getByRole('region', { name: 'Details', exact: true })).toBeHidden();
   await expect(qr.getByRole('img').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Print lane QR codes' })).toBeHidden();
   await page.screenshot({ path: 'test-results/scoring-qr-print.png', fullPage: true });
   await page.emulateMedia({ media: 'screen' });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Start competition', exact: true }).click();
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole('table', { name: 'Scoring standings' }).getByRole('row')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Expand: participants', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(settings.getByRole('spinbutton')).toHaveCount(0);
+  await expect(settings.getByRole('button', { name: 'Save scoring format' })).toHaveCount(0);
+  expect(await links.evaluateAll((elements) => elements.map((link) => (link as HTMLAnchorElement).href))).toEqual(urls);
   // Four archers across two lanes give two participants per lane.
   const assignments = await (await request.get(`${f.base}/participants`, { headers: f.headers })).json();
   const occupiedLaneId = assignments[0].laneId;
@@ -106,6 +149,8 @@ test('start, print lane QRs, enter on a phone, resume on another device and wrap
   const url = urls[linkIndex]!;
   const phoneContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const otherContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await phoneContext.addInitScript(() => localStorage.setItem('arrowcast.language', 'en'));
+  await otherContext.addInitScript(() => localStorage.setItem('arrowcast.language', 'en'));
   try {
     const phone = await phoneContext.newPage(); const other = await otherContext.newPage();
     await phone.goto(url);
@@ -166,15 +211,15 @@ test('start, print lane QRs, enter on a phone, resume on another device and wrap
 
 test('choose lane participants, retain drafts and correct recorded scores including misses', async ({ page, request }) => {
   const f = await fixture(request);
-  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
-  const started = await (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } })).json();
+  const started = await (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })).json();
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   const code = started.qrCodes[0] as LaneQrCode;
   await page.goto(code.path);
   const cards = page.getByRole('group', { name: 'Lane participants', exact: true });
   const participants = cards.locator('.scoring-participant-toggle');
   const first = participants.nth(0);
   const second = participants.nth(1);
-  await expect(page.getByRole('combobox')).toHaveCount(0);
+  await expect(cards.getByRole('combobox')).toHaveCount(0);
   await expect(participants).toHaveCount(2);
   await expect(first).toHaveAttribute('aria-expanded', 'true');
   await expect(second).toHaveAttribute('aria-expanded', 'false');
@@ -252,12 +297,16 @@ test('choose lane participants, retain drafts and correct recorded scores includ
 
 test('a stale phone cannot overwrite another phone and revoked codes stop access', async ({ request, browser }) => {
   const f = await fixture(request);
-  expect((await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })).ok()).toBeTruthy();
-  const started = await (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } })).json();
+  const checkingIn = await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  expect(checkingIn.ok()).toBeTruthy();
+  const started = await checkingIn.json();
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   const people = await (await request.get(`${f.base}/participants`, { headers: f.headers })).json();
   const code = (started.qrCodes as LaneQrCode[]).find((c) => c.laneId === people[0].laneId)!;
   const url = new URL(code.path, test.info().project.use.baseURL).href;
   const firstContext = await browser.newContext(); const secondContext = await browser.newContext();
+  await firstContext.addInitScript(() => localStorage.setItem('arrowcast.language', 'en'));
+  await secondContext.addInitScript(() => localStorage.setItem('arrowcast.language', 'en'));
   try {
     const first = await firstContext.newPage(); const second = await secondContext.newPage();
     await first.goto(url); await second.goto(url);
@@ -281,13 +330,14 @@ test('a stale phone cannot overwrite another phone and revoked codes stop access
 
 test('ending a competition removes open scoring cards and rejects QR scans', async ({ page, request, browser }) => {
   const f = await fixture(request);
-  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
-  const started = await (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } })).json();
+  const started = await (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })).json();
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   const code = started.qrCodes[0] as LaneQrCode;
   const url = new URL(code.path, test.info().project.use.baseURL).href;
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
   await page.goto(`/admin/competitions/${f.competition.id}`);
   const phoneContext = await browser.newContext();
+  await phoneContext.addInitScript(() => localStorage.setItem('arrowcast.language', 'en'));
   try {
     const phone = await phoneContext.newPage();
     await phone.goto(url);

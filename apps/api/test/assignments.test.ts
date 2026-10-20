@@ -39,6 +39,34 @@ test('planner minimizes lines, spreads shooters, matches targets and preserves e
   assert.throws(() => planAssignments(laneList, people(29)), AssignmentError);
 });
 
+test('planner mixes clubs across letters and uses free lanes before repeating clubmates', () => {
+  const entrants = people(8).map((p, i) => ({ ...p, clubNumber: i < 4 ? 'first' : 'second' }));
+  const mixed = planAssignments(laneList.slice(0, 4), entrants);
+  for (const lane of laneList.slice(0, 4)) {
+    const clubsOnLane = mixed.filter((p) => p.laneId === lane.laneId)
+      .map((p) => entrants.find((person) => person.participantId === p.participantId)!.clubNumber);
+    assert.deepEqual(clubsOnLane.sort(), ['first', 'second']);
+  }
+  const sameClub = planAssignments(laneList, entrants.map((p) => ({ ...p, clubNumber: 'only' })));
+  assert.equal(new Set(sameClub.map((p) => p.laneId)).size, 7);
+  assert.equal(sameClub.filter((p) => p.targetLetter === 'A').length, 4);
+  assert.equal(sameClub.filter((p) => p.targetLetter === 'B').length, 4);
+  assert.equal(new Set(sameClub.map((p) => `${p.laneId}/${p.targetLetter}`)).size, 8);
+});
+
+test('planner considers fixed clubmates and allows unavoidable repeats on matching targets', () => {
+  const fixed = { ...people(1)[0]!, clubNumber: 'club', laneId: 'lane-0', targetLetter: 'A' as const };
+  const late = { ...people(1)[0]!, participantId: 'late', clubNumber: 'club' };
+  const plan = planAssignments(laneList.slice(0, 2), [fixed, late]);
+  assert.deepEqual(plan, [{ participantId: 'late', laneId: 'lane-1', targetLetter: 'A' }]);
+  const restricted = [{ ...laneList[0]! }, { ...laneList[1]!, targetType: '60 cm' }];
+  const unavoidable = planAssignments(restricted, [fixed, late]);
+  assert.deepEqual(unavoidable, [{ participantId: 'late', laneId: 'lane-0', targetLetter: 'B' }]);
+  const singleLane = planAssignments(laneList.slice(0, 1), people(4).map((p) => ({ ...p, clubNumber: 'club' })));
+  assert.equal(singleLane.length, 4);
+  assert.equal(new Set(singleLane.map((p) => p.targetLetter)).size, 4);
+});
+
 test('check-in persists assignments, fills open places on re-entry, and rebuilds checked-in participants only', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'arrowcast-assignments-'));
   const databasePath = join(directory, 'test.sqlite');
@@ -48,6 +76,7 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
   db.insert(ranges).values({ id: 'range', name: 'Indoor' }).run();
   db.insert(rangeDistances).values({ rangeId: 'range', distanceMeters: 18 }).run();
   db.insert(clubs).values({ clubNumber: 'club', name: 'Club' }).run();
+  db.insert(clubs).values({ clubNumber: 'other', name: 'Other club' }).run();
   db.insert(bowTypes).values({ name: 'Recurve' }).onConflictDoNothing().run();
   db.insert(targetTypes).values({ name: '40 cm' }).run();
   db.insert(competitions).values({ id: 'competition', name: 'Test', date: '2026-11-01', startingTime: '09:00', endingTime: '12:00', rangeId: 'range' }).run();
@@ -55,11 +84,11 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
     db.insert(lanes).values({ id: lane.laneId, number: lane.number, rangeId: 'range' }).run();
     db.insert(competitionLanes).values({ ...lane, competitionId: 'competition', rangeId: 'range', distanceMeters: 18 }).run();
   }
-  const addPerson = (id: string) => {
-    db.insert(participants).values({ id, federationNumber: id, name: id, clubNumber: 'club' }).run();
+  const addPerson = (id: string, clubNumber = 'club') => {
+    db.insert(participants).values({ id, federationNumber: id, name: id, clubNumber }).run();
     db.insert(competitionParticipants).values({ competitionId: 'competition', participantId: id, bowType: 'Recurve', targetType: '40 cm' }).run();
   };
-  for (let i = 0; i < 5; i++) addPerson(`person-${i}`);
+  for (let i = 0; i < 5; i++) addPerson(`person-${i}`, i < 3 ? 'club' : 'other');
   const app = buildApp({ jwtSecret: 'assignments-secret-with-at-least-thirty-two-bytes', databasePath });
   const base = '/api/v1/admin/competitions/competition';
   try {
@@ -73,6 +102,10 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
     assert.equal((await status('Check-in')).statusCode, 200);
     const initial = await getPeople();
     assert.ok(initial.every((p: any) => p.laneId && p.targetLetter && p.checkedIn === false));
+    for (const lane of laneList.slice(0, 3)) {
+      const onLane = initial.filter((p: any) => p.laneId === lane.laneId);
+      assert.equal(new Set(onLane.map((p: any) => p.clubNumber)).size, onLane.length);
+    }
     assert.equal((await status('Scheduled')).statusCode, 200);
     addPerson('late');
     assert.equal((await status('Check-in')).statusCode, 200);

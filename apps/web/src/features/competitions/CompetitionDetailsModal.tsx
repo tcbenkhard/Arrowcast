@@ -1,3 +1,4 @@
+import { t, message } from '../../i18n';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useModal } from '../../hooks/useModal';
@@ -45,8 +46,8 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         })));
         if (controller.signal.aborted) return;
-        if (responses.some((response) => response.status === 401)) { onUnauthorized('Je sessie is verlopen of ongeldig. Log opnieuw in.'); return; }
-        if (responses.some((response) => !response.ok)) throw new Error('Loading failed');
+        if (responses.some((response) => response.status === 401)) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in")); return; }
+        if (responses.some((response) => !response.ok)) throw new Error(t("CompetitionDetailPage.loading_failed"));
         const [types, loadedRanges] = await Promise.all([responses[0]!.json() as Promise<string[]>, responses[1]!.json() as Promise<Range[]>]);
         const loadedLanes = await responses[2]!.json() as { laneId: string; distanceMeters: number }[];
         if (!controller.signal.aborted) {
@@ -57,7 +58,7 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
           setAssignments(savedAssignments);
         }
       } catch {
-        if (!controller.signal.aborted) setLoadError('Could not load ranges and target types. Please try again.');
+        if (!controller.signal.aborted) setLoadError(t("CompetitionDetailsModal.could_not_load_ranges_and_target_types_please_try"));
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -70,10 +71,10 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
     if (pending || loading || loadError) return;
     setError('');
     if (!removing) {
-      if (!draft.name.trim()) { setError('Enter a competition name.'); return; }
-      if (draft.endingTime <= draft.startingTime) { setError('Ending time must be after starting time on the competition date.'); return; }
+      if (!draft.name.trim()) { setError(t("CompetitionDetailsModal.enter_a_competition_name")); return; }
+      if (draft.endingTime <= draft.startingTime) { setError(t("CompetitionDetailsModal.ending_time_must_be_after_starting_time_on_the")); return; }
       if (!range || Object.keys(assignments).length === 0) {
-        setError('Select at least one lane with a distance.'); return;
+        setError(t('competition.selectLane')); return;
       }
     }
     setPending(true);
@@ -85,64 +86,63 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
           ...(lanesChanged ? { rangeId, lanes: Object.entries(assignments).map(([laneId, distanceMeters]) => ({ laneId, distanceMeters })) } : {}),
         }) } : {}),
       });
-      if (response.status === 401) { onUnauthorized('Je sessie is verlopen of ongeldig. Log opnieuw in.'); return; }
+      if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in")); return; }
       if (!response.ok) {
         const result = await response.json() as { message?: string };
-        throw new Error(result.message ?? `Could not ${removing ? 'remove' : 'save'} the competition. Please try again.`);
+        throw new Error(result.message ?? t('competition.mutationError'));
       }
       if (removing) onRemoved();
       else onSaved(await response.json() as Competition);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reach the server. Please try again.');
+      setError(err instanceof Error ? err.message : t("CompetitionDetailsModal.could_not_reach_the_server_please_try_again"));
     } finally { setPending(false); }
   }
 
   return <dialog ref={dialog} className="range-modal" aria-labelledby="competition-modal-title"
     aria-describedby={removing ? 'competition-remove-description' : undefined}>
-    <h2 id="competition-modal-title">{removing ? 'Remove competition' : 'Edit competition'}</h2>
-    {removing && <p id="competition-remove-description">Remove competition “{competition.name}”? All associated lane assignments,
-      registrations and scores will be permanently deleted. This cannot be undone.</p>}
+    <h2 id="competition-modal-title">{removing ? t("CompetitionDetailsModal.remove_competition") : t("CompetitionDetailsModal.edit_competition")}</h2>
+    {removing && <p id="competition-remove-description">{t('competition.removeConfirmation', { name: competition.name })}</p>}
     <form onSubmit={(event) => { void submit(event); }} aria-busy={pending}>
       {!removing && <fieldset disabled={pending}>
-        <label htmlFor="edit-competition-name">Name</label>
+        <label htmlFor="edit-competition-name">{t("CompetitionDetailPage.name")}</label>
         <input id="edit-competition-name" autoFocus required maxLength={100} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-        <label htmlFor="edit-competition-date">Date</label>
+        <label htmlFor="edit-competition-date">{t("CompetitionDetailPage.date")}</label>
         <input id="edit-competition-date" type="date" required min="0001-01-01" max="9999-12-31" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
         <div className="competition-form-row">
           <div className="competition-form-field">
-            <label htmlFor="edit-competition-start">Starting time</label>
+            <label htmlFor="edit-competition-start">{t("CompetitionDetailPage.starting_time")}</label>
             <input id="edit-competition-start" type="time" required value={draft.startingTime} onChange={(event) => setDraft({ ...draft, startingTime: event.target.value })} />
           </div>
           <div className="competition-form-field">
-            <label htmlFor="edit-competition-end">Ending time</label>
+            <label htmlFor="edit-competition-end">{t("CompetitionDetailPage.ending_time")}</label>
             <input id="edit-competition-end" type="time" required value={draft.endingTime} onChange={(event) => setDraft({ ...draft, endingTime: event.target.value })} />
           </div>
         </div>
         <div className="competition-form-row">
           <div className="competition-form-field">
-            <label htmlFor="edit-competition-rounds">Number of rounds</label>
+            <label htmlFor="edit-competition-rounds">{t("CompetitionDetailsModal.number_of_rounds")}</label>
             <input id="edit-competition-rounds" type="number" required min={1} max={1000} disabled={competition.status !== 'Scheduled'} value={draft.numberOfRounds}
               onChange={(event) => setDraft({ ...draft, numberOfRounds: Number(event.target.value) })} />
           </div>
           <div className="competition-form-field">
-            <label htmlFor="edit-competition-arrows">Arrows per round</label>
+            <label htmlFor="edit-competition-arrows">{t("CompetitionDetailPage.arrows_per_round")}</label>
             <input id="edit-competition-arrows" type="number" required min={1} max={36} disabled={competition.status !== 'Scheduled'} value={draft.arrowsPerRound}
               onChange={(event) => setDraft({ ...draft, arrowsPerRound: Number(event.target.value) })} />
           </div>
         </div>
-        {competition.status !== 'Scheduled' && <p className="muted">Scoring format is locked after check-in starts.</p>}
-        <label htmlFor="edit-competition-target">Default target</label>
+        {competition.status !== 'Scheduled' && <p className="muted">{t("CompetitionDetailsModal.scoring_format_is_locked_after_checkin_starts")}</p>}
+        <label htmlFor="edit-competition-target">{t("CompetitionDetailPage.default_target")}</label>
         <select id="edit-competition-target" disabled={loading || !!loadError} value={draft.defaultTargetType}
           onChange={(event) => setDraft({ ...draft, defaultTargetType: event.target.value })}>
-          <option value="">No default target</option>
+          <option value="">{t("CompetitionDetailsModal.no_default_target")}</option>
           {draft.defaultTargetType && !targetTypes.includes(draft.defaultTargetType) && <option value={draft.defaultTargetType}>{draft.defaultTargetType}</option>}
           {targetTypes.map((type) => <option key={type} value={type}>{type}</option>)}
         </select>
-        <p className="muted">The default applies to new registrations. Existing lane targets and registrations keep their settings.</p>
-        {loading && <p role="status">Loading ranges and target types...</p>}
-        {loadError && <div><p className="error" role="alert">{loadError}</p>
-          <button type="button" className="secondary" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>}
-        <label htmlFor="edit-competition-range">Range</label>
+        <p className="muted">{t("CompetitionDetailsModal.the_default_applies_to_new_registrations_existing_lane_targets")}</p>
+        {loading && <p role="status">{t("CompetitionDetailsModal.loading_ranges_and_target_types")}</p>}
+        {loadError && <div><p className="error" role="alert">{message(loadError)}</p>
+          <button type="button" className="secondary" onClick={() => setRetry((value) => value + 1)}>{t("CompetitionDetailPage.try_again")}</button></div>}
+        <label htmlFor="edit-competition-range">{t("CompetitionDetailPage.range")}</label>
         <select id="edit-competition-range" required disabled={loading || !!loadError || competition.status !== 'Scheduled'} value={rangeId}
           onChange={(event) => {
             setRangeId(event.target.value);
@@ -151,18 +151,17 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
           {!ranges.some((value) => value.id === competition.range.id) && <option value={competition.range.id}>{competition.range.name}</option>}
           {ranges.map((value) => <option key={value.id} value={value.id}>{value.name}</option>)}
         </select>
-        {competition.status !== 'Scheduled' && <p className="muted">The range is locked after check-in starts.</p>}
-        {range && !loading && !loadError && <fieldset className="competition-lanes" disabled={competition.status !== 'Scheduled'}><legend>Lanes and distances</legend>
-          <p className="muted">Choose a distance to include a lane. Leave unused lanes unassigned.
-            {lanesChanged && ' Changing lanes or distances will clear existing participant placements.'}</p>
-          <div className="distance-list" role="group" aria-label="Set distance for all lanes">
-            <span>Set all lanes to:</span>
+        {competition.status !== 'Scheduled' && <p className="muted">{t("CompetitionDetailsModal.the_range_is_locked_after_checkin_starts")}</p>}
+        {range && !loading && !loadError && <fieldset className="competition-lanes" disabled={competition.status !== 'Scheduled'}><legend>{t("CompetitionDetailsModal.lanes_and_distances")}</legend>
+          <p className="muted">{t("CompetitionDetailsModal.choose_a_distance_to_include_a_lane_leave_unused")}{lanesChanged && t("CompetitionDetailsModal.changing_lanes_or_distances_will_clear_existing_participant_placements")}</p>
+          <div className="distance-list" role="group" aria-label={t("CompetitionDetailsModal.set_distance_for_all_lanes")}>
+            <span>{t("CompetitionDetailsModal.set_all_lanes_to")}</span>
             {range.supportedDistancesMeters.map((distance) => <button key={distance} type="button" className="distance-link"
-              aria-label={`Set all lanes to ${distance} m`}
-              onClick={() => setAssignments(Object.fromEntries(range.lanes.map((lane) => [lane.id, distance])))}>{distance} m</button>)}
+              aria-label={t("CompetitionDetailsModal.set_all_lanes_to_m", { p0: distance })}
+              onClick={() => setAssignments(Object.fromEntries(range.lanes.map((lane) => [lane.id, distance])))}>{distance} {t("CompetitionDetailPage.m")}</button>)}
           </div>
           {range.lanes.map((lane) => <div className="lane-assignment" key={lane.id}>
-            <label htmlFor={`edit-lane-${lane.id}`}>Lane {lane.number}</label>
+            <label htmlFor={`edit-lane-${lane.id}`}>{t("CompetitionDetailPage.lane")} {lane.number}</label>
             <select id={`edit-lane-${lane.id}`} value={assignments[lane.id] ?? ''} onChange={(event) => {
               const value = event.target.value;
               setAssignments((current) => {
@@ -171,17 +170,17 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
                 return next;
               });
             }}>
-              <option value="">Not assigned</option>
-              {range.supportedDistancesMeters.map((distance) => <option key={distance} value={distance}>{distance} m</option>)}
+              <option value="">{t("CompetitionDetailsModal.not_assigned")}</option>
+              {range.supportedDistancesMeters.map((distance) => <option key={distance} value={distance}>{distance} {t("CompetitionDetailPage.m")}</option>)}
             </select>
           </div>)}
         </fieldset>}
       </fieldset>}
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="error" role="alert">{message(error)}</p>}
       <div className="modal-actions">
-        <button type="button" className="secondary" autoFocus={removing} disabled={pending} onClick={onClose}>Cancel</button>
+        <button type="button" className="secondary" autoFocus={removing} disabled={pending} onClick={onClose}>{t("PasswordChangeForm.cancel")}</button>
         <button type="submit" className={removing ? 'danger' : undefined} disabled={pending || loading || !!loadError}>
-          {pending ? (removing ? 'Removing...' : 'Saving...') : (removing ? 'Remove competition' : 'Save changes')}
+          {pending ? (removing ? t("CompetitionDetailsModal.removing") : t("CompetitionDetailsModal.saving")) : (removing ? t("CompetitionDetailsModal.remove_competition") : t("CompetitionDetailsModal.save_changes"))}
         </button>
       </div>
     </form>

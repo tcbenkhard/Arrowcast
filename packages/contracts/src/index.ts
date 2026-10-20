@@ -29,6 +29,8 @@ export interface ScoringContext {
 export interface ScoringStanding {
   participantId: string;
   name: string;
+  laneNumber: number | null;
+  targetLetter: string | null;
   enteredRounds: number;
   totalRounds: number;
   totalScore: number;

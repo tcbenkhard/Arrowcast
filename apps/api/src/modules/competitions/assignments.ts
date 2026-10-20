@@ -1,16 +1,17 @@
-import { and, eq } from 'drizzle-orm';
+import { t } from '@arrowcast/contracts/i18n';
+import { and, eq, getTableColumns } from 'drizzle-orm';
 import type { AppDatabase } from '../../db/index.js';
-import { competitionLanes, competitionParticipants, lanes } from '../../db/schema.js';
+import { competitionLanes, competitionParticipants, lanes, participants } from '../../db/schema.js';
 
 export const letters = ['A', 'B', 'C', 'D'] as const;
 type Letter = typeof letters[number];
 interface Lane { laneId: string; number: number; numberOfTargets: number; targetType: string | null }
-interface Person { participantId: string; targetType: string | null; laneId: string | null; targetLetter: Letter | null }
+interface Person { participantId: string; clubNumber?: string | null; targetType: string | null; laneId: string | null; targetLetter: Letter | null }
 interface Spot { laneId: string; targetLetter: Letter; targetType: string | null; position: number; line: number }
 export class AssignmentError extends Error {}
 
 // First minimize the number of shooting lines, retaining every existing place.
-// Within that limit, balance the lines and fill the most widely separated places.
+// Within that limit, balance the lines, then mix clubs and prefer spaced places.
 export function planAssignments(laneList: Lane[], people: Person[]) {
   const spots: Spot[] = laneList.flatMap((lane) => letters.flatMap((targetLetter, line) =>
     line % 2 < lane.numberOfTargets ? [{ laneId: lane.laneId, targetLetter, line,
@@ -22,7 +23,7 @@ export function planAssignments(laneList: Lane[], people: Person[]) {
     if (!person.laneId || !person.targetLetter) continue;
     const spot = spots.find((s) => s.laneId === person.laneId && s.targetLetter === person.targetLetter);
     if (!spot || spot.targetType !== person.targetType || occupied.has(key(spot))) {
-      throw new AssignmentError('An existing assignment no longer matches the lane configuration. Restore the configuration or reassign checked-in participants.');
+      throw new AssignmentError(t("assignments.an_existing_assignment_no_longer_matches_the_lane_configuration"));
     }
     occupied.add(key(spot)); fixed.push(spot);
   }
@@ -34,7 +35,7 @@ export function planAssignments(laneList: Lane[], people: Person[]) {
   const allowedLines = lineOptions.find((option) => fixed.every((s) => option.includes(s.line))
     && [...demand].every(([type, count]) => type != null && spots.filter((s) =>
       option.includes(s.line) && s.targetType === type && !occupied.has(key(s))).length >= count));
-  if (!allowedLines) throw new AssignmentError('Not enough matching targets to assign all participants (maximum two shooters per target).');
+  if (!allowedLines) throw new AssignmentError(t("assignments.not_enough_matching_targets_to_assign_all_participants_maximum"));
   const placed = [...fixed];
   const result: { participantId: string; laneId: string; targetLetter: Letter }[] = [];
   for (const person of pending) {
@@ -94,12 +95,106 @@ export function planAssignments(laneList: Lane[], people: Person[]) {
       }
     }
   }
+  mixClubs(spots, people, pending, fixed, placed, result, allowedLines);
   return result;
+}
+
+// Min-cost flow minimizes pairs of clubmates sharing a lane, including fixed
+// assignments. Keep the planned line loads, preferring the spaced-out places
+// whenever they permit the same amount of club mixing.
+function mixClubs(spots: Spot[], people: Person[], pending: Person[], fixed: Spot[], placed: Spot[],
+  result: { participantId: string; laneId: string; targetLetter: Letter }[], allowedLines: number[]) {
+  if (!people.some((p) => p.clubNumber)) return;
+  const key = (s: { laneId: string; targetLetter: string }) => `${s.laneId}/${s.targetLetter}`;
+  const occupied = new Set(fixed.map(key));
+  for (const type of new Set(pending.map((p) => p.targetType))) {
+    const indexes = pending.flatMap((p, i) => p.targetType === type ? [i] : []);
+    const groups = new Map<string, number[]>();
+    for (const i of indexes) {
+      const person = pending[i]!;
+      // Missing club data must not make unrelated participants clubmates.
+      const club = person.clubNumber ? `club:${person.clubNumber}` : `person:${person.participantId}`;
+      groups.set(club, [...(groups.get(club) ?? []), i]);
+    }
+    type Edge = { to: number; reverse: number; capacity: number; cost: number };
+    const graph: Edge[][] = [];
+    const node = () => { graph.push([]); return graph.length - 1; };
+    const edge = (from: number, to: number, capacity: number, cost = 0) => {
+      const forward = { to, reverse: graph[to]!.length, capacity, cost };
+      graph[from]!.push(forward);
+      graph[to]!.push({ to: from, reverse: graph[from]!.length - 1, capacity: 0, cost: -cost });
+      return forward;
+    };
+    const source = node();
+    const sink = node();
+    const lineNodes = new Map(allowedLines.map((line) => [line, node()]));
+    for (const [line, id] of lineNodes) {
+      edge(id, sink, indexes.filter((i) => placed[fixed.length + i]!.line === line).length);
+    }
+    const preferred = new Set(indexes.map((i) => key(result[i]!)));
+    const candidates = spots.filter((s) => s.targetType === type && allowedLines.includes(s.line) && !occupied.has(key(s)));
+    const laneNodes = new Map([...new Set(candidates.map((s) => s.laneId))].map((id) => [id, node()]));
+    const places = candidates.map((spot) => ({ spot,
+      edge: edge(laneNodes.get(spot.laneId)!, lineNodes.get(spot.line)!, 1, preferred.has(key(spot)) ? 0 : 1) }));
+    const clubLanes: { indexes: number[]; laneId: string; edges: Edge[] }[] = [];
+    for (const members of groups.values()) {
+      const clubNode = node();
+      edge(source, clubNode, members.length);
+      const club = pending[members[0]!]!.clubNumber;
+      for (const [laneId, laneNode] of laneNodes) {
+        const existing = club ? people.filter((p) => p.laneId === laneId && p.clubNumber === club).length : 0;
+        const capacity = Math.min(members.length, candidates.filter((s) => s.laneId === laneId).length);
+        const edges = Array.from({ length: capacity }, (_, i) =>
+          edge(clubNode, laneNode, 1, (existing + i) * (indexes.length + 1)));
+        clubLanes.push({ indexes: members, laneId, edges });
+      }
+    }
+    for (let flow = 0; flow < indexes.length; flow++) {
+      // Residual reverse edges let later placements repair earlier choices.
+      const distance = graph.map(() => Infinity);
+      const previous: { from: number; edge: Edge }[] = [];
+      distance[source] = 0;
+      const queue = [source];
+      const queued = new Set(queue);
+      for (let head = 0; head < queue.length; head++) {
+        const from = queue[head]!;
+        queued.delete(from);
+        for (const e of graph[from]!) {
+          if (e.capacity && distance[e.to]! > distance[from]! + e.cost) {
+            distance[e.to] = distance[from]! + e.cost;
+            previous[e.to] = { from, edge: e };
+            if (!queued.has(e.to)) { queue.push(e.to); queued.add(e.to); }
+          }
+        }
+      }
+      if (!previous[sink]) throw new AssignmentError(t("assignments.not_enough_matching_targets_to_mix_clubs"));
+      for (let id = sink; id !== source;) {
+        const step = previous[id]!;
+        step.edge.capacity--;
+        graph[id]![step.edge.reverse]!.capacity++;
+        id = step.from;
+      }
+    }
+    const available = places.filter((p) => p.edge.capacity === 0).map((p) => p.spot);
+    const remaining = new Set(indexes);
+    for (const allocation of clubLanes) {
+      const count = allocation.edges.filter((e) => e.capacity === 0).length;
+      for (let i = 0; i < count; i++) {
+        const index = allocation.indexes.find((j) => remaining.has(j) && result[j]!.laneId === allocation.laneId)
+          ?? allocation.indexes.find((j) => remaining.has(j))!;
+        const spotIndex = available.findIndex((s) => s.laneId === allocation.laneId && s.targetLetter === result[index]!.targetLetter);
+        const spot = available.splice(spotIndex >= 0 ? spotIndex : available.findIndex((s) => s.laneId === allocation.laneId), 1)[0]!;
+        result[index] = { participantId: pending[index]!.participantId, laneId: spot.laneId, targetLetter: spot.targetLetter };
+        remaining.delete(index);
+      }
+    }
+  }
 }
 
 export function assignParticipants(db: Pick<AppDatabase, 'select' | 'update'>, competitionId: string, reassign = false) {
   const selection = eq(competitionParticipants.competitionId, competitionId);
-  const people = db.select().from(competitionParticipants).where(selection).all();
+  const people = db.select({ ...getTableColumns(competitionParticipants), clubNumber: participants.clubNumber })
+    .from(competitionParticipants).innerJoin(participants, eq(participants.id, competitionParticipants.participantId)).where(selection).all();
   const laneList = db.select({ laneId: lanes.id, number: lanes.number, targetType: competitionLanes.targetType,
     numberOfTargets: competitionLanes.numberOfTargets }).from(competitionLanes)
     .innerJoin(lanes, eq(lanes.id, competitionLanes.laneId)).where(eq(competitionLanes.competitionId, competitionId)).orderBy(lanes.number).all();

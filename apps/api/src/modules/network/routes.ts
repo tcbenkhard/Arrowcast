@@ -1,3 +1,4 @@
+import { t } from '@arrowcast/contracts/i18n';
 import { request } from 'node:http';
 import { existsSync } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
@@ -14,7 +15,7 @@ export function networkCommand(body?: unknown): Promise<{ code: number; body: un
         try { resolve({ code: res.statusCode ?? 503, body: JSON.parse(data) as unknown }); } catch (error) { reject(error); }
       });
     });
-    req.on('timeout', () => req.destroy(new Error('Network service timed out')));
+    req.on('timeout', () => req.destroy(new Error(t("routes.network_service_timed_out"))));
     req.on('error', reject);
     req.end(body ? JSON.stringify(body) : undefined);
   });
@@ -28,9 +29,9 @@ export async function networkRoutes(app: FastifyInstance) {
     } catch {
       if (!existsSync('/usr/local/lib/arrowcast/network.py')) {
         return { mode: 'disabled', busy: false, ssid: null, address: null,
-          message: 'Network settings are available on configured Raspberry Pi images.' };
+          message: t("routes.network_settings_are_available_on_configured_raspberry_pi_images") };
       }
-      return reply.code(503).send({ message: 'Network service unavailable. Try again shortly.' });
+      return reply.code(503).send({ message: t("routes.network_service_unavailable_try_again_shortly") });
     }
   });
   app.post('/network', {
@@ -46,7 +47,7 @@ export async function networkRoutes(app: FastifyInstance) {
       const result = await networkCommand(req.body);
       return reply.code(result.code).send(result.body);
     } catch {
-      return reply.code(503).send({ message: 'Network service unavailable. Try again shortly.' });
+      return reply.code(503).send({ message: t("routes.network_service_unavailable_try_again_shortly") });
     }
   });
 }

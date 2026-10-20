@@ -9,7 +9,7 @@ body {
 }
 
 main {
-  max-width: 64rem;
+  max-width: 80rem;
   margin-inline: auto;
   padding: 2rem;
 }
@@ -49,6 +49,11 @@ button.danger:hover:not(:disabled) { background: #991b1b; border-color: #991b1b;
 .profile-dropdown button { display: block; width: 100%; border: 0; background: white; color: #1f2937; text-align: left; }
 .profile-dropdown button:hover { background: #eff6ff; }
 .profile-dropdown hr { margin: 0.375rem 0; border: 0; border-top: 1px solid #e2e8f0; }
+.profile-dropdown label { display: block; margin: 0.5rem; }
+.profile-dropdown select { width: calc(100% - 1rem); margin: 0 0.5rem 0.5rem; }
+.language-select { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-bottom: 1rem; }
+.language-select label { margin: 0; }
+.language-select select { width: auto; }
 .panel { margin-top: 1.5rem; padding: 1rem 1.5rem 1.5rem; background: white; border: 1px solid #d1d5db; border-radius: 0.75rem; }
 .panel > :is(h2, h3):first-child,
 .panel > .section-header :is(h2, h3),
@@ -93,6 +98,7 @@ button.danger:hover:not(:disabled) { background: #991b1b; border-color: #991b1b;
 table { width: 100%; border-collapse: collapse; text-align: left; }
 th, td { padding: 1rem 0.75rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
 thead { background: #f8fafc; color: #475569; }
+.participants-table th[scope="row"] { font-weight: normal; }
 .participants-table th:nth-child(-n+2), .participants-table td:nth-child(-n+2) {
   width: 1%;
   white-space: nowrap;
@@ -184,6 +190,15 @@ button.distance-link { padding: 0; border: 0; background: transparent; color: #1
 .competition-flow-back:focus-visible { outline: 2px solid #1e40af; outline-offset: -5px; }
 
 .scoring-settings-form { max-width: 24rem; }
+.live-score-header h3 { margin: 0; }
+.live-score-toolbar { flex-wrap: wrap; }
+.live-score-toolbar p { margin: 0; }
+.live-score-actions { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }
+.live-score-fullscreen-button { display: inline-flex; align-items: center; justify-content: center; padding: 0.625rem; }
+.live-score-fullscreen-button svg { width: 1.5rem; height: 1.5rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.live-score-panel:fullscreen { margin: 0; border: 0; border-radius: 0; padding: clamp(1rem, 3vw, 3rem); overflow: auto; background: white; }
+.live-score-panel:fullscreen .live-score-controls { display: none; }
+.live-score-panel:fullscreen table { font-size: clamp(1rem, 1.5vw, 1.75rem); }
 .lane-qr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
 .lane-qr-card { text-align: center; border: 1px solid #cbd5e1; border-radius: 0.75rem; padding: 1rem; break-inside: avoid; background: white; }
 .lane-qr-card h3 { margin: 0; }

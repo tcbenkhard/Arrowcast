@@ -1,3 +1,4 @@
+import { t } from '@arrowcast/contracts/i18n';
 import type { FastifyInstance } from 'fastify';
 import { randomInt } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
@@ -10,6 +11,7 @@ interface UserInput {
   username: string;
   password?: string;
   role: 'admin' | 'competition_manager';
+  language?: 'nl' | 'en';
 }
 
 const properties = {
@@ -17,14 +19,15 @@ const properties = {
   username: { type: 'string', minLength: 1, maxLength: 100 },
   password: { type: 'string', minLength: 8, maxLength: 1024 },
   role: { type: 'string', enum: ['admin', 'competition_manager'] },
+  language: { type: 'string', enum: ['nl', 'en'] },
 };
 const publicUser = (user: typeof users.$inferSelect) => ({
-  name: user.name, username: user.username, role: user.role, forceChangePassword: user.forceChangePassword,
+  name: user.name, username: user.username, role: user.role, language: user.language, forceChangePassword: user.forceChangePassword,
 });
 
 export async function userRoutes(app: FastifyInstance, { db }: { db: AppDatabase }) {
   app.addHook('onRequest', async (request, reply) => {
-    if (request.user.role !== 'admin') return reply.code(403).send({ message: 'Only administrators can manage users.' });
+    if (request.user.role !== 'admin') return reply.code(403).send({ message: t("users.only_administrators_can_manage_users") });
   });
 
   app.get('/users', async () => db.select().from(users).orderBy(asc(users.name), asc(users.username)).all().map(publicUser));
@@ -34,10 +37,10 @@ export async function userRoutes(app: FastifyInstance, { db }: { db: AppDatabase
   }, async (request, reply) => {
     const result = db.transaction((tx) => {
       const existing = tx.select().from(users).where(eq(users.username, request.params.username)).get();
-      if (!existing) return { status: 404, message: 'User not found.' };
-      if (existing.username === 'admin') return { status: 403, message: 'The admin account cannot be removed.' };
+      if (!existing) return { status: 404, message: t("users.user_not_found") };
+      if (existing.username === 'admin') return { status: 403, message: t("users.the_admin_account_cannot_be_removed") };
       if (existing.role === 'admin' && tx.select().from(users).where(eq(users.role, 'admin')).all().length === 1) {
-        return { status: 409, message: 'Keep at least one administrator.' };
+        return { status: 409, message: t("users.keep_at_least_one_administrator") };
       }
       tx.delete(users).where(eq(users.username, existing.username)).run();
       return { sessionRevoked: request.user.sub === existing.username };
@@ -54,13 +57,13 @@ export async function userRoutes(app: FastifyInstance, { db }: { db: AppDatabase
     const name = request.body.name.trim();
     const username = request.body.username.trim();
     if (!name || !username || !password || password.trim().length < 8) {
-      return reply.code(400).send({ message: 'Enter a name, username and initial password with at least 8 characters.' });
+      return reply.code(400).send({ message: t("users.enter_a_name_username_and_initial_password_with_at") });
     }
     const passwordHash = await hashPassword(password);
-    const created = db.insert(users).values({ name, username, role, passwordHash, forceChangePassword: true,
+    const created = db.insert(users).values({ name, username, role, language: request.body.language ?? 'nl', passwordHash, forceChangePassword: true,
       sessionVersion: randomInt(1, 2147483647) })
       .onConflictDoNothing({ target: users.username }).returning().get();
-    if (!created) return reply.code(409).send({ message: 'This username is already in use.' });
+    if (!created) return reply.code(409).send({ message: t("users.this_username_is_already_in_use") });
     return reply.code(201).send(publicUser(created));
   });
 
@@ -75,27 +78,28 @@ export async function userRoutes(app: FastifyInstance, { db }: { db: AppDatabase
     const username = request.body.username.trim();
     const { role, password } = request.body;
     if (request.params.username === 'admin' && password !== undefined) {
-      return reply.code(403).send({ message: 'Log in as admin to change its password through your profile.' });
+      return reply.code(403).send({ message: t("users.log_in_as_admin_to_change_its_password_through") });
     }
     if (!name || !username || (password !== undefined && password.trim().length < 8)) {
-      return reply.code(400).send({ message: 'Enter a name, username and a password with at least 8 characters.' });
+      return reply.code(400).send({ message: t("Users.enter_a_name_username_and_a_password_with_at") });
     }
     const passwordHash = password === undefined ? undefined : await hashPassword(password);
     const result = db.transaction((tx) => {
       const existing = tx.select().from(users).where(eq(users.username, request.params.username)).get();
-      if (!existing) return { status: 404, message: 'User not found.' };
+      if (!existing) return { status: 404, message: t("users.user_not_found") };
       if (existing.username === 'admin' && username !== 'admin') {
-        return { status: 403, message: 'The admin username cannot be changed.' };
+        return { status: 403, message: t("users.the_admin_username_cannot_be_changed") };
       }
       if (username !== existing.username && tx.select().from(users).where(eq(users.username, username)).get()) {
-        return { status: 409, message: 'This username is already in use.' };
+        return { status: 409, message: t("users.this_username_is_already_in_use") };
       }
       if (existing.role === 'admin' && role !== 'admin'
         && tx.select().from(users).where(eq(users.role, 'admin')).all().length === 1) {
-        return { status: 409, message: 'Keep at least one administrator.' };
+        return { status: 409, message: t("users.keep_at_least_one_administrator") };
       }
       const sessionRevoked = username !== existing.username || role !== existing.role || passwordHash !== undefined;
       const changed = tx.update(users).set({ name, username, role,
+        language: request.body.language ?? existing.language,
         ...(passwordHash === undefined ? {} : { passwordHash, forceChangePassword: true }),
         sessionVersion: existing.sessionVersion + (sessionRevoked ? 1 : 0),
       }).where(eq(users.username, existing.username)).returning().get()!;

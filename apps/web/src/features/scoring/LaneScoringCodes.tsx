@@ -1,3 +1,4 @@
+import { t, message, getLanguage } from '../../i18n';
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import type { LaneQrCode } from '@arrowcast/contracts';
@@ -22,20 +23,20 @@ export function LaneScoringCodes({ competitionId, name, status, codes, onCodesCh
     void fetch(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, {
       headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
     }).then(async (response) => {
-      if (response.status === 401) { onUnauthorized('Je sessie is verlopen. Log opnieuw in.'); return; }
-      if (!response.ok) throw new Error('Could not load QR code status.');
+      if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in")); return; }
+      if (!response.ok) throw new Error(t("LaneScoringCodes.could_not_load_qr_code_status"));
       let grants = await response.json() as LaneQrCode[];
       if (!cancelled && grants.some((grant) => typeof grant.path !== 'string')) {
         const restored = await fetch(`/api/v1/admin/competitions/${competitionId}/scoring-codes/restore`, {
           method: 'POST', headers: { Authorization: `Bearer ${token}` },
         });
-        if (restored.status === 401) { onUnauthorized('Je sessie is verlopen. Log opnieuw in.'); return; }
-        if (!restored.ok) throw new Error('Could not restore QR codes.');
+        if (restored.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in")); return; }
+        if (!restored.ok) throw new Error(t("LaneScoringCodes.could_not_restore_qr_codes"));
         const refreshed = await fetch(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
         });
-        if (refreshed.status === 401) { onUnauthorized('Je sessie is verlopen. Log opnieuw in.'); return; }
-        if (!refreshed.ok) throw new Error('Could not load QR codes.');
+        if (refreshed.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in")); return; }
+        if (!refreshed.ok) throw new Error(t("LaneScoringCodes.could_not_load_qr_codes"));
         grants = await refreshed.json() as LaneQrCode[];
       }
       if (!cancelled) {
@@ -43,7 +44,7 @@ export function LaneScoringCodes({ competitionId, name, status, codes, onCodesCh
         if (available.length) onCodesChange(available);
       }
       if (!cancelled) { setHasCodes(grants.length > 0); setLoaded(true); setError(''); }
-    }).catch(() => { if (!cancelled) setError('Could not load QR code status. Try again.'); });
+    }).catch(() => { if (!cancelled) setError(t("LaneScoringCodes.could_not_load_qr_code_status_try_again")); });
     return () => { cancelled = true; };
   }, [competitionId, token, onUnauthorized, codes, retry, onCodesChange]);
   useEffect(() => {
@@ -51,58 +52,58 @@ export function LaneScoringCodes({ competitionId, name, status, codes, onCodesCh
     void (async () => {
       try {
         const base = new URL(siteUrl);
-        if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password) throw new Error('Enter an http or https website address.');
+        if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password) throw new Error(t("LaneScoringCodes.enter_an_http_or_https_website_address"));
         const results = await Promise.all(codes.map(async (code) => {
           const url = new URL(code.path, base.origin).href;
           return { code, url, image: await QRCode.toDataURL(url, { width: 480, margin: 4, errorCorrectionLevel: 'M' }) };
         }));
         if (!cancelled) setImages(results);
-      } catch { if (!cancelled) setQrError('Enter a valid website address to create the QR codes.'); }
+      } catch { if (!cancelled) setQrError(t("LaneScoringCodes.enter_a_valid_website_address_to_create_the_qr")); }
     })();
     return () => { cancelled = true; };
   }, [codes, siteUrl]);
   async function generate() {
     if (pending || !loaded) return;
-    if (hasCodes && !window.confirm('Replace all lane QR codes? Previous codes and their scoring sessions will stop working. Scores and lane progress will be preserved.')) return;
+    if (hasCodes && !window.confirm(t("LaneScoringCodes.replace_all_lane_qr_codes_previous_codes_and_their"))) return;
     setPending(true); setError('');
     try {
       const response = await fetch(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
-      if (response.status === 401) { onUnauthorized('Je sessie is verlopen. Log opnieuw in.'); return; }
-      if (!response.ok) throw new Error('Could not generate QR codes.');
+      if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in")); return; }
+      if (!response.ok) throw new Error(t("LaneScoringCodes.could_not_generate_qr_codes"));
       onCodesChange(await response.json() as LaneQrCode[]); setHasCodes(true);
-    } catch { setError('Could not retrieve new QR codes. Check your connection and generate replacement codes if needed.'); }
+    } catch { setError(t("LaneScoringCodes.could_not_retrieve_new_qr_codes_check_your_connection")); }
     finally { setPending(false); }
   }
   return <section className="panel collapsible-panel lane-qr-panel" aria-labelledby="lane-qr-title">
     <div className="section-header collapsible-panel-header qr-controls">
-      <h3 id="lane-qr-title">Lane scoring QR codes</h3>
-      <button type="button" className="panel-toggle" aria-label={`${expanded ? 'Collapse' : 'Expand'} lane scoring QR codes`}
+      <h3 id="lane-qr-title">{t("LaneScoringCodes.lane_scoring_qr_codes")}</h3>
+      <button type="button" className="panel-toggle" aria-label={t("LaneScoringCodes.lane_scoring_qr_codes_242", { p0: expanded ? t("CompetitionDetailPage.collapse") : t("CompetitionDetailPage.expand") })}
         aria-expanded={expanded} aria-controls="lane-qr-content" onClick={() => setExpanded((value) => !value)}>
         <svg className="panel-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
       </button>
     </div>
     <div id="lane-qr-content" className="collapsible-panel-content" hidden={!expanded}>
-    <div className="section-header qr-controls"><p className="muted">Anyone with a code can enter scores for that lane without an account.</p>
-      {status === 'Active' && <button disabled={pending || !loaded} onClick={() => { void generate(); }}>
-        {hasCodes ? 'Generate replacement QR codes' : 'Generate QR codes'}
+    <div className="section-header qr-controls"><p className="muted">{t("LaneScoringCodes.anyone_with_a_code_can_enter_scores_for_that")}</p>
+      {(status === 'Check-in' || status === 'Active') && <button disabled={pending || !loaded} onClick={() => { void generate(); }}>
+        {hasCodes ? t("LaneScoringCodes.generate_replacement_qr_codes") : t("LaneScoringCodes.generate_qr_codes")}
       </button>}
     </div>
-    {error && <div className="qr-controls"><p className="error" role="alert">{error}</p>
-      {!loaded && <button onClick={() => setRetry((value) => value + 1)}>Try again</button>}</div>}
+    {error && <div className="qr-controls"><p className="error" role="alert">{message(error)}</p>
+      {!loaded && <button onClick={() => setRetry((value) => value + 1)}>{t("CompetitionDetailPage.try_again")}</button>}</div>}
     {codes.length > 0 && <>
       <div className="qr-controls">
-        <p className="muted">Set the scoring website address in Settings under Arrowcast hostname. You can return here to print or save these codes as PDF.</p>
-        <button className="secondary" disabled={images.length !== codes.length || !!qrError} onClick={() => window.print()}>Print lane QR codes</button>
-        {qrError && <p className="error" role="alert">{qrError}</p>}
+        <p className="muted">{t("LaneScoringCodes.set_the_scoring_website_address_in_settings_under_arrowcast")}</p>
+        <button className="secondary" disabled={images.length !== codes.length || !!qrError} onClick={() => window.print()}>{t("LaneScoringCodes.print_lane_qr_codes")}</button>
+        {qrError && <p className="error" role="alert">{message(qrError)}</p>}
       </div>
       <div className="lane-qr-grid">{images.map(({ code, url, image }) => <article className="lane-qr-card" key={code.grantId}>
-        <h3>{name}</h3><h4>Lane {code.laneNumber}</h4>
-        <img src={image} alt={`Scoring QR code for lane ${code.laneNumber}`} width={240} height={240} />
-        <p>Scan to enter scores</p>
-        <a className="qr-controls" href={url} target="_blank" rel="noreferrer">Open scoring for lane {code.laneNumber}</a>
-        <p className="muted">Valid until {new Date(code.expiresAt).toLocaleString()}</p>
+        <h3>{name}</h3><h4>{t("CompetitionDetailPage.lane")} {code.laneNumber}</h4>
+        <img src={image} alt={t("LaneScoringCodes.scoring_qr_code_for_lane", { p0: code.laneNumber })} width={240} height={240} />
+        <p>{t("LaneScoringCodes.scan_to_enter_scores")}</p>
+        <a className="qr-controls" href={url} target="_blank" rel="noreferrer">{t('scoring.openLane', { number: code.laneNumber })}</a>
+        <p className="muted">{t('scoring.validUntil', { date: new Date(code.expiresAt).toLocaleString(getLanguage()) })}</p>
       </article>)}</div>
     </>}
     </div>

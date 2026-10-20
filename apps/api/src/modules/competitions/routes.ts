@@ -1,10 +1,11 @@
+import { t } from '@arrowcast/contracts/i18n';
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
 import { AssignmentError, assignParticipants } from './assignments.js';
 import type { LaneQrCode } from '@arrowcast/contracts';
-import { initializeLaneScoring, issueLaneCodes, revokeGrants } from '../scoring/service.js';
+import { finalizeScores, initializeLaneScoring, issueLaneCodes, revokeGrants } from '../scoring/service.js';
 import { competitionParticipants, competitionLanes, competitionStatuses, competitions, lanes, laneScoringState, rangeDistances, ranges, scorecards, targetTypes } from '../../db/schema.js';
 import { arrowScores, laneScoringGrants, roundScores, scoreChanges, scoringMutations, scoringSessions } from '../../db/schema.js';
 
@@ -80,7 +81,7 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
     schema: { params, response: { 200: detailSchema } },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    return competition ?? reply.code(404).send({ message: 'Competition not found.' });
+    return competition ?? reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
   });
 
   app.patch<{ Params: { competitionId: string }; Body: {
@@ -104,22 +105,22 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
       } }, response: { 200: detailSchema } },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
     const body = request.body;
     const date = new Date(`${body.date}T00:00:00Z`);
     if (body.date.startsWith('0000') || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== body.date) {
-      return reply.code(400).send({ message: 'Enter a valid competition date.' });
+      return reply.code(400).send({ message: t("routes.enter_a_valid_competition_date") });
     }
     if (body.endingTime <= body.startingTime) {
-      return reply.code(400).send({ message: 'Ending time must be after starting time on the competition date.' });
+      return reply.code(400).send({ message: t("CompetitionDetailsModal.ending_time_must_be_after_starting_time_on_the") });
     }
     if ((body.numberOfRounds !== competition.numberOfRounds || body.arrowsPerRound !== competition.arrowsPerRound)
       && (competition.status !== 'Scheduled' || db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, competition.id)).get())) {
-      return reply.code(409).send({ message: 'Configure scoring before check-in and before any scores exist.' });
+      return reply.code(409).send({ message: t("routes.configure_scoring_before_checkin_and_before_any_scores_exist") });
     }
     const defaultTargetType = body.defaultTargetType?.trim() ?? null;
     if (defaultTargetType && !db.select().from(targetTypes).where(eq(targetTypes.name, defaultTargetType)).get()) {
-      return reply.code(400).send({ message: 'Select an existing default target type.' });
+      return reply.code(400).send({ message: t('competition.selectDefaultTarget') });
     }
     const rangeChanged = body.rangeId !== undefined && body.rangeId !== competition.range.id;
     const currentLanes = assignedLanes(competition.id);
@@ -127,17 +128,17 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
       || body.lanes.some((lane) => !currentLanes.some((current) => current.laneId === lane.laneId && current.distanceMeters === lane.distanceMeters))));
     if (rangeChanged || body.lanes !== undefined) {
       if (lanesChanged && (competition.status !== 'Scheduled' || db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, competition.id)).get())) {
-        return reply.code(409).send({ message: 'Change the range or lanes before check-in and before any scores exist.' });
+        return reply.code(409).send({ message: t("routes.change_the_range_or_lanes_before_checkin_and_before") });
       }
       if (!body.lanes?.length || new Set(body.lanes.map((lane) => lane.laneId)).size !== body.lanes.length) {
-        return reply.code(400).send({ message: 'Select at least one lane and select each lane only once.' });
+        return reply.code(400).send({ message: t('competition.selectUniqueLanes') });
       }
       const range = db.select().from(ranges).where(eq(ranges.id, body.rangeId ?? competition.range.id)).get();
-      if (!range) return reply.code(400).send({ message: 'Select an existing range.' });
+      if (!range) return reply.code(400).send({ message: t('competition.selectExistingRange') });
       const availableLanes = new Set(db.select({ id: lanes.id }).from(lanes).where(eq(lanes.rangeId, range.id)).all().map((lane) => lane.id));
       const distances = new Set(db.select().from(rangeDistances).where(eq(rangeDistances.rangeId, range.id)).all().map((value) => value.distanceMeters));
       if (body.lanes.some((lane) => !availableLanes.has(lane.laneId) || !distances.has(lane.distanceMeters))) {
-        return reply.code(400).send({ message: 'Choose lanes and supported distances from the selected range.' });
+        return reply.code(400).send({ message: t("routes.choose_lanes_and_supported_distances_from_the_selected_range") });
       }
     }
     db.transaction((tx) => {
@@ -171,7 +172,7 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
     schema: { params },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
     // Remove dependent scoring records before their parents; all changes roll back together.
     db.transaction((tx) => {
       const cards = tx.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, competition.id));
@@ -201,14 +202,14 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
             path: { type: 'string' }, expiresAt: { type: 'integer' } } } } } } } },
   }, async (request, reply) => {
     const current = findCompetition(request.params.competitionId);
-    if (!current) return reply.code(404).send({ message: 'Competition not found.' });
+    if (!current) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
     const currentIndex = competitionStatuses.indexOf(current.status);
     const targetIndex = competitionStatuses.indexOf(request.body.status);
     if (targetIndex === currentIndex || targetIndex > currentIndex + 1) {
-      return reply.code(409).send({ message: 'Move to the next status or an earlier status in the competition flow.' });
+      return reply.code(409).send({ message: t("routes.move_to_the_next_status_or_an_earlier_status") });
     }
     if (targetIndex < 2 && db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, current.id)).get()) {
-      return reply.code(409).send({ message: 'Scores already exist. Participants, assignments and scoring format must remain unchanged.' });
+      return reply.code(409).send({ message: t("routes.scores_already_exist_participants_assignments_and_scoring_format_must") });
     }
     let updated;
     let qrCodes: LaneQrCode[] | undefined;
@@ -218,11 +219,16 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
           revokeGrants(tx, current.id);
           tx.delete(laneScoringState).where(eq(laneScoringState.competitionId, current.id)).run();
         }
-        if (request.body.status === 'Closed') revokeGrants(tx, current.id);
-        if (request.body.status === 'Check-in') assignParticipants(tx, current.id);
+        if (request.body.status === 'Closed') {
+          finalizeScores(tx, current.id);
+          revokeGrants(tx, current.id);
+        }
+        if (request.body.status === 'Check-in') {
+          assignParticipants(tx, current.id);
+          qrCodes = issueLaneCodes(tx, current.id);
+        }
         if (request.body.status === 'Active') {
           initializeLaneScoring(tx, current.id);
-          if (current.status === 'Check-in') qrCodes = issueLaneCodes(tx, current.id);
         }
         return tx.update(competitions).set({ status: request.body.status })
           .where(and(eq(competitions.id, current.id), eq(competitions.status, current.status))).returning().get();
@@ -231,7 +237,7 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
       if (error instanceof AssignmentError) return reply.code(409).send({ message: error.message });
       throw error;
     }
-    if (!updated) return reply.code(409).send({ message: 'Competition status has changed. Reload and try again.' });
+    if (!updated) return reply.code(409).send({ message: t("routes.competition_status_has_changed_reload_and_try_again") });
     return { ...findCompetition(current.id)!, ...(qrCodes ? { qrCodes } : {}) };
   });
 
@@ -240,9 +246,9 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
       properties: { numberOfRounds: numberOfRoundsSchema, arrowsPerRound: arrowsPerRoundSchema } }, response: { 200: detailSchema } },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
     if (competition.status !== 'Scheduled' || db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, competition.id)).get()) {
-      return reply.code(409).send({ message: 'Configure scoring before check-in and before any scores exist.' });
+      return reply.code(409).send({ message: t("routes.configure_scoring_before_checkin_and_before_any_scores_exist") });
     }
     db.update(competitions).set(request.body).where(eq(competitions.id, competition.id)).run();
     return findCompetition(competition.id);
@@ -252,20 +258,20 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
     schema: { params },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
-    if (competition.status !== 'Check-in') return reply.code(409).send({ message: 'Reassignment is only available during check-in.' });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
+    if (competition.status !== 'Check-in') return reply.code(409).send({ message: t("routes.reassignment_is_only_available_during_checkin") });
     try { db.transaction((tx) => assignParticipants(tx, competition.id, true)); }
     catch (error) {
       if (error instanceof AssignmentError) return reply.code(409).send({ message: error.message });
       throw error;
     }
-    return { message: 'Checked-in participants reassigned.' };
+    return { message: t("routes.checkedin_participants_reassigned") };
   });
 
   app.get<{ Params: { competitionId: string } }>('/competitions/:competitionId/lanes', {
     schema: { params, response: { 200: { type: 'array', items: laneSchema } } },
   }, async (request, reply) => {
-    if (!findCompetition(request.params.competitionId)) return reply.code(404).send({ message: 'Competition not found.' });
+    if (!findCompetition(request.params.competitionId)) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
     return assignedLanes(request.params.competitionId);
   });
 
@@ -280,18 +286,18 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
   }, async (request, reply) => {
     const { competitionId, laneId } = request.params;
     const competition = findCompetition(competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
-    if (competition.status !== 'Scheduled') return reply.code(409).send({ message: 'Lanes can only be configured before check-in.' });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
+    if (competition.status !== 'Scheduled') return reply.code(409).send({ message: t("routes.lanes_can_only_be_configured_before_checkin") });
     const assigned = db.select().from(competitionParticipants).where(and(
       eq(competitionParticipants.competitionId, competitionId), eq(competitionParticipants.laneId, laneId))).all();
     if (assigned.some((p) => p.targetType !== (request.body.targetType?.trim() ?? null)
       || ((p.targetLetter === 'B' || p.targetLetter === 'D') && (request.body.numberOfTargets ?? 1) < 2))) {
-      return reply.code(409).send({ message: 'This change would invalidate existing shooting assignments.' });
+      return reply.code(409).send({ message: t("routes.this_change_would_invalidate_existing_shooting_assignments") });
     }
     const updated = db.update(competitionLanes).set({
       targetType: request.body.targetType?.trim() ?? null, numberOfTargets: request.body.numberOfTargets ?? 1,
     }).where(and(eq(competitionLanes.competitionId, competitionId), eq(competitionLanes.laneId, laneId))).returning().get();
-    if (!updated) return reply.code(404).send({ message: 'Competition lane not found.' });
+    if (!updated) return reply.code(404).send({ message: t("routes.competition_lane_not_found") });
     return assignedLanes(competitionId).find((lane) => lane.laneId === laneId);
   });
 
@@ -319,27 +325,27 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
     const body = request.body;
     const date = new Date(`${body.date}T00:00:00Z`);
     if (body.date.startsWith('0000') || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== body.date) {
-      return reply.code(400).send({ message: 'Enter a valid competition date.' });
+      return reply.code(400).send({ message: t("routes.enter_a_valid_competition_date") });
     }
     if (body.endingTime <= body.startingTime) {
-      return reply.code(400).send({ message: 'Ending time must be after starting time on the competition date.' });
+      return reply.code(400).send({ message: t("CompetitionDetailsModal.ending_time_must_be_after_starting_time_on_the") });
     }
     if (new Set(body.lanes.map((lane) => lane.laneId)).size !== body.lanes.length) {
-      return reply.code(400).send({ message: 'Select each lane only once.' });
+      return reply.code(400).send({ message: t('competition.uniqueLanes') });
     }
     const defaultTargetType = body.defaultTargetType?.trim() ?? null;
     const result = db.transaction((tx) => {
       if (defaultTargetType && !tx.select().from(targetTypes).where(eq(targetTypes.name, defaultTargetType)).get()) {
-        return { error: 'Select an existing default target type.' };
+        return { error: t('competition.selectDefaultTarget') };
       }
       const range = tx.select().from(ranges).where(eq(ranges.id, body.rangeId)).get();
-      if (!range) return { error: 'Select an existing range.' };
+      if (!range) return { error: t('competition.selectExistingRange') };
       const availableLanes = new Map(tx.select().from(lanes).where(eq(lanes.rangeId, range.id)).all()
         .map((lane) => [lane.id, lane.number]));
       const availableDistances = new Set(tx.select().from(rangeDistances).where(eq(rangeDistances.rangeId, range.id))
         .all().map((distance) => distance.distanceMeters));
       if (body.lanes.some((lane) => !availableLanes.has(lane.laneId) || !availableDistances.has(lane.distanceMeters))) {
-        return { error: 'Choose lanes and supported distances from the selected range.' };
+        return { error: t("routes.choose_lanes_and_supported_distances_from_the_selected_range") };
       }
       const { rangeId: _rangeId, ...created } = tx.insert(competitions).values({
         id: randomUUID(), name: body.name.trim(), date: body.date,

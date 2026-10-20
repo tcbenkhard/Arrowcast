@@ -1,3 +1,4 @@
+import { t } from '@arrowcast/contracts/i18n';
 import { asc, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
@@ -18,7 +19,7 @@ export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDa
   }, async (request, reply) => {
     const name = request.body.name.trim();
     const created = db.insert(targetTypes).values({ name }).onConflictDoNothing().returning().get();
-    if (!created) return reply.code(409).send({ message: 'A target type with this name already exists.' });
+    if (!created) return reply.code(409).send({ message: t("TargetTypesPage.a_target_type_with_this_name_already_exists") });
     return reply.type('application/json').code(201).send(JSON.stringify(created.name));
   });
 
@@ -40,7 +41,7 @@ export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDa
       if (used || usedByParticipant || usedAsDefault) return null;
       return tx.delete(targetTypes).where(inArray(targetTypes.name, request.body.names)).returning().all();
     });
-    if (removed === null) return reply.code(409).send({ message: 'Een of meer geselecteerde target types zijn in gebruik bij een wedstrijd. Er is niets verwijderd.' });
+    if (removed === null) return reply.code(409).send({ message: t("TargetTypesPage.een_of_meer_geselecteerde_target_types_zijn_in_gebruik", {}, 'nl') });
     return { removed: removed.map((type) => type.name) };
   });
 

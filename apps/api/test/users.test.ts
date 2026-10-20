@@ -39,7 +39,7 @@ test('users are administrator-only and new users must change their password befo
   const headers = { authorization: `Bearer ${admin.json().token}` };
   const created = await app.inject({ method: 'POST', url: '/api/v1/admin/users', headers, payload: initial });
   assert.equal(created.statusCode, 201);
-  assert.deepEqual(created.json(), { name: initial.name, username: initial.username, role: initial.role, forceChangePassword: true });
+  assert.deepEqual(created.json(), { name: initial.name, username: initial.username, role: initial.role, language: 'nl', forceChangePassword: true });
   const listed = await app.inject({ url: '/api/v1/admin/users', headers });
   assert.equal(listed.json().length, 2);
   assert.ok(listed.json().every((user: object) => !('password' in user) && !('passwordHash' in user) && !('sessionVersion' in user)));

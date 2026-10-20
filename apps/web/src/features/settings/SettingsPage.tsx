@@ -1,3 +1,4 @@
+import { t, message } from '../../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { TargetTypesPage } from '../target-types/TargetTypesPage';
 import { RangesPage } from '../ranges/RangesPage';
@@ -34,14 +35,14 @@ export function SettingsPage({ token, onUnauthorized }: {
         const response = await fetch('/api/v1/admin/participants/import', {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
-        if (response.status === 401) { onUnauthorized('Je sessie is verlopen of ongeldig. Log opnieuw in.'); return; }
-        if (!response.ok) throw new Error('Status unavailable');
+        if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in")); return; }
+        if (!response.ok) throw new Error(t("SettingsPage.status_unavailable"));
         const result = await response.json() as ImportState;
         if (controller.signal.aborted) return;
         setState(result); setError('');
         timer = setTimeout(() => { void refresh(); }, result.status === 'running' ? 1500 : 3000);
       } catch {
-        if (!controller.signal.aborted) setError('De importstatus kon niet worden opgehaald. Controleer de verbinding en probeer opnieuw.');
+        if (!controller.signal.aborted) setError(t("SettingsPage.de_importstatus_kon_niet_worden_opgehaald_controleer_de_verbinding"));
       }
     }
     void refresh();
@@ -56,16 +57,16 @@ export function SettingsPage({ token, onUnauthorized }: {
       const response = await fetch('/api/v1/admin/participants/import', {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
-      if (response.status === 401) { onUnauthorized('Je sessie is verlopen of ongeldig. Log opnieuw in.'); return; }
+      if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in")); return; }
       if (response.status === 503) {
         const result = await response.json() as ImportState;
         if (result.available === false) { setState(result); setRetry((value) => value + 1); return; }
       }
-      if (!response.ok && response.status !== 409) throw new Error('Import start failed');
-      setState({ status: 'running', progress: 'De import wordt gestart.', result: null, error: null });
+      if (!response.ok && response.status !== 409) throw new Error(t("SettingsPage.import_start_failed"));
+      setState({ status: 'running', progress: t("SettingsPage.de_import_wordt_gestart"), result: null, error: null });
       setRetry((value) => value + 1);
     } catch {
-      setError('De import kon niet worden gestart. Controleer de importstatus voordat je opnieuw probeert.');
+      setError(t("SettingsPage.de_import_kon_niet_worden_gestart_controleer_de_importstatus"));
     } finally {
       starting.current = false; setPending(false);
     }
@@ -73,7 +74,7 @@ export function SettingsPage({ token, onUnauthorized }: {
 
   const running = state?.status === 'running';
   return <section className="settings-page" aria-labelledby="settings-heading">
-    <h2 id="settings-heading">Settings</h2>
+    <h2 id="settings-heading">{t("AdminPage.settings")}</h2>
     <div className="settings-cards">
       <RangesPage token={token} onUnauthorized={onUnauthorized} />
       <TargetTypesPage token={token} onUnauthorized={onUnauthorized} />
@@ -81,21 +82,18 @@ export function SettingsPage({ token, onUnauthorized }: {
       <Updates token={token} onUnauthorized={onUnauthorized} />
       <Network token={token} onUnauthorized={onUnauthorized} />
       <ArrowcastHostname />
-      <SettingsCard id="participant-import" title="Deelnemers importeren">
-        <p>Importeer deelnemers en verenigingen uit de nieuwste regiocompetities van Handboogsport.
-          Bestaande deelnemers worden bijgewerkt. De import kan enkele minuten duren en gaat door als je deze pagina verlaat.</p>
+      <SettingsCard id="participant-import" title={t("SettingsPage.deelnemers_importeren")}>
+        <p>{t("SettingsPage.importeer_deelnemers_en_verenigingen_uit_de_nieuwste_regiocompetities_van")}</p>
         <button disabled={!state || state.available === false || pending || running || !!error} onClick={() => { void startImport(); }}>
-          Importeer deelnemers uit handboogsport
-        </button>
-        {state?.available === false && <p role="status">{state.message}</p>}
-        {(!state && !error) && <p role="status">Importstatus ophalen...</p>}
-        {(running || pending) && <p role="status" aria-live="polite">Bezig met importeren... {state?.progress}</p>}
+          {t("SettingsPage.importeer_deelnemers_uit_handboogsport")}</button>
+        {state?.available === false && <p role="status">{message(state.message)}</p>}
+        {(!state && !error) && <p role="status">{t("SettingsPage.importstatus_ophalen")}</p>}
+        {(running || pending) && <p role="status" aria-live="polite">{t("SettingsPage.bezig_met_importeren")} {message(state?.progress)}</p>}
         {state?.status === 'completed' && state.result && <p className="success" role="status">
-          Import voltooid ({state.result.season}): {state.result.participants} deelnemers en {state.result.clubs} verenigingen opgeslagen.
-        </p>}
-        {state?.status === 'failed' && <p className="error" role="alert">{state.error}</p>}
-        {error && <div><p className="error" role="alert">{error}</p>
-          <button className="secondary retry-button" onClick={() => { setError(''); setRetry((value) => value + 1); }}>Importstatus opnieuw ophalen</button>
+          {t('import.completed', { date: state.result.season, participants: state.result.participants, clubs: state.result.clubs })}</p>}
+        {state?.status === 'failed' && <p className="error" role="alert">{message(state.error)}</p>}
+        {error && <div><p className="error" role="alert">{message(error)}</p>
+          <button className="secondary retry-button" onClick={() => { setError(''); setRetry((value) => value + 1); }}>{t("SettingsPage.importstatus_opnieuw_ophalen")}</button>
         </div>}
       </SettingsCard>
     </div>

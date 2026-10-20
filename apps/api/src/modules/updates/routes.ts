@@ -1,3 +1,4 @@
+import { t } from '@arrowcast/contracts/i18n';
 import { request } from 'node:http';
 import { existsSync } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
@@ -14,7 +15,7 @@ export function updaterCommand(command: 'status' | 'install'): Promise<unknown> 
         try { resolve({ code: res.statusCode, body: JSON.parse(body) as unknown }); } catch (error) { reject(error); }
       });
     });
-    req.on('timeout', () => req.destroy(new Error('Updater timed out')));
+    req.on('timeout', () => req.destroy(new Error(t('updates.timeout'))));
     req.on('error', reject);
     req.end();
   });
@@ -28,9 +29,9 @@ export async function updateRoutes(app: FastifyInstance) {
     } catch {
       if (command === 'status' && !existsSync('/etc/arrowcast/update.json')) {
         return { status: 'disabled', currentVersion: 'development', availableVersion: null,
-          message: 'Updates are available on configured Raspberry Pi images.' };
+          message: t('updates.configuredImage') };
       }
-      return reply.code(503).send({ message: 'Updates are available only on a configured Raspberry Pi image.' });
+      return reply.code(503).send({ message: t('updates.onlyConfiguredImage') });
     }
   }
   app.get('/updates', async (_request, reply) => send('status', reply));

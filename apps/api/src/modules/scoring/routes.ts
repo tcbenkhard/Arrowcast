@@ -1,3 +1,4 @@
+import { t } from '@arrowcast/contracts/i18n';
 import { randomUUID } from 'node:crypto';
 import cookie from '@fastify/cookie';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -26,7 +27,7 @@ export async function scoringRoutes(app: FastifyInstance, { db }: { db: AppDatab
     // A required non-simple header prevents cross-origin form/CSRF requests. No CORS is enabled.
     if (request.method !== 'GET' && (request.headers['x-arrowcast-scoring'] !== '1'
       || request.headers['sec-fetch-site'] === 'cross-site')) {
-      return reply.code(403).send({ message: 'Open scoring on this website to save scores.' });
+      return reply.code(403).send({ message: t("routes.open_scoring_on_this_website_to_save_scores") });
     }
   });
   function authorize(request: FastifyRequest, grantId: string) {
@@ -34,7 +35,7 @@ export async function scoringRoutes(app: FastifyInstance, { db }: { db: AppDatab
     const token = request.cookies[cookieName];
     const session = token ? db.select().from(scoringSessions).where(eq(scoringSessions.tokenHash, hashToken(token))).get() : undefined;
     if (!session || session.grantId !== grantId || session.revokedAt !== null || session.expiresAt <= Date.now()) {
-      throw new ScoringError(401, 'Scan the lane QR code to open a scoring session.');
+      throw new ScoringError(401, t("routes.scan_the_lane_qr_code_to_open_a_scoring"));
     }
     return { grant, session };
   }
@@ -45,7 +46,7 @@ export async function scoringRoutes(app: FastifyInstance, { db }: { db: AppDatab
       properties: { token: { type: 'string', pattern: '^[A-Za-z0-9_-]{43}$' } } } },
   }, async (request, reply) => {
     const grant = validGrant(db, request.params.grantId);
-    if (hashToken(request.body.token) !== grant.tokenHash) throw new ScoringError(401, 'Invalid lane scoring code.');
+    if (hashToken(request.body.token) !== grant.tokenHash) throw new ScoringError(401, t("routes.invalid_lane_scoring_code"));
     const context = scoringContext(db, grant);
     const token = newToken(); const now = Date.now(); const expiresAt = Math.min(grant.expiresAt, now + 86400_000);
     db.insert(scoringSessions).values({ id: randomUUID(), grantId: grant.id, tokenHash: hashToken(token), createdAt: now, expiresAt }).run();
@@ -78,8 +79,8 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
     schema: { params: competitionParams },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
-    if (competition.status !== 'Active') return [];
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
+    if (competition.status !== 'Check-in' && competition.status !== 'Active') return [];
     return db.select({ id: laneScoringGrants.id, laneId: laneScoringGrants.laneId, laneNumber: lanes.number,
       token: laneScoringGrants.token, expiresAt: laneScoringGrants.expiresAt })
       .from(laneScoringGrants).innerJoin(lanes, eq(lanes.id, laneScoringGrants.laneId))
@@ -95,9 +96,9 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
     schema: { params: competitionParams },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
-    if (competition.status !== 'Active') {
-      return reply.code(409).send({ message: 'Scoring has not started.' });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
+    if (competition.status !== 'Check-in' && competition.status !== 'Active') {
+      return reply.code(409).send({ message: t("routes.scoring_has_not_started") });
     }
     db.transaction((tx) => restoreLaneCodes(tx, competition.id));
     return reply.code(204).send();
@@ -106,10 +107,12 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
     schema: { params: competitionParams },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
     return db.transaction((tx) => {
-      const people = tx.select({ participantId: participants.id, name: participants.name }).from(competitionParticipants)
+      const people = tx.select({ participantId: participants.id, name: participants.name,
+        laneNumber: lanes.number, targetLetter: competitionParticipants.targetLetter }).from(competitionParticipants)
         .innerJoin(participants, eq(participants.id, competitionParticipants.participantId))
+        .leftJoin(lanes, eq(lanes.id, competitionParticipants.laneId))
         .where(eq(competitionParticipants.competitionId, competition.id)).all();
       const scores = tx.select({ participantId: scorecards.participantId, roundId: roundScores.id, symbol: arrowScores.symbol })
         .from(scorecards).innerJoin(roundScores, and(eq(roundScores.scorecardId, scorecards.id), eq(roundScores.status, 'submitted')))
@@ -135,14 +138,17 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
     schema: { params: competitionParams },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
-    if (competition.status !== 'Active') return reply.code(409).send({ message: 'Start the competition before issuing scoring codes.' });
-    return db.transaction((tx) => { initializeLaneScoring(tx, competition.id); return issueLaneCodes(tx, competition.id); });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
+    if (competition.status !== 'Check-in' && competition.status !== 'Active') return reply.code(409).send({ message: t("routes.start_checkin_before_issuing_scoring_codes") });
+    return db.transaction((tx) => {
+      if (competition.status === 'Active') initializeLaneScoring(tx, competition.id);
+      return issueLaneCodes(tx, competition.id);
+    });
   });
   app.delete<{ Params: { competitionId: string } }>('/competitions/:competitionId/scoring-codes', {
     schema: { params: competitionParams },
   }, async (request, reply) => {
-    if (!findCompetition(request.params.competitionId)) return reply.code(404).send({ message: 'Competition not found.' });
+    if (!findCompetition(request.params.competitionId)) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
     revokeGrants(db, request.params.competitionId);
     return reply.code(204).send();
   });
@@ -151,7 +157,7 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
       properties: { scoringLocked: { type: 'boolean' } } } },
   }, async (request, reply) => {
     const competition = findCompetition(request.params.competitionId);
-    if (!competition) return reply.code(404).send({ message: 'Competition not found.' });
+    if (!competition) return reply.code(404).send({ message: t("CompetitionDetailPage.competition_not_found") });
     db.update(competitions).set(request.body).where(eq(competitions.id, competition.id)).run();
     return request.body;
   });

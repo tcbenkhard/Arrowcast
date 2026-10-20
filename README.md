@@ -391,8 +391,9 @@ rounds, total scores and average scores per arrow in submitted rounds, sorted by
 average and refreshed every five seconds. QR, participants and lanes cards start
 collapsed.
 
-Starting a competition creates a persistent scoring cursor for each lane and
-returns one QR code per lane. **Lane scoring QR codes** prints the cards using the
+Starting check-in generates one QR code per lane so cards can be printed before
+score entry opens. Starting the competition creates a persistent scoring cursor
+for each lane and preserves those QR codes. **Lane scoring QR codes** prints the cards using the
 browser's print/save-as-PDF dialog. Set **Scoring website address** to an address
 reachable by the lane devices; localhost on the organizer's computer is not
 reachable from a phone. QR generation runs locally without an external QR service.
@@ -461,6 +462,20 @@ servers already occupy ports 3000/5173, set `ARROWCAST_E2E_API_PORT` and
 `ARROWCAST_E2E_WEB_PORT` to unused ports before running the browser tests.
 `PLAYWRIGHT_CHANNEL=msedge` can use an installed Edge browser instead of the
 downloaded Playwright Chromium.
+
+## Taalinstellingen
+
+De site ondersteunt Nederlands en Engels. Gebruikers kiezen hun taal via het
+profielmenu; beheerders kunnen deze ook instellen bij het aanmaken of bewerken
+van een gebruiker. De voorkeur staat in `users.language` en wordt bij het
+inloggen toegepast. Zonder account wordt de taalkeuze in de browser bewaard.
+
+Alle interfaceteksten en applicatiemeldingen staan met een vaste sleutel in
+`packages/contracts/src/locales/nl.json` en `en.json`. Voeg nieuwe teksten aan
+beide bestanden toe en gebruik `t(key, parameters)` in componenten. De tests
+controleren of beide catalogi dezelfde sleutels en invulparameters bevatten.
+Migratie `0020_user_language.sql` voegt de voorkeur toe aan bestaande databases;
+deze migratie draait automatisch bij het starten van de API.
 
 ## Latere stappen
 

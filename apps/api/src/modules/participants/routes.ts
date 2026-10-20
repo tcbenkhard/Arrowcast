@@ -1,3 +1,4 @@
+import { t } from '@arrowcast/contracts/i18n';
 import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
 import { createPageFetcher, saveParticipants, scrapeLatestParticipants } from './import.js';
@@ -17,7 +18,7 @@ export async function participantRoutes(app: FastifyInstance, options: {
   } = { status: 'idle', progress: null, result: null, error: null };
   let running: Promise<void> | undefined;
   const canImport = options.canImport ?? internetAvailable;
-  const offlineMessage = 'Arrowcast moet verbonden zijn met het internet om deelnemers te importeren.';
+  const offlineMessage = t('import.internetRequired', {}, 'nl');
   const scrape = options.scrape ?? ((progress) => scrapeLatestParticipants(createPageFetcher(canImport), progress));
 
   // Finish an active transaction/import before the parent closes the database.
@@ -28,8 +29,8 @@ export async function participantRoutes(app: FastifyInstance, options: {
   });
   app.post('/participants/import', async (_request, reply) => {
     if (!await canImport()) return reply.code(503).send({ ...state, available: false, message: offlineMessage });
-    if (state.status === 'running') return reply.code(409).send({ message: 'Er loopt al een deelnemersimport.' });
-    state = { status: 'running', progress: 'De nieuwste competitie wordt opgezocht.', result: null, error: null };
+    if (state.status === 'running') return reply.code(409).send({ message: t("routes.er_loopt_al_een_deelnemersimport", {}, 'nl') });
+    state = { status: 'running', progress: t('import.findingLatest', {}, 'nl'), result: null, error: null };
     running = (async () => {
       try {
         const data = await scrape((message) => { state.progress = message; });
@@ -41,7 +42,7 @@ export async function participantRoutes(app: FastifyInstance, options: {
       } catch (error) {
         app.log.error({ err: error }, 'Deelnemersimport mislukt');
         state = { status: 'failed', progress: null, result: null,
-          error: 'Importeren is mislukt. Er zijn geen gegevens opgeslagen. Probeer het opnieuw.' };
+          error: t("routes.importeren_is_mislukt_er_zijn_geen_gegevens_opgeslagen_probeer", {}, 'nl') };
       }
     })();
     return reply.code(202).send({ status: 'running', available: true });

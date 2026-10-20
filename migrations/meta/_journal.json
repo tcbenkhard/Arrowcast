@@ -141,6 +141,13 @@
       "when": 1792506857975,
       "tag": "0019_user_management",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792529304410,
+      "tag": "0020_user_language",
+      "breakpoints": true
     }
   ]
 }

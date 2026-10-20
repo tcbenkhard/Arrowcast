@@ -12,7 +12,7 @@ import type { LaneQrCode, ScoringContext, ScoringMutation } from '@arrowcast/con
 import { buildApp } from '../src/app.js';
 import { openDatabase } from '../src/db/index.js';
 import { arrowScores, clubs, competitionLanes, competitionParticipants, competitions, laneScoringGrants,
-  laneScoringState, lanes, participants, rangeDistances, ranges, roundScores, scorecards, scoreChanges, scoringMutations, scoringSessions } from '../src/db/schema.js';
+  laneScoringState, lanes, participants, rangeDistances, ranges, roundScores, scorecards, scoreChanges, scoringMutations, scoringSessions, targetTypes } from '../src/db/schema.js';
 import { hashToken } from '../src/modules/scoring/service.js';
 
 const config = { jwtSecret: 'scoring-test-secret-with-at-least-thirty-two-bytes' };
@@ -40,9 +40,11 @@ async function setup(t: TestContext) {
     get app() { return app; }, db, admin,
     async restart() { await app.close(); app = buildApp({ ...config, databasePath }); await app.ready(); },
     async start() {
+      const codes = await app.inject({ method: 'POST', url: '/api/v1/admin/competitions/competition/scoring-codes', headers: admin });
+      assert.equal(codes.statusCode, 200, codes.body);
       const response = await app.inject({ method: 'PATCH', url: '/api/v1/admin/competitions/competition/status', headers: admin, payload: { status: 'Active' } });
       assert.equal(response.statusCode, 200, response.body);
-      return response.json().qrCodes as LaneQrCode[];
+      return codes.json() as LaneQrCode[];
     },
     async exchange(code: LaneQrCode) {
       const token = new URLSearchParams(code.path.split('#')[1]).get('token')!;
@@ -62,6 +64,39 @@ async function setup(t: TestContext) {
   };
   return fixture;
 }
+
+test('check-in issues printable codes, keeps scoring closed, and preserves codes through reassignment and activation', async (t) => {
+  const f = await setup(t);
+  f.db.insert(targetTypes).values({ name: '40 cm' }).run();
+  f.db.update(competitionLanes).set({ numberOfTargets: 2, targetType: '40 cm' }).run();
+  f.db.update(competitionParticipants).set({ targetType: '40 cm' }).run();
+  const base = '/api/v1/admin/competitions/competition';
+  const status = (status: string) => f.app.inject({ method: 'PATCH', url: `${base}/status`, headers: f.admin, payload: { status } });
+  const list = async () => (await f.app.inject({ url: `${base}/scoring-codes`, headers: f.admin })).json();
+  assert.equal((await status('Scheduled')).statusCode, 200);
+  assert.equal((await f.app.inject({ method: 'POST', url: `${base}/scoring-codes`, headers: f.admin })).statusCode, 409);
+  const checkIn = await status('Check-in');
+  assert.equal(checkIn.statusCode, 200, checkIn.body);
+  const codes = checkIn.json().qrCodes as LaneQrCode[];
+  assert.equal(codes.length, 2);
+  assert.deepEqual(await list(), codes);
+  const code = codes[0]!;
+  const token = new URLSearchParams(code.path.split('#')[1]).get('token');
+  const exchange = () => f.app.inject({ method: 'POST', url: `/api/v1/scoring/${code.grantId}/exchange`, headers: csrf, payload: { token } });
+  assert.equal((await exchange()).statusCode, 403);
+  assert.equal((await f.save(code, '')).statusCode, 403);
+  assert.deepEqual(f.db.select().from(laneScoringState).all(), []);
+  assert.equal((await f.app.inject({ method: 'POST', url: `${base}/assignments/reassign`, headers: f.admin })).statusCode, 200);
+  await f.restart();
+  assert.deepEqual(await list(), codes);
+  assert.equal((await status('Active')).statusCode, 200);
+  assert.deepEqual(await list(), codes);
+  assert.equal((await exchange()).statusCode, 200);
+  assert.equal((await status('Scheduled')).statusCode, 200);
+  assert.deepEqual(await list(), []);
+  assert.equal((await status('Check-in')).statusCode, 200);
+  assert.ok((await list()).every((next: LaneQrCode) => !codes.some((old) => old.grantId === next.grantId)));
+});
 
 test('range changes preserve registrations, clear placements and old score access, and respect the phase lock', async (t) => {
   const f = await setup(t);
@@ -269,7 +304,7 @@ test('scoring locks, closed competitions, grant rotation, expiry and revocation 
   assert.equal((await f.context(code, session.cookie)).statusCode, 401);
   assert.equal((await f.save(code, session.cookie, { expectedVersion: 1 })).statusCode, 401);
   const newCode = replacement.json()[0] as LaneQrCode; const newSession = await f.exchange(newCode);
-  assert.deepEqual(newSession.context.rounds[0]?.arrows, ['10', null]);
+  assert.deepEqual(newSession.context.rounds[0]?.arrows, ['10', 'M']);
   f.db.update(scoringSessions).set({ expiresAt: Date.now() - 1 }).where(eq(scoringSessions.grantId, newCode.grantId)).run();
   assert.equal((await f.context(newCode, newSession.cookie)).statusCode, 401);
   const activeSession = await f.exchange(newCode);
@@ -279,7 +314,53 @@ test('scoring locks, closed competitions, grant rotation, expiry and revocation 
   const renewedSession = await f.exchange(renewed);
   assert.equal((await f.app.inject({ method: 'DELETE', url: `${base}/scoring-codes`, headers: f.admin })).statusCode, 204);
   assert.equal((await f.context(renewed, renewedSession.cookie)).statusCode, 401);
+  assert.equal(f.db.select().from(arrowScores).all().length, 12);
+});
+
+test('closing fills missing arrows and rounds with misses and corrects averages without losing entered scores', async (t) => {
+  const f = await setup(t); const code = (await f.start())[0]!; const session = await f.exchange(code);
+  assert.equal((await f.save(code, session.cookie)).statusCode, 200);
+  assert.equal((await f.save(code, session.cookie, { participantId: 'c', expectedVersion: 1,
+    arrows: [null, '8'], submit: false })).statusCode, 200);
+  const base = '/api/v1/admin/competitions/competition';
+  const standings = async () => (await f.app.inject({ url: `${base}/scoring-standings`, headers: f.admin })).json();
+  assert.equal((await standings())[0].averageScore, 9.5);
+  const status = (value: string) => f.app.inject({ method: 'PATCH', url: `${base}/status`, headers: f.admin, payload: { status: value } });
+  assert.equal((await status('Closed')).statusCode, 200);
+  assert.deepEqual(await standings(), [
+    { participantId: 'a', name: 'Archer A', laneNumber: 1, targetLetter: 'A', enteredRounds: 2, totalRounds: 2, totalScore: 19, averageScore: 4.75 },
+    { participantId: 'c', name: 'Archer C', laneNumber: 1, targetLetter: 'C', enteredRounds: 2, totalRounds: 2, totalScore: 8, averageScore: 2 },
+    { participantId: 'other', name: 'Other lane archer', laneNumber: 2, targetLetter: 'A', enteredRounds: 2, totalRounds: 2, totalScore: 0, averageScore: 0 },
+  ]);
+  assert.equal(f.db.select().from(arrowScores).all().length, 12);
+  assert.ok(f.db.select().from(roundScores).all().every((round) => round.status === 'submitted' && round.submittedAt !== null));
+  assert.ok(f.db.select().from(laneScoringState).all().every((state) => state.completed && state.currentParticipantId === null));
+  await f.restart();
+  assert.equal((await status('Active')).statusCode, 200);
+  const replacement = (await f.app.inject({ method: 'POST', url: `${base}/scoring-codes`, headers: f.admin })).json()[0] as LaneQrCode;
+  const reopened = await f.exchange(replacement);
+  assert.equal(reopened.context.completed, true);
+  assert.deepEqual(reopened.context.rounds.find((round) => round.participantId === 'c' && round.roundNumber === 1)?.arrows, ['M', '8']);
+  const before = await standings();
+  assert.equal((await status('Closed')).statusCode, 200);
+  assert.deepEqual(await standings(), before);
+  assert.equal(f.db.select().from(arrowScores).all().length, 12);
+});
+
+test('failed closing rolls back zero scores, competition status, lane progress and access revocation', async (t) => {
+  const f = await setup(t); const code = (await f.start())[0]!; const session = await f.exchange(code);
+  assert.equal((await f.save(code, session.cookie, { arrows: ['10', null], submit: false })).statusCode, 200);
+  const before = (await f.context(code, session.cookie)).json();
+  f.db.run(sql`CREATE TRIGGER fail_finalization BEFORE UPDATE OF status ON competitions
+    WHEN NEW.status = 'Closed' BEGIN SELECT RAISE(ABORT, 'simulated closing failure'); END`);
+  const response = await f.app.inject({ method: 'PATCH', url: '/api/v1/admin/competitions/competition/status',
+    headers: f.admin, payload: { status: 'Closed' } });
+  assert.equal(response.statusCode, 500);
+  assert.deepEqual((await f.context(code, session.cookie)).json(), before);
+  assert.equal(f.db.select().from(scorecards).all().length, 1);
+  assert.equal(f.db.select().from(roundScores).all().length, 1);
   assert.equal(f.db.select().from(arrowScores).all().length, 1);
+  assert.ok(f.db.select().from(laneScoringGrants).all().every((grant) => grant.revokedAt === null));
 });
 
 test('a failed write rolls back scores, lane progress, audit and idempotency together', async (t) => {
@@ -341,9 +422,9 @@ test('admins retrieve identical QR codes after restart and standings rank submit
   assert.equal((await f.save(codes[0]!, session.cookie, { expectedVersion: 3, roundNumber: 2, arrows: ['M', '1'] })).statusCode, 200);
   standings = (await f.app.inject({ url: standingsUrl, headers: f.admin })).json();
   assert.deepEqual(standings, [
-    { participantId: 'c', name: 'Archer C', enteredRounds: 1, totalRounds: 2, totalScore: 16, averageScore: 8 },
-    { participantId: 'a', name: 'Archer A', enteredRounds: 2, totalRounds: 2, totalScore: 20, averageScore: 5 },
-    { participantId: 'other', name: 'Other lane archer', enteredRounds: 0, totalRounds: 2, totalScore: 0, averageScore: 0 },
+    { participantId: 'c', name: 'Archer C', laneNumber: 1, targetLetter: 'C', enteredRounds: 1, totalRounds: 2, totalScore: 16, averageScore: 8 },
+    { participantId: 'a', name: 'Archer A', laneNumber: 1, targetLetter: 'A', enteredRounds: 2, totalRounds: 2, totalScore: 20, averageScore: 5 },
+    { participantId: 'other', name: 'Other lane archer', laneNumber: 2, targetLetter: 'A', enteredRounds: 0, totalRounds: 2, totalScore: 0, averageScore: 0 },
   ]);
   await f.app.inject({ method: 'POST', url, headers: f.admin });
   const replacements = (await f.app.inject({ url, headers: f.admin })).json();

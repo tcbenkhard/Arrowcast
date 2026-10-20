@@ -1,3 +1,4 @@
+import { t } from '@arrowcast/contracts/i18n';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
@@ -72,7 +73,7 @@ export async function rangeRoutes(app: FastifyInstance, options: { db: AppDataba
   }, async (request, reply) => {
     const { name, supportedDistancesMeters, lanes: requestedLanes } = request.body;
     if (new Set(requestedLanes.map((lane) => lane.number)).size !== requestedLanes.length) {
-      return reply.code(400).send({ message: 'Lane numbers must be unique within a range.' });
+      return reply.code(400).send({ message: t("routes.lane_numbers_must_be_unique_within_a_range") });
     }
 
     const range = options.db.transaction((tx) => {
