@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 
 test('participant modal searches, adds existing people with the keyboard and creates new participants', async ({ page, request }) => {
@@ -169,7 +169,7 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await expect(add).toBeFocused();
   const selectAll = section.getByRole('checkbox', { name: 'Select all participants', exact: true });
   const selectExisting = section.getByRole('checkbox', { name: 'Select participant Zoë van Dijk (000123)', exact: true });
-  const action = section.getByRole('button', { name: 'Uitschrijven', exact: true });
+  const action = section.getByRole('button', { name: 'Unregister', exact: true });
   await expect(action).not.toBeVisible();
   await selectExisting.check();
   await expect(action).toBeVisible();
@@ -177,15 +177,15 @@ test('participant modal searches, adds existing people with the keyboard and cre
   const targetSelection = section.getByRole('combobox', { name: 'Target for selected participants' });
   fail = true;
   await targetSelection.selectOption(JSON.stringify('Custom face'));
-  await expect(section.getByRole('alert')).toContainText('Target opslaan is niet gelukt');
+  await expect(section.getByRole('alert')).toContainText('Could not save the target');
   await expect(selectExisting).toBeChecked();
   fail = false;
   await targetSelection.selectOption(JSON.stringify('Custom face'));
-  await expect(section.getByRole('status')).toContainText('Target bijgewerkt voor 1 deelnemer.');
+  await expect(section.getByRole('status')).toContainText('Target updated for 1 participant.');
   expect(people.find((person) => person.id === 'new')?.targetType).toBe('Custom face');
   await selectAll.check();
   await targetSelection.selectOption(JSON.stringify('Custom face'));
-  await expect(section.getByRole('status')).toContainText('Target bijgewerkt voor 2 deelnemers.');
+  await expect(section.getByRole('status')).toContainText('Target updated for 2 participants.');
   await expect(section.getByRole('row', { name: /New Archer/ })).toContainText('Custom face');
   await page.reload();
   await expect(section.getByRole('row', { name: /New Archer/ })).toContainText('Custom face');
@@ -195,7 +195,7 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await selectExisting.check();
   await selectAll.check();
   page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain('2 geselecteerde deelnemers');
+    expect(dialog.message()).toContain('2 selected participants');
     await dialog.dismiss();
   });
   await action.click();
@@ -205,16 +205,16 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await selectExisting.check();
   fail = true;
   page.once('dialog', async (dialog) => {
-    expect(dialog.message()).toContain('de geselecteerde deelnemer');
+    expect(dialog.message()).toContain('the selected participant');
     await dialog.accept();
   });
   await action.click();
-  await expect(section.getByRole('alert')).toContainText('De selectie is bewaard');
+  await expect(section.getByRole('alert')).toContainText('Your selection has been kept');
   await expect(selectExisting).toBeChecked();
   await expect(section.getByRole('row', { name: /New Archer/ })).toBeVisible();
   fail = false;
   page.once('dialog', (dialog) => dialog.accept());
-  await section.getByRole('button', { name: 'Opnieuw proberen', exact: true }).click();
+  await section.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(section.getByRole('row', { name: /Zoë van Dijk/ })).toHaveCount(0);
   await expect(section.getByRole('row', { name: /New Archer/ })).toBeVisible();
   await expect(action).not.toBeVisible();

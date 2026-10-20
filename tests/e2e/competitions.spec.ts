@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 
 let token: string;
@@ -50,7 +50,7 @@ test('edit competition details, keep input on failure and confirm removal', asyn
   const detailUrl = `**/api/v1/admin/competitions/${competition.id}`;
   await page.route(detailUrl, (route) => route.fulfill({ status: 500, json: { message: 'Could not save competition.' } }));
   await edit.getByRole('button', { name: 'Save changes' }).click();
-  await expect(edit.getByRole('alert')).toContainText('Could not save');
+  await expect(edit.getByRole('alert')).toContainText('Something went wrong. Check your input and connection and try again.');
   await expect(edit.getByLabel('Name', { exact: true })).toHaveValue('Updated browser competition');
   await page.unroute(detailUrl);
   await edit.getByRole('button', { name: 'Save changes' }).click();
@@ -79,7 +79,7 @@ test('edit competition details, keep input on failure and confirm removal', asyn
   await details.getByRole('button', { name: 'Remove', exact: true }).click();
   await page.route(detailUrl, (route) => route.fulfill({ status: 500, json: { message: 'Could not remove competition.' } }));
   await remove.getByRole('button', { name: 'Remove competition' }).click();
-  await expect(remove.getByRole('alert')).toContainText('Could not remove');
+  await expect(remove.getByRole('alert')).toContainText('Something went wrong. Check your input and connection and try again.');
   await page.unroute(detailUrl);
   await remove.getByRole('button', { name: 'Remove competition' }).click();
   await expect(page).toHaveURL('/admin/competitions');
@@ -415,7 +415,7 @@ test('competition flow starts in Scheduled, handles a failed update and advances
   const statusUrl = `**/api/v1/admin/competitions/${competition.id}/status`;
   await page.route(statusUrl, (route) => route.fulfill({ status: 500, json: { message: 'Could not update status.' } }));
   await details.getByRole('button', { name: 'Start check-in', exact: true }).click();
-  await expect(details.getByRole('alert')).toContainText('Could not update status.');
+  await expect(details.getByRole('alert')).toContainText('Something went wrong. Check your input and connection and try again.');
   await expect(flow.locator('[aria-current="step"]')).toContainText('Scheduled');
   await page.unroute(statusUrl);
   for (const [status, label] of [['Check-in', 'Start check-in'], ['Active', 'Start competition'], ['Closed', 'End competition']]) {
@@ -436,7 +436,7 @@ test('competition flow starts in Scheduled, handles a failed update and advances
   await expect(flow.getByRole('button')).toHaveCount(3);
   await page.route(statusUrl, (route) => route.fulfill({ status: 500, json: { message: 'Could not update status.' } }));
   await flow.getByRole('button', { name: 'Move back to Active', exact: true }).click();
-  await expect(details.getByRole('alert')).toContainText('Could not update status.');
+  await expect(details.getByRole('alert')).toContainText('Something went wrong. Check your input and connection and try again.');
   await expect(flow.locator('[aria-current="step"]')).toContainText('Closed');
   await page.unroute(statusUrl);
   const scheduled = flow.getByRole('button', { name: 'Move back to Scheduled', exact: true });
@@ -526,8 +526,8 @@ test('warnings below the flow follow lane edits, participant target changes and 
   await expect(warnings).toContainText('All participants must have a selected bow type.');
   await expect(warnings).toContainText('Lane 1 must have at least 1 target.');
   await expect(warnings).toContainText('Lane 1 must have a selected target type.');
-  await expect(warnings).toContainText('Not enough targets: 4 participants need at least 2 targets, but 0 configured');
-  await expect(warnings).toContainText('Face A: 3 participants need at least 2 targets, but 0 configured');
+  await expect(warnings).toContainText('Not enough targets. Participants: 4; targets required: 2; configured: 0');
+  await expect(warnings).toContainText('Face A: participants: 3; targets required: 2; configured: 0');
   const flow = page.getByRole('region', { name: 'Competition flow', exact: true });
   page.once('dialog', async (dialog) => {
     expect(dialog.type()).toBe('alert');
@@ -543,14 +543,14 @@ test('warnings below the flow follow lane edits, participant target changes and 
   await lane.getByLabel('Target type', { exact: true }).selectOption('Face B');
   await lane.getByLabel('Number of targets', { exact: true }).selectOption('2');
   await expect(warnings).not.toContainText('Lane 1 must');
-  await expect(warnings).not.toContainText('Not enough targets:');
-  await expect(warnings).toContainText('but 0 configured');
+  await expect(warnings).not.toContainText('Not enough targets.');
+  await expect(warnings).toContainText('configured: 0');
   await lane.getByLabel('Target type', { exact: true }).selectOption('Face A');
   await lane.getByLabel('Number of targets', { exact: true }).selectOption('1');
-  await expect(warnings).toContainText('Not enough targets: 4 participants need at least 2 targets, but 1 configured');
-  await expect(warnings).toContainText('but 1 configured');
+  await expect(warnings).toContainText('Not enough targets. Participants: 4; targets required: 2; configured: 1');
+  await expect(warnings).toContainText('configured: 1');
   await lane.getByLabel('Number of targets', { exact: true }).selectOption('2');
-  await expect(warnings).not.toContainText('Not enough targets:');
+  await expect(warnings).not.toContainText('Not enough targets.');
   await expect(warnings).not.toContainText('Face A:');
   const participants = page.getByRole('region', { name: 'Participants', exact: true });
   await participants.getByRole('checkbox', { name: 'Select participant Archer 3 (3)', exact: true }).check();
@@ -558,7 +558,7 @@ test('warnings below the flow follow lane edits, participant target changes and 
   await expect(warnings).not.toContainText('All participants must have a selected target.');
   await expect(warnings).toContainText('All participants must have a selected bow type.');
   page.once('dialog', (dialog) => dialog.accept());
-  await participants.getByRole('button', { name: 'Uitschrijven', exact: true }).click();
+  await participants.getByRole('button', { name: 'Unregister', exact: true }).click();
   await expect(warnings).toHaveCount(0);
   await page.getByRole('button', { name: 'Start check-in', exact: true }).click();
   await expect(flow.locator('[aria-current="step"]')).toContainText('Check-in');
@@ -569,7 +569,7 @@ test('warnings below the flow follow lane edits, participant target changes and 
   expect(statusRequests).toBe(2);
   await lane.getByLabel('Target type', { exact: true }).selectOption('');
   await expect(warnings).toContainText('Lane 1 must have a selected target type.');
-  await expect(warnings).toContainText('but 0 configured');
+  await expect(warnings).toContainText('configured: 0');
   page.once('dialog', async (dialog) => {
     expect(dialog.type()).toBe('alert');
     expect(dialog.message()).toContain('All warnings must be resolved');
@@ -632,7 +632,7 @@ test('check-in controls persist, show assignments and refresh after reassignment
   await expect(section.getByRole('row', { name: /Shooter 0/ })).toBeVisible();
   await expect(section.getByRole('row', { name: /Shooter 1/ })).toHaveCount(0);
   await checkIn.click();
-  await expect(section.getByRole('alert')).toHaveText('Check-in failed.');
+  await expect(section.getByRole('alert')).toHaveText('Something went wrong. Check your input and connection and try again.');
   await expect(checkIn).not.toBeChecked();
   failCheckIn = false;
   await checkIn.click();
@@ -658,7 +658,7 @@ test('check-in controls persist, show assignments and refresh after reassignment
   await expect(section.getByRole('row', { name: /Shooter 1/ })).toContainText('Lane 1 B');
   page.once('dialog', (dialog) => dialog.accept());
   await reassign.click();
-  await expect(section.getByRole('alert')).toHaveText('Reassignment failed.');
+  await expect(section.getByRole('alert')).toHaveText('Something went wrong. Check your input and connection and try again.');
   await expect(section.getByRole('row', { name: /Shooter 1/ })).toContainText('Lane 1 B');
   failReassign = false;
   page.once('dialog', (dialog) => dialog.accept());
@@ -669,7 +669,7 @@ test('check-in controls persist, show assignments and refresh after reassignment
   for (const status of ['Active', 'Closed']) {
     competition.status = status;
     await page.reload();
-    if (status === 'Active') await section.getByRole('button', { name: 'Expand participants', exact: true }).click();
+    if (status === 'Active') await section.getByRole('button', { name: 'Expand: participants', exact: true }).click();
     await expect(section.getByRole('row', { name: /Shooter 0/ })).toBeVisible();
     await expect(checkIn).toHaveCount(0);
     await expect(reassign).toHaveCount(0);

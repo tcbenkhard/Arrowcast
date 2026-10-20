@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 import { request } from 'node:http';
 
@@ -6,7 +6,7 @@ test('administrator adds and edits a user, who must change their password and ca
   await page.goto('/');
   await page.evaluate((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');
-  await page.getByRole('button', { name: 'Expand Users', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Users', exact: true }).click();
   const users = page.getByRole('region', { name: 'Users', exact: true });
   await expect(users.getByRole('columnheader')).toHaveText(['Name', 'Username', 'Role']);
   await expect(users.getByRole('row', { name: /Administrator admin Administrator/ })).toBeVisible();
@@ -17,6 +17,7 @@ test('administrator adds and edits a user, who must change their password and ca
   await modal.getByLabel('Name', { exact: true }).fill('Browser User');
   await modal.getByLabel('Username', { exact: true }).fill('browser-user');
   await modal.getByLabel('Initial password', { exact: true }).fill('initial-password');
+  await modal.getByLabel('Language', { exact: true }).selectOption('en');
   await expect(modal.getByLabel('Role', { exact: true })).toHaveValue('competition_manager');
   await expect(modal.getByLabel('Role', { exact: true }).locator('option')).toHaveText(['Competition manager', 'Administrator']);
   await modal.getByRole('button', { name: 'Add user', exact: true }).click();
@@ -56,12 +57,12 @@ test('administrator adds and edits a user, who must change their password and ca
   expect(login.status).toBe(200);
   await page.evaluate((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), login.token);
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: 'Wachtwoord wijzigen', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Change password', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
-  await page.getByLabel('Huidig wachtwoord', { exact: true }).fill('initial-password');
-  await page.getByLabel('Nieuw wachtwoord', { exact: true }).fill('browser-user-password');
-  await page.getByLabel('Bevestig nieuw wachtwoord', { exact: true }).fill('browser-user-password');
-  await page.getByRole('button', { name: 'Wachtwoord opslaan', exact: true }).click();
+  await page.getByLabel('Current password', { exact: true }).fill('initial-password');
+  await page.getByLabel('New password', { exact: true }).fill('browser-user-password');
+  await page.getByLabel('Confirm new password', { exact: true }).fill('browser-user-password');
+  await page.getByRole('button', { name: 'Save password', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Competitions', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Settings', exact: true })).toHaveCount(0);
   await page.goto('/admin/settings');
@@ -70,7 +71,7 @@ test('administrator adds and edits a user, who must change their password and ca
 
   await page.evaluate((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');
-  await page.getByRole('button', { name: 'Expand Users', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Users', exact: true }).click();
   await users.getByText('edited-browser-user', { exact: true }).click();
   const remove = modal.getByRole('button', { name: 'Remove user', exact: true });
   await expect(remove).toHaveClass('danger');
@@ -86,7 +87,7 @@ test('administrator adds and edits a user, who must change their password and ca
   await expect(modal.getByText('Log in as admin and use Change password in your profile to change this password.')).toBeVisible();
   await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Expand Users', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Users', exact: true }).click();
   await expect(users.getByRole('row', { name: /Administrator admin Administrator/ })).toBeVisible();
   await expect(users.getByText('edited-browser-user', { exact: true })).toHaveCount(0);
 });

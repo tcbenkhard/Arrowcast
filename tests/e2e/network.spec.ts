@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 
 test('settings saves Wi-Fi credentials and explains Ethernet priority and reconnection', async ({ page }) => {
@@ -13,7 +13,7 @@ test('settings saves Wi-Fi credentials and explains Ethernet priority and reconn
   });
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');
-  await page.getByRole('button', { name: 'Expand Network', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Network', exact: true }).click();
   const network = page.getByRole('region', { name: 'Network', exact: true });
   await expect(network.getByText('Ethernet cable connected. Wi-Fi is disabled.', { exact: true })).toBeVisible();
   await network.getByLabel('Wi-Fi network name (SSID)', { exact: true }).fill('Club Wi-Fi');
@@ -30,12 +30,12 @@ test('settings saves Wi-Fi credentials and explains Ethernet priority and reconn
 test('settings reports invalid Wi-Fi credentials and permits correction', async ({ page }) => {
   await page.route('**/api/v1/admin/network', async (route) => {
     await route.fulfill(route.request().method() === 'POST'
-      ? { status: 400, json: { message: 'Use an 8–63 character Wi-Fi password.' } }
+      ? { status: 400, json: { message: 'Use an 8–63 character Wi-Fi password, 64 hexadecimal digits, or leave it empty for an open network.' } }
       : { json: { mode: 'hotspot', busy: false, ssid: null, address: '10.42.0.1', message: '' } });
   });
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');
-  await page.getByRole('button', { name: 'Expand Network', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Network', exact: true }).click();
   const network = page.getByRole('region', { name: 'Network', exact: true });
   await expect(network.getByText('ArrowCast hotspot active: http://10.42.0.1', { exact: true })).toBeVisible();
   await network.getByLabel('Wi-Fi network name (SSID)', { exact: true }).fill('Club Wi-Fi');

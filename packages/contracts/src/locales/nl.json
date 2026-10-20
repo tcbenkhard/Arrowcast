@@ -1,5 +1,7 @@
 {
   "App.arrowcast": "Arrowcast",
+  "network.invalidPassword": "Gebruik een wifiwachtwoord van 8–63 tekens of 64 hexadecimale cijfers, of laat het leeg voor een open netwerk.",
+  "CompetitionParticipants.participant_added": "{name} toegevoegd.",
   "App.welkom_bij_arrowcast": "Welkom bij Arrowcast.",
   "App.naar_het_beheerportal": "Naar het beheerportal",
   "App.pagina_niet_gevonden": "Pagina niet gevonden",

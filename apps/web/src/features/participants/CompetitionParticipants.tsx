@@ -355,7 +355,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
       setQuery(''); setResults([]); setActive(0); setSearchError('');
       setSelected(null); setBowType(''); setTargetType(defaultTargetType ?? '');
       setCreating(false); setName(''); setFederationNumber(''); setClubNumber('');
-      setNotice(`${person.name} added.`);
+      setNotice(t('CompetitionParticipants.participant_added', { name: person.name }));
       setFocusVersion((value) => value + 1);
     } catch { setError(t("CompetitionParticipants.could_not_reach_the_server_your_input_has_been")); }
     finally { saving.current = false; setPending(false); }

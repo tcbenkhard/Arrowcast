@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 
 test('no internet shows installed version and guidance, then resumes checks after reconnecting', async ({ page }) => {
@@ -11,15 +11,15 @@ test('no internet shows installed version and guidance, then resumes checks afte
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');
   const updates = page.getByRole('region', { name: 'Updates', exact: true });
-  await updates.getByRole('button', { name: 'Expand Updates', exact: true }).click();
+  await updates.getByRole('button', { name: 'Expand: Updates', exact: true }).click();
   await expect(updates.getByText('Installed version: v1.0.0', { exact: true })).toBeVisible();
-  await expect(updates.getByText(/must be connected to the internet/)).toBeVisible();
+  await expect(updates.getByText('No internet connection. Connect to check for updates.', { exact: true })).toBeVisible();
   await expect(updates.getByRole('button', { name: 'Update', exact: true })).toHaveCount(0);
   await expect(updates.getByText('No updates available', { exact: true })).toHaveCount(0);
   await expect(updates.getByRole('alert')).toHaveCount(0);
   online = true;
   await expect(updates.getByRole('button', { name: 'Update', exact: true })).toBeVisible();
-  await expect(updates.getByText(/must be connected to the internet/)).toHaveCount(0);
+  await expect(updates.getByText('No internet connection. Connect to check for updates.', { exact: true })).toHaveCount(0);
 });
 
 test('settings checks updates and installs only after confirmation', async ({ page }) => {
@@ -39,7 +39,7 @@ test('settings checks updates and installs only after confirmation', async ({ pa
   }, testAdminToken());
   await page.goto('/admin/settings');
   const updates = page.getByRole('region', { name: 'Updates', exact: true });
-  const toggle = updates.getByRole('button', { name: /^(Expand|Collapse) Updates$/ });
+  const toggle = updates.getByRole('button', { name: /^(Expand|Collapse): Updates$/ });
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByText('No updates available', { exact: true })).toBeHidden();
   await toggle.click();
@@ -56,7 +56,7 @@ test('settings checks updates and installs only after confirmation', async ({ pa
   expect(posts).toBe(0);
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Update', exact: true }).click();
-  await expect(page.getByText('Downloading and verifying update…')).toBeVisible();
+  await expect(page.getByText('Installing update…', { exact: true })).toBeVisible();
   await expect(toggle).toBeDisabled();
   expect(posts).toBe(1);
 });

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 
 let token: string;
@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript((savedToken) => sessionStorage.setItem('arrowcast.admin.jwt', savedToken), token);
   await page.goto('/admin/ranges');
   await expect(page).toHaveURL('/admin/settings');
-  await page.getByRole('button', { name: 'Expand Ranges', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Ranges', exact: true }).click();
 });
 
 test('add a range through the modal, validate lanes, and retain it after reloading', async ({ page }) => {
@@ -34,12 +34,12 @@ test('add a range through the modal, validate lanes, and retain it after reloadi
   await expect(row).toContainText('25 m');
   await expect(row).toContainText('11 lanes');
   await page.reload();
-  await page.getByRole('button', { name: 'Expand Ranges', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Ranges', exact: true }).click();
   await expect(row).toBeVisible();
   await page.getByRole('link', { name: 'Competitions', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Competitions', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Expand Ranges', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Ranges', exact: true }).click();
   await expect(row).toBeVisible();
 });
 
@@ -75,13 +75,13 @@ test('modal cancels with Escape and Cancel, and a failed save keeps the entered 
 test('overview offers retry on failure and returns to login on an expired session', async ({ page }) => {
   await page.route('**/api/v1/admin/ranges', (route) => route.abort());
   await page.reload();
-  await page.getByRole('button', { name: 'Expand Ranges', exact: true }).click();
+  await page.getByRole('button', { name: 'Expand: Ranges', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Could not load ranges');
   await page.unroute('**/api/v1/admin/ranges');
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeEnabled();
   await page.route('**/api/v1/admin/ranges', (route) => route.fulfill({ status: 401, json: {} }));
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Inloggen', exact: true })).toBeVisible();
-  await expect(page.getByRole('alert')).toContainText('verlopen');
+  await expect(page.getByRole('heading', { name: 'Log in', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('expired');
 });

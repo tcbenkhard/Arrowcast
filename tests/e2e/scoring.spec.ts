@@ -1,15 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import type { APIRequestContext, Page } from '@playwright/test';
 import type { LaneQrCode, ScoringContext } from '../../packages/contracts/src/index';
 import { testAdminToken } from './admin';
-
-test.beforeEach(async ({ context, request }) => {
-  await context.addInitScript(() => localStorage.setItem('arrowcast.language', 'en'));
-  await request.patch('/api/v1/admin/me/language', {
-    headers: { Authorization: `Bearer ${testAdminToken()}` }, data: { language: 'en' },
-  });
-});
 
 async function fixture(request: APIRequestContext, arrowsPerRound = 2) {
   const token = testAdminToken(); const headers = { Authorization: `Bearer ${token}` };
