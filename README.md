@@ -242,6 +242,14 @@ above the table apply a target type or target count to those lanes only. Every
 change saves immediately; requests for the same lane are processed in order. Save failures appear below the dropdown with
 a retry option.
 
+While a competition is Scheduled, **Details → Edit** shows every lane in the
+selected range with its assigned distance. Select a distance to add a lane or
+choose **Not assigned** to remove it; at least one lane must remain. Saving lane
+or distance changes clears participant placements and preserves the target type
+and target count of retained lanes. Newly added lanes use the competition's
+default target and one target. Lane changes are locked once check-in starts or
+scores exist.
+
 Entering Check-in generates persistent shooting assignments in
 `competition_participants`: `checked_in`, `lane_id`, and `target_letter`. A/C use
 target 1 and B/D use target 2, with at most two shooters per target. The planner
@@ -463,8 +471,9 @@ Score entry is available through the lane QR links described below.
 De workflow [Raspberry Pi image](.github/workflows/pi-image.yml) bouwt een native
 ARM64 SD-kaartimage met nginx, Node.js, systemd en SQLite, zonder Docker.
 Zie [bouwen, downloaden en installeren](docs/pi-image.md). Handmatig starten maakt
-een downloadbaar Actions-artifact; een versietag maakt ook een conceptrelease.
-Een fysieke Pi-bootcheck is vereist voordat die release wordt gepubliceerd.
+een downloadbaar Actions-artifact; een versietag maakt ook een release die na
+het uploaden van alle bestanden automatisch wordt gepubliceerd.
+Een fysieke Pi-bootcheck blijft vereist voordat de image in productie wordt gebruikt.
 De image zendt het open wifi-netwerk **ArrowCast** uit. Verbind zonder
 wifi-wachtwoord en open `http://10.42.0.1/admin`; Ethernet blijft ook beschikbaar.
 Log in met `admin` / `admin` en kies bij de eerste login een nieuw wachtwoord.

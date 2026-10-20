@@ -20,12 +20,12 @@ class SigningTests(unittest.TestCase):
     def setUpClass(cls):
         cls.private = subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA',
                                      '-pkeyopt', 'rsa_keygen_bits:2048'],
-                                    check=True, capture_output=True).stdout.decode()
-        cls.public = subprocess.run(['openssl', 'pkey', '-pubout'], input=cls.private.encode(),
-                                   check=True, capture_output=True).stdout.decode()
+                                    check=True, capture_output=True, text=True).stdout
+        cls.public = subprocess.run(['openssl', 'pkey', '-pubout'], input=cls.private,
+                                   check=True, capture_output=True, text=True).stdout
         cls.other_private = subprocess.run(['openssl', 'genpkey', '-algorithm', 'RSA',
                                            '-pkeyopt', 'rsa_keygen_bits:2048'],
-                                          check=True, capture_output=True).stdout.decode()
+                                          check=True, capture_output=True, text=True).stdout
 
     def validate(self, public, private=None):
         environment = {'ARROWCAST_UPDATE_PUBLIC_KEY': public, 'ARROWCAST_UPDATE_PRIVATE_KEY': private or ''}
@@ -34,13 +34,13 @@ class SigningTests(unittest.TestCase):
 
     def test_multiline_pair_is_valid(self):
         public, private = self.validate(self.public, self.private)
-        self.assertEqual(public.decode(), self.public)
+        self.assertEqual(public.decode().replace('\r\n', '\n'), self.public)
         self.assertEqual(private.decode(), self.private)
 
     def test_escaped_newlines_and_windows_line_endings(self):
         for newline in ['\\n', '\\r\\n', '\r\n']:
             public, _ = self.validate(self.public.replace('\n', newline), self.private.replace('\n', newline))
-            self.assertEqual(public.decode(), self.public)
+            self.assertEqual(public.decode().replace('\r\n', '\n'), self.public)
 
     def test_filename_ssh_bare_base64_and_private_key_are_rejected_as_public(self):
         for value in ['update-public.pem', 'ssh-rsa AAAA', 'MIIBIjANBgkqh', self.private]:

@@ -17,11 +17,24 @@ below. Backup/restore UI and browser onboarding are not implemented.
    extract the artifact ZIP. The `.img.xz` inside is the installation image.
    Build artifacts are retained for 14 days; download them while available.
 
+`main` is the release branch. Merge changes into `main` and push it before
+creating a new version tag; the workflow rejects release tags whose commits are
+not on `main`. Do not move existing published tags. For example:
+
+```sh
+git switch main
+git pull --ff-only origin main
+git push origin main
+git tag v0.0.8
+git push origin v0.0.8
+```
+
 Pushing a version tag such as `v1.0.0` runs the same checks/build and attaches the
 image, SHA256SUMS, installation guide, version and source/build-tool revisions
-to a **draft GitHub Release**. Test that exact image on real Pi 4 and Pi 5 hardware
-before publishing the draft. Published release files persist independently of
-the short-lived Actions artifact. A rerun will not overwrite a published release.
+to a **GitHub Release**. The workflow creates a draft, uploads all assets, then
+automatically publishes the release once the uploads succeed. Failed uploads
+leave a draft that can be retried. Published release files persist independently
+of the short-lived Actions artifact. A rerun will not overwrite a published release.
 
 GitHub Actions must be enabled and repository policy must allow the release job
 to write repository contents. Manual runs upload artifacts only. Public downloads
@@ -154,8 +167,9 @@ scripts, then builds the image. Inside the target rootfs it also checks native
 SQLite, migrations, production login and access control, removes the smoke-test
 database, validates nginx configuration, parses the access point profile with
 the target NetworkManager, and validates dnsmasq configuration. These checks do not prove physical
-boot, networking or SD-card behaviour. A maintainer must perform those checks
-before publishing the draft release.
+boot, networking or SD-card behaviour. Release publication is automatic;
+a maintainer must validate the exact image on real Pi 4 and Pi 5 hardware
+before using it in production.
 
 For the hotspot, verify on both Pi models: **ArrowCast** appears without a lock,
 two phones join without a password and obtain different `10.42.0.x` addresses,
@@ -226,9 +240,11 @@ installing this image on an existing card still requires preserving its data.
 
 The workflow packages the exact compiled ARM64 application from the image,
 including Node and native SQLite dependencies, into `arrowcast-update.tar.xz`.
-The draft release includes a signed `update.json` manifest and `update.sig`.
+The release must include `arrowcast-update.tar.xz`, a signed `update.json`
+manifest and `update.sig`; an SD-card image alone cannot be installed through
+Settings. The workflow verifies these files exist before publishing automatically.
 Test the exact installation image **and upgrade from the previous release** on
-Pi 4 and Pi 5, then publish the draft. Devices discover the latest published
+Pi 4 and Pi 5 before using it in production. Devices discover the latest published
 stable release through GitHub; they ignore drafts and prereleases and refuse
 versions older than or equal to their installed version.
 
