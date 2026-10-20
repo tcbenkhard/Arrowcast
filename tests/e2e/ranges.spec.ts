@@ -1,11 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { testAdminToken } from './admin';
 
 let token: string;
 
-test.beforeAll(async ({ request }) => {
-  const response = await request.post('/api/v1/auth/login', { data: { username: 'admin', password: 'admin' } });
-  expect(response.ok()).toBeTruthy();
-  token = (await response.json()).token;
+test.beforeAll(() => {
+  token = testAdminToken();
 });
 
 test.beforeEach(async ({ page }) => {

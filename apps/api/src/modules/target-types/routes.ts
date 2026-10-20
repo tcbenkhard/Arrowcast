@@ -1,7 +1,7 @@
 import { asc, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
-import { competitionLanes, competitionParticipants, targetTypes } from '../../db/schema.js';
+import { competitionLanes, competitionParticipants, competitions, targetTypes } from '../../db/schema.js';
 
 export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDatabase }) {
   app.get('/target-types', {
@@ -35,7 +35,9 @@ export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDa
         .where(inArray(competitionLanes.targetType, request.body.names)).get();
       const usedByParticipant = tx.select({ name: competitionParticipants.targetType }).from(competitionParticipants)
         .where(inArray(competitionParticipants.targetType, request.body.names)).get();
-      if (used || usedByParticipant) return null;
+      const usedAsDefault = tx.select({ name: competitions.defaultTargetType }).from(competitions)
+        .where(inArray(competitions.defaultTargetType, request.body.names)).get();
+      if (used || usedByParticipant || usedAsDefault) return null;
       return tx.delete(targetTypes).where(inArray(targetTypes.name, request.body.names)).returning().all();
     });
     if (removed === null) return reply.code(409).send({ message: 'Een of meer geselecteerde target types zijn in gebruik bij een wedstrijd. Er is niets verwijderd.' });

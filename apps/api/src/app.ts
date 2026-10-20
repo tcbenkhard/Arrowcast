@@ -7,7 +7,7 @@ import { seedAdmin } from './db/seed.js';
 
 export function buildApp(config: AuthConfig = readAuthConfig()) {
   const app = Fastify({
-    logger: { redact: ['req.headers.authorization'] },
+    logger: { redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'] },
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   });
   const database = openDatabase(config.databasePath);

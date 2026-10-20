@@ -1,0 +1,1 @@
+ALTER TABLE `competitions` ADD `default_target_type` text REFERENCES target_types(name);

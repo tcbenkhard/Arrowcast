@@ -2,22 +2,30 @@ import { competitionStatuses } from './status';
 import type { CompetitionStatus } from './status';
 import { CompetitionStatusBadge } from './CompetitionStatusBadge';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
+import { CompetitionDetailsModal } from './CompetitionDetailsModal';
 import type { Participant } from '../participants/CompetitionParticipants';
 import { competitionWarnings } from './warnings';
 import { CompetitionParticipants } from '../participants/CompetitionParticipants';
+import type { LaneQrCode } from '@arrowcast/contracts';
+import { LaneScoringCodes } from '../scoring/LaneScoringCodes';
+import { ScoringSettings } from '../scoring/ScoringSettings';
 
 interface AuthProps {
   token: string;
   onUnauthorized: (message: string) => void;
 }
-interface Competition {
+export interface Competition {
   id: string;
   name: string;
   date: string;
   startingTime: string;
   endingTime: string;
   status: CompetitionStatus;
+  numberOfRounds: number;
+  arrowsPerRound: number;
+  scoringLocked: boolean;
+  defaultTargetType: string | null;
   range: { id: string; name: string };
 }
 interface Lane {
@@ -45,6 +53,22 @@ const transitionLabels = {
 
 export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
   const { competitionId } = useParams();
+  const navigate = useNavigate();
+  const [detailsAction, setDetailsAction] = useState<'edit' | 'remove' | null>(null);
+  const [detailsNotice, setDetailsNotice] = useState('');
+  const editButton = useRef<HTMLButtonElement>(null);
+  const removeButton = useRef<HTMLButtonElement>(null);
+  const restoreDetailsFocus = useRef<'edit' | 'remove' | null>(null);
+  function closeDetailsModal() {
+    restoreDetailsFocus.current = detailsAction;
+    setDetailsAction(null);
+  }
+  useEffect(() => {
+    if (!detailsAction && restoreDetailsFocus.current) {
+      (restoreDetailsFocus.current === 'edit' ? editButton : removeButton).current?.focus();
+      restoreDetailsFocus.current = null;
+    }
+  }, [detailsAction]);
   const [competition, setCompetition] = useState<Competition | null>(null);
   const [laneSnapshot, setLaneSnapshot] = useState<{ id: string | undefined; data: Lane[] | null }>();
   const [participantSnapshot, setParticipantSnapshot] = useState<{ id: string | undefined; data: Participant[] | null }>();
@@ -59,10 +83,14 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
   const [changingStatus, setChangingStatus] = useState(false);
   const statusInProgress = useRef(false);
   const [statusError, setStatusError] = useState('');
+  const [qrCodes, setQrCodes] = useState<LaneQrCode[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
     setCompetition(null);
+    setDetailsAction(null);
+    setDetailsNotice('');
+    setQrCodes([]);
     setError('');
     void (async () => {
       try {
@@ -101,6 +129,11 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
           + '\n\nStart competition?';
         if (!window.confirm(message)) return;
       }
+      if (status === 'Closed') {
+        const message = 'Closing the competition will lock all scores, disable all score entry access, and end the competition.'
+          + '\n\nEnd competition?';
+        if (!window.confirm(message)) return;
+      }
     }
     statusInProgress.current = true; setChangingStatus(true); setStatusError('');
     try {
@@ -113,7 +146,10 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
         const result = await response.json() as { message?: string };
         throw new Error(result.message ?? 'Could not update status. Please try again.');
       }
-      setCompetition(await response.json() as Competition);
+      const result = await response.json() as Competition & { qrCodes?: LaneQrCode[] };
+      setCompetition(result);
+      if (result.qrCodes) setQrCodes(result.qrCodes);
+      if (status !== 'Active') setQrCodes([]);
     } catch (error) { setStatusError(error instanceof Error ? error.message : 'Could not update status. Please try again.'); }
     finally { statusInProgress.current = false; setChangingStatus(false); }
   }
@@ -150,14 +186,24 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
         </section>}
       </div>
       <section className="panel" aria-labelledby="competition-details-title" aria-busy={changingStatus}>
-        <h3 id="competition-details-title">Details</h3>
+        <div className="section-header competition-details-header">
+          <h3 id="competition-details-title">Details</h3>
+          {(competition.status === 'Scheduled' || competition.status === 'Closed') && <div className="competition-details-toolbar">
+            {competition.status === 'Scheduled' && <button ref={editButton} type="button" className="secondary" disabled={changingStatus} onClick={() => { setDetailsNotice(''); setDetailsAction('edit'); }}>Edit</button>}
+            <button ref={removeButton} type="button" className="danger" disabled={changingStatus} onClick={() => { setDetailsNotice(''); setDetailsAction('remove'); }}>Remove</button>
+          </div>}
+        </div>
+        {detailsNotice && <p className="success" role="status">{detailsNotice}</p>}
         <dl className="competition-details">
           <div><dt>Name</dt><dd>{competition.name}</dd></div>
           <div><dt>Date</dt><dd><time dateTime={competition.date}>{competition.date}</time></dd></div>
           <div><dt>Starting time</dt><dd>{competition.startingTime}</dd></div>
           <div><dt>Ending time</dt><dd>{competition.endingTime}</dd></div>
+          <div><dt>Default target</dt><dd>{competition.defaultTargetType ?? 'None'}</dd></div>
           <div><dt>Range</dt><dd>{competition.range.name}</dd></div>
           <div><dt>Status</dt><dd><CompetitionStatusBadge status={competition.status} /></dd></div>
+          <div><dt>Rounds</dt><dd>{competition.numberOfRounds}</dd></div>
+          <div><dt>Arrows per round</dt><dd>{competition.arrowsPerRound}</dd></div>
         </dl>
         {statusError && <p className="error" role="alert">{statusError}</p>}
         {nextStatus && nextStatus !== 'Scheduled' && <div className="competition-details-actions">
@@ -166,16 +212,28 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
           </button>
         </div>}
       </section>
-      <CompetitionLanes status={competition.status} onChange={onLanesChange} key={competition.id} competitionId={competition.id} token={token} onUnauthorized={onUnauthorized} />
-      <CompetitionParticipants onChange={onParticipantsChange} status={competition.status} lanes={laneSnapshot?.data ?? []} key={`participants-${competition.id}-${competition.status}`} competitionId={competition.id} token={token} onUnauthorized={onUnauthorized} />
+      {detailsAction && <CompetitionDetailsModal key={`${competition.id}-${detailsAction}`} mode={detailsAction} competition={competition}
+        token={token} onUnauthorized={onUnauthorized} onClose={closeDetailsModal}
+        onSaved={(updated) => {
+          if (updated.range.id !== competition.range.id) { setLaneSnapshot(undefined); setParticipantSnapshot(undefined); }
+          setCompetition(updated); closeDetailsModal(); setDetailsNotice('Competition details saved.');
+        }}
+        onRemoved={() => { void navigate('/admin/competitions'); }} />}
+      <ScoringSettings key={`scoring-settings-${competition.id}`} competition={competition} token={token}
+        onUnauthorized={onUnauthorized} onChange={(settings) => setCompetition((current) => current ? { ...current, ...settings } : current)} />
+      {competition.status === 'Active' && <LaneScoringCodes
+        key={`scoring-codes-${competition.id}`} competitionId={competition.id} name={competition.name} status={competition.status}
+        codes={qrCodes} onCodesChange={setQrCodes} token={token} onUnauthorized={onUnauthorized} />}
+      <CompetitionLanes status={competition.status} onChange={onLanesChange} key={`${competition.id}-${competition.range.id}`} competitionId={competition.id} token={token} onUnauthorized={onUnauthorized} />
+      <CompetitionParticipants defaultTargetType={competition.defaultTargetType} onChange={onParticipantsChange} status={competition.status} lanes={laneSnapshot?.data ?? []} key={`participants-${competition.id}-${competition.range.id}-${competition.status}`} competitionId={competition.id} token={token} onUnauthorized={onUnauthorized} />
     </>}
   </>;
 }
 
 function CompetitionLanes({ competitionId, token, onUnauthorized, onChange, status }: AuthProps & { competitionId: string; onChange: (lanes: Lane[] | null) => void; status: CompetitionStatus }) {
   const readOnly = status !== 'Scheduled';
-  const [expanded, setExpanded] = useState(status !== 'Check-in');
-  useEffect(() => { setExpanded(status !== 'Check-in'); }, [status]);
+  const [expanded, setExpanded] = useState(status === 'Scheduled' || status === 'Closed');
+  useEffect(() => { setExpanded(status === 'Scheduled' || status === 'Closed'); }, [status]);
   const [lanes, setLanes] = useState<Lane[]>([]);
   const [selectedLanes, setSelectedLanes] = useState<Set<string>>(() => new Set());
   const [bulkUpdate, setBulkUpdate] = useState<BulkLaneUpdate | null>(null);

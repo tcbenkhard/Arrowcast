@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { testAdminToken } from './admin';
 
 test('participant modal searches, adds existing people with the keyboard and creates new participants', async ({ page, request }) => {
-  const login = await request.post('/api/v1/auth/login', { data: { username: 'admin', password: 'admin' } });
-  const token = (await login.json()).token;
+  const token = testAdminToken();
   const headers = { Authorization: `Bearer ${token}` };
   const rangeResponse = await request.post('/api/v1/admin/ranges', { headers,
     data: { name: 'Participant range', supportedDistancesMeters: [18], lanes: [{ number: 1 }] } });

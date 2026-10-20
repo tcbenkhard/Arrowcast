@@ -15,6 +15,7 @@ main {
 }
 
 * { box-sizing: border-box; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 .auth-card {
   max-width: 28rem;
@@ -34,6 +35,10 @@ input { min-width: 0; width: 100%; border: 1px solid #64748b; }
 button { cursor: pointer; border: 1px solid #1e40af; background: #1e40af; color: white; }
 button:disabled { cursor: not-allowed; opacity: 0.65; }
 button.secondary { background: white; color: #1e40af; }
+button.danger { background: #b91c1c; border-color: #b91c1c; color: white; }
+button.danger:hover:not(:disabled) { background: #991b1b; border-color: #991b1b; }
+.competition-details-header h3 { margin: 0; }
+.competition-details-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.75rem; }
 .auth-card > button { margin: 0.25rem; }
 :focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
 .error { color: #b91c1c; margin: 0; }
@@ -93,6 +98,8 @@ thead { background: #f8fafc; color: #475569; }
 .range-modal { width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.75rem; border: 1px solid #d1d5db; border-radius: 0.75rem; color: #1f2937; box-shadow: 0 20px 60px #0f172a33; }
 .range-modal::backdrop { background: #0f172a88; }
 .range-modal h2 { margin-top: 0; }
+.competition-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.competition-form-field { display: grid; gap: 0.75rem; min-width: 0; }
 .range-modal fieldset { display: grid; gap: 0.75rem; border: 0; margin: 0; padding: 0; min-width: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; }
 .retry-button { margin-top: 1rem; }
@@ -162,3 +169,56 @@ button.distance-link { padding: 0; border: 0; background: transparent; color: #1
 .competition-flow li:last-child .competition-flow-back { padding-right: 1rem; }
 .competition-flow-back:hover:not(:disabled) { background: #bfdbfe; }
 .competition-flow-back:focus-visible { outline: 2px solid #1e40af; outline-offset: -5px; }
+
+.scoring-settings-form { max-width: 24rem; }
+.lane-qr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
+.lane-qr-card { text-align: center; border: 1px solid #cbd5e1; border-radius: 0.75rem; padding: 1rem; break-inside: avoid; background: white; }
+.lane-qr-card h3 { margin: 0; }
+.lane-qr-card h4 { margin: 0.75rem 0 0; font-size: 1.75rem; }
+.lane-qr-card img { display: block; width: 100%; max-width: 20rem; height: auto; margin: auto; }
+.lane-qr-card a { display: inline-block; padding: 0.5rem; }
+.qr-controls > input { margin-top: 0.5rem; }
+.scoring-page { max-width: 48rem; }
+.scoring-participants { display: grid; gap: 0.75rem; margin-top: 1.5rem; }
+.scoring-participant.panel { margin-top: 0; padding: 0; overflow: hidden; }
+.scoring-participant.active { border-color: #2563eb; }
+.scoring-participant h2 { margin: 0; font-size: 1.25rem; scroll-margin-top: 1rem; }
+.scoring-participant-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; min-height: 3.5rem; padding: 1rem; border: 0; border-radius: 0; background: white; color: #1f2937; text-align: left; font-weight: 700; }
+.scoring-participant-toggle span:first-child { overflow-wrap: anywhere; }
+.scoring-participant-toggle:hover, .scoring-participant.active .scoring-participant-toggle { background: #eff6ff; }
+.scoring-participant-toggle:focus-visible { outline-offset: -3px; }
+.scoring-participant .score-entry { padding: 1rem; border-top: 1px solid #d1d5db; }
+.score-entry h2 { font-size: 1.75rem; }
+.scoring-arrow-row { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0; }
+.scoring-arrow-slots { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; gap: 0.5rem; }
+.scoring-arrow-slots button { min-width: 3.25rem; min-height: 3.5rem; font-size: 1.5rem; font-weight: 700; }
+.scoring-arrow-slots .selected { background: #dbeafe; color: #1e3a8a; border-color: #2563eb; box-shadow: 0 0 0 3px #93c5fd; }
+.scoring-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; }
+.scoring-keypad button { min-height: 4rem; font-size: 1.75rem; font-weight: 700; touch-action: manipulation; }
+.scoring-backspace { background: #b91c1c; border-color: #b91c1c; color: white; }
+.scoring-save { width: 100%; min-height: 3.5rem; margin-top: 1rem; font-size: 1.25rem; font-weight: 700; }
+.scoring-subtotal { display: grid; flex-shrink: 0; gap: 0.25rem; margin: 0; text-align: right; }
+.scoring-subtotal span { font-size: 0.8rem; color: #475569; }
+.scoring-subtotal strong { font-size: 1.5rem; }
+.participant-scorecard { margin-top: 1.5rem; }
+.participant-scorecard table { font-variant-numeric: tabular-nums; }
+.participant-scorecard :is(th, td) { padding: 0.125rem 0.5rem; text-align: center; vertical-align: middle; white-space: nowrap; }
+.participant-scorecard tbody tr[aria-disabled="false"] { cursor: pointer; }
+.participant-scorecard tbody tr[aria-disabled="false"]:hover, .participant-scorecard .selected-round { background: #eff6ff; }
+.scoresheet-round { min-width: 2rem; min-height: 2rem; padding: 0.25rem; background: transparent; color: #1e40af; border: 0; font-weight: 700; }
+.scoring-message { padding: 1rem; margin-block: 1rem; border: 1px solid #d97706; border-radius: 0.5rem; background: #fffbeb; }
+.scoring-message button { margin: 0.75rem 0.5rem 0 0; }
+.scoring-page details { margin-top: 1.5rem; }
+.scoring-page summary { cursor: pointer; padding: 0.75rem 0; }
+@media print {
+  @page { margin: 12mm; }
+  body { background: white; }
+  main { max-width: none; padding: 0; }
+  body:has(.lane-qr-panel) main > :not(.lane-qr-panel), .qr-controls { display: none !important; }
+  .lane-qr-panel { display: block !important; border: 0; box-shadow: none; padding: 0; margin: 0; }
+  #lane-qr-content[hidden] { display: block !important; }
+  .lane-qr-grid { display: block; margin: 0; }
+  .lane-qr-card { border-color: black; padding: 6mm; }
+  .lane-qr-card + .lane-qr-card { break-before: page; }
+  .lane-qr-card img { width: 65mm; max-width: 100%; }
+}

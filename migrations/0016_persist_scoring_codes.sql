@@ -1,0 +1,1 @@
+ALTER TABLE `lane_scoring_grants` ADD `token` text;

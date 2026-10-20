@@ -29,6 +29,14 @@ interface AuthProps {
 }
 
 const expiredMessage = 'Je sessie is verlopen of ongeldig. Log opnieuw in.';
+const statusOrder: Record<CompetitionStatus, number> = { Active: 0, 'Check-in': 1, Scheduled: 2, Closed: 3 };
+
+function compareCompetitions(a: Competition, b: Competition) {
+  return statusOrder[a.status] - statusOrder[b.status]
+    || a.date.localeCompare(b.date)
+    || a.startingTime.localeCompare(b.startingTime)
+    || a.id.localeCompare(b.id);
+}
 
 export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
@@ -60,7 +68,7 @@ export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
         if (response.status === 401) { onUnauthorized(expiredMessage); return; }
         if (!response.ok) throw new Error('Loading failed');
         const result = await response.json() as Competition[];
-        if (!controller.signal.aborted) setCompetitions(result);
+        if (!controller.signal.aborted) setCompetitions(result.sort(compareCompetitions));
       } catch {
         if (!controller.signal.aborted) setError('Could not load competitions. Check your connection and try again.');
       } finally {
@@ -98,7 +106,7 @@ export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
     </table></div>}
     {adding && <AddCompetitionModal token={token} onUnauthorized={onUnauthorized} onClose={closeModal}
       onCreated={(competition) => {
-        setCompetitions((current) => [...current, competition].sort((a, b) => a.date.localeCompare(b.date) || a.startingTime.localeCompare(b.startingTime) || a.id.localeCompare(b.id)));
+        setCompetitions((current) => [...current, competition].sort(compareCompetitions));
         setNotice(`Competition “${competition.name}” added.`);
         closeModal();
       }} />}
@@ -113,8 +121,12 @@ function AddCompetitionModal({ token, onUnauthorized, onClose, onCreated }: Auth
   const [date, setDate] = useState('');
   const [startingTime, setStartingTime] = useState('');
   const [endingTime, setEndingTime] = useState('');
+  const [numberOfRounds, setNumberOfRounds] = useState(10);
+  const [arrowsPerRound, setArrowsPerRound] = useState(3);
   const [ranges, setRanges] = useState<Range[]>([]);
   const [rangeId, setRangeId] = useState('');
+  const [targetTypes, setTargetTypes] = useState<string[]>([]);
+  const [defaultTargetType, setDefaultTargetType] = useState('');
   const [assignments, setAssignments] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -131,16 +143,16 @@ function AddCompetitionModal({ token, onUnauthorized, onClose, onCreated }: Auth
     setLoadError('');
     void (async () => {
       try {
-        const response = await fetch('/api/v1/admin/ranges', {
+        const responses = await Promise.all(['/api/v1/admin/ranges', '/api/v1/admin/target-types'].map((url) => fetch(url, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
-        });
+        })));
         if (controller.signal.aborted) return;
-        if (response.status === 401) { onUnauthorized(expiredMessage); return; }
-        if (!response.ok) throw new Error('Loading failed');
-        const result = await response.json() as Range[];
-        if (!controller.signal.aborted) setRanges(result);
+        if (responses.some((response) => response.status === 401)) { onUnauthorized(expiredMessage); return; }
+        if (responses.some((response) => !response.ok)) throw new Error('Loading failed');
+        const [loadedRanges, loadedTargets] = await Promise.all(responses.map((response) => response.json()));
+        if (!controller.signal.aborted) { setRanges(loadedRanges as Range[]); setTargetTypes(loadedTargets as string[]); }
       } catch {
-        if (!controller.signal.aborted) setLoadError('Could not load ranges. Please try again.');
+        if (!controller.signal.aborted) setLoadError('Could not load ranges and target types. Please try again.');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -160,7 +172,8 @@ function AddCompetitionModal({ token, onUnauthorized, onClose, onCreated }: Auth
     try {
       const response = await fetch('/api/v1/admin/competitions', {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), date, startingTime, endingTime, rangeId, lanes: selectedLanes }),
+        body: JSON.stringify({ name: name.trim(), date, startingTime, endingTime, rangeId,
+          numberOfRounds, arrowsPerRound, defaultTargetType: defaultTargetType || null, lanes: selectedLanes }),
       });
       if (response.status === 401) { onUnauthorized(expiredMessage); return; }
       if (!response.ok) {
@@ -185,14 +198,37 @@ function AddCompetitionModal({ token, onUnauthorized, onClose, onCreated }: Auth
         <input id="competition-name" autoFocus required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} />
         <label htmlFor="competition-date">Date</label>
         <input id="competition-date" type="date" required min="0001-01-01" max="9999-12-31" value={date} onChange={(event) => setDate(event.target.value)} />
-        <label htmlFor="competition-start">Starting time</label>
-        <input id="competition-start" type="time" required value={startingTime} onChange={(event) => setStartingTime(event.target.value)} />
-        <label htmlFor="competition-end">Ending time</label>
-        <input id="competition-end" type="time" required value={endingTime} onChange={(event) => setEndingTime(event.target.value)} />
+        <div className="competition-form-row">
+          <div className="competition-form-field">
+            <label htmlFor="competition-start">Starting time</label>
+            <input id="competition-start" type="time" required value={startingTime} onChange={(event) => setStartingTime(event.target.value)} />
+          </div>
+          <div className="competition-form-field">
+            <label htmlFor="competition-end">Ending time</label>
+            <input id="competition-end" type="time" required value={endingTime} onChange={(event) => setEndingTime(event.target.value)} />
+          </div>
+        </div>
+        <div className="competition-form-row">
+          <div className="competition-form-field">
+            <label htmlFor="competition-rounds">Number of rounds</label>
+            <input id="competition-rounds" type="number" required min={1} max={1000} value={numberOfRounds}
+              onChange={(event) => setNumberOfRounds(Number(event.target.value))} />
+          </div>
+          <div className="competition-form-field">
+            <label htmlFor="competition-arrows">Arrows per round</label>
+            <input id="competition-arrows" type="number" required min={1} max={36} value={arrowsPerRound}
+              onChange={(event) => setArrowsPerRound(Number(event.target.value))} />
+          </div>
+        </div>
         {loading ? <p role="status">Loading ranges…</p> : loadError ? <div>
           <p className="error" role="alert">{loadError}</p>
           <button type="button" className="secondary retry-button" onClick={() => setRetry((value) => value + 1)}>Try again</button>
         </div> : ranges.length === 0 ? <p role="status">Create a range in Settings before adding a competition.</p> : <>
+          <label htmlFor="competition-default-target">Default target</label>
+          <select id="competition-default-target" value={defaultTargetType} onChange={(event) => setDefaultTargetType(event.target.value)}>
+            <option value="">No default target</option>
+            {targetTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
           <label htmlFor="competition-range">Range</label>
           <select id="competition-range" required value={rangeId} onChange={(event) => {
             setRangeId(event.target.value); setAssignments({});

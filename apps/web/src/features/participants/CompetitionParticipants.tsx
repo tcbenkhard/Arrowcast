@@ -7,9 +7,10 @@ export interface Participant { id: string; name: string; federationNumber: strin
 interface AuthProps { token: string; onUnauthorized: (message: string) => void }
 const expiredMessage = 'Je sessie is verlopen of ongeldig. Log opnieuw in.';
 
-export function CompetitionParticipants({ competitionId, token, onUnauthorized, onChange, status, lanes }: AuthProps & { competitionId: string; status: string; lanes: { laneId: string; number: number }[]; onChange: (people: Participant[] | null) => void }) {
+export function CompetitionParticipants({ competitionId, token, onUnauthorized, onChange, status, lanes, defaultTargetType = null }: AuthProps & { competitionId: string; defaultTargetType?: string | null; status: string; lanes: { laneId: string; number: number }[]; onChange: (people: Participant[] | null) => void }) {
   const checkingIn = status === 'Check-in';
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(status !== 'Active');
+  useEffect(() => { setExpanded(status !== 'Active'); }, [status]);
   const canRemove = status === 'Scheduled';
   const canAdd = status === 'Scheduled';
   const canSelect = status === 'Scheduled';
@@ -191,13 +192,14 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
       </tr>) : <tr><td colSpan={5 + (canSelect ? 1 : 0) + (checkingIn ? 2 : 0)}>No participants yet.</td></tr>}</tbody>
     </table></div></>}
     </div>
-    {canAdd && open && <ParticipantModal token={token} onUnauthorized={onUnauthorized} url={url} onClose={close} onAdded={(person) => {
+    {canAdd && open && <ParticipantModal defaultTargetType={defaultTargetType} token={token} onUnauthorized={onUnauthorized} url={url} onClose={close} onAdded={(person) => {
       setPeople((current) => [...current.filter((p) => p.id !== person.id), person].sort((a, b) => a.name.localeCompare(b.name, 'nl')));
     }} />}
   </section>;
 }
 
-function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded }: AuthProps & {
+function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaultTargetType }: AuthProps & {
+  defaultTargetType?: string | null;
   url: string; onClose: () => void; onAdded: (person: Participant) => void;
 }) {
   const searchInput = useRef<HTMLInputElement>(null);
@@ -212,7 +214,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded }: Auth
   const [bowsLoading, setBowsLoading] = useState(true);
   const [bowsError, setBowsError] = useState('');
   const [targetTypes, setTargetTypes] = useState<string[]>([]);
-  const [targetType, setTargetType] = useState('');
+  const [targetType, setTargetType] = useState(defaultTargetType ?? '');
   const hasQuery = query.trim().length > 0;
   const [results, setResults] = useState<Participant[]>([]);
   const [searching, setSearching] = useState(false);
@@ -312,7 +314,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded }: Auth
       const person = await response.json() as Participant;
       onAdded(person);
       setQuery(''); setResults([]); setActive(0); setSearchError('');
-      setSelected(null); setBowType(''); setBowConfirmed(false); setTargetType('');
+      setSelected(null); setBowType(''); setBowConfirmed(false); setTargetType(defaultTargetType ?? '');
       setCreating(false); setName(''); setFederationNumber(''); setClubNumber('');
       setNotice(`${person.name} added.`);
       setFocusVersion((value) => value + 1);

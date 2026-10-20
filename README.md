@@ -5,8 +5,8 @@ Basisstructuur voor de boogschietcompetitiewebsite uit
 workspaces, één lockfile en afzonderlijk bouwbare frontend en backend.
 
 De publieke startpagina staat op `/`. Onder `/admin` staat het beveiligde
-beheerportal met loginformulier. De backend geeft JWT's uit; beheerfuncties en
-score-invoer volgen later.
+beheerportal met loginformulier. Beheer gebruikt JWT-authenticatie; de
+score-invoer gebruikt afzonderlijke QR-toegang per wedstrijdbaan.
 
 ## Vereisten
 
@@ -61,20 +61,19 @@ apps/
     src/components/    Gedeelde UI-componenten
     src/lib/           Frontendhulpmiddelen
   api/                 Fastify; eigen package.json en TypeScript-configuratie
-    src/modules/       JWT-authenticatie; overige modules volgen later
+    src/modules/       Authenticatie, beheer en QR-score-invoer
     src/db/            Drizzle-schema, SQLite-verbinding en adminseed
     src/plugins/       Toekomstige Fastify-plugins
 packages/
-  contracts/           Leeg package voor gedeelde API-contracten
+  contracts/           Gedeelde scoring-API-contracten
   scoring/             Leeg package voor pure scoreberekeningen
 migrations/            SQL-migraties met Drizzle-journal en schemasnapshots
 tests/e2e/             Playwright-tests voor de authenticatieflow
 ```
 
-De `.gitkeep`-bestanden bewaren de lege folders in versiebeheer. Gedeelde packages
-bevatten nog geen schema's of logica en zijn nog geen afhankelijkheden van de apps.
-Voeg die afhankelijkheden expliciet toe wanneer ze gebruikt gaan worden; de
-frontend importeert geen backendcode.
+De `.gitkeep`-bestanden bewaren de lege folders in versiebeheer. Frontend en
+backend delen scoringtypes via het contracts-package. De frontend importeert
+geen backendcode. Het scoring-package is gereserveerd voor verdere berekeningen.
 
 ## Bouwen en controleren
 
@@ -364,11 +363,94 @@ deelnemersnamen met bijbehorende triggers. Triggers houden deze index actueel bi
 importeren, aanmaken, wijzigen en verwijderen; bestaande deelnemers worden bij
 de migratie geïndexeerd.
 
+## Lane scoring
+
+Competitions define `numberOfRounds` (1–1000) and `arrowsPerRound` (1–36), defaulting
+to 10 rounds of 3 arrows for existing and new competitions. Set these when creating
+a competition, or use **Save scoring format** in its detail page before Check-in.
+`PATCH /api/v1/admin/competitions/:competitionId/scoring-settings` accepts both fields.
+
+During scoring, the Scoring card shows participant names, submitted rounds/total
+rounds, total scores and average scores per arrow in submitted rounds, sorted by descending
+average and refreshed every five seconds. QR, participants and lanes cards start
+collapsed.
+
+Starting a competition creates a persistent scoring cursor for each lane and
+returns one QR code per lane. **Lane scoring QR codes** prints the cards using the
+browser's print/save-as-PDF dialog. Set **Scoring website address** to an address
+reachable by the lane devices; localhost on the organizer's computer is not
+reachable from a phone. QR generation runs locally without an external QR service.
+
+QR links open `/scoring/:competitionId/:laneId/:grantId#token=...` without an admin
+login. The browser removes the fragment and exchanges the random 32-byte secret
+for a dedicated HttpOnly, SameSite=Strict scoring cookie scoped to that grant's
+API path. QR grants last seven days; browser sessions last up to 24 hours. Scanning
+the same printout on another device creates another session for the same lane.
+Session secrets are stored as hashes. QR secrets are retained in the database so
+authenticated admins can retrieve and reprint the same cards after refreshing.
+For older codes stored only as hashes, the admin page creates retrievable codes
+without revoking existing printouts or scoring sessions.
+**Generate replacement QR codes** revokes previous codes and sessions while
+preserving scores and progress. GET/POST/DELETE on the authenticated
+`/api/v1/admin/competitions/:competitionId/scoring-codes` endpoint inspect, replace,
+and revoke grants respectively. GET and POST return QR links.
+
+The mobile screen stacks participant cards vertically in a lane group. Selecting
+a card expands its score entry and collapses the previous participant. The active
+card includes a scoresheet; click any round row to select it for editing.
+Saving returns to the lane's current unfinished round and participant.
+Use the numeric buttons to record each arrow; **Miss** scores zero and is stored
+as `M`. This first scoring format supports values 0–10.
+Each arrow selection in an unfinished round saves a draft to the database.
+**Save** requires every arrow, submits the participant's round, and selects the
+first unfinished score in round and target-letter order. Participants can be
+scored out of order without skipping unfinished rounds. After all rounds are
+submitted, the lane is complete.
+Select an earlier round or use **Edit** in the recorded rounds to correct scores,
+including after lane completion while the competition is active and unlocked.
+Corrections stay local until **Save correction** submits all arrows together;
+the existing submitted total remains in place until then. Switching away from an
+unsaved correction asks for confirmation. The screen shows submitted totals and
+the recorded rounds, including drafts.
+
+Closing or reopening the screen, restarting the API, or scanning on another phone
+restores server-confirmed drafts and the lane cursor. The screen distinguishes
+saving from confirmation; input still awaiting confirmation needs a connection
+and a successful retry before it is available on another device. Scoring polls
+every five seconds for progress made on other devices. There is no offline queue.
+
+Each mutation has a submission UUID and expected lane version. Saving scores,
+advancing progress, recording the audit entry, and remembering the submission
+are one transaction. An identical retry returns its original result; stale edits
+return 409 and require reloading instead of overwriting another device.
+Scoring APIs under `/api/v1/scoring/:grantId` expose `POST /exchange`, `GET /context`,
+and `POST /scores`. Writes require `X-Arrowcast-Scoring: 1`; cross-site requests
+are rejected. Every request checks grant/session validity, and every new write
+checks current lane assignment, scoring lock, competition status and score values.
+
+**Pause scoring** / **Resume scoring** uses the authenticated
+`PATCH /api/v1/admin/competitions/:competitionId/scoring-lock` endpoint with
+`{ "scoringLocked": true }` or `false`. Ending a competition revokes its QR codes and scoring sessions, blocking both
+reading and entering lane scores. Open scoring pages remove the cards on their
+next refresh (within five seconds). Reopening requires new QR codes. Once draft or submitted scores exist, returning to Scheduled
+or Check-in is blocked so participant assignments and scoring counts stay intact.
+Reopening Closed to Active preserves existing scores, progress and valid codes.
+
+Migration `0015_lane_scoring.sql` adds scoring configuration and tables without
+rebuilding or deleting existing competitions or assignments. It runs at API
+startup through the normal migration mechanism.
+
+Browser tests use a temporary SQLite database with a test club. If development
+servers already occupy ports 3000/5173, set `ARROWCAST_E2E_API_PORT` and
+`ARROWCAST_E2E_WEB_PORT` to unused ports before running the browser tests.
+`PLAYWRIGHT_CHANNEL=msedge` can use an installed Edge browser instead of the
+downloaded Playwright Chromium.
+
 ## Latere stappen
 
 TanStack Query, Tailwind, TypeBox, gebruikersbeheer en
 scoreberekening worden toegevoegd bij de bijbehorende implementatie.
-`/scoring` is nog niet geïmplementeerd.
+Score entry is available through the lane QR links described below.
 
 Ook Docker/Compose, het serveren van frontendbestanden door Fastify, healthchecks,
 het persistente volume en ARM64-validatie volgen later. De huidige basis is nog

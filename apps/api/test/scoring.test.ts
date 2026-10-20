@@ -1,0 +1,373 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import type { TestContext } from 'node:test';
+import { eq, sql } from 'drizzle-orm';
+import SQLite from 'better-sqlite3';
+import type { LaneQrCode, ScoringContext, ScoringMutation } from '@arrowcast/contracts';
+import { buildApp } from '../src/app.js';
+import { openDatabase } from '../src/db/index.js';
+import { arrowScores, clubs, competitionLanes, competitionParticipants, competitions, laneScoringGrants,
+  laneScoringState, lanes, participants, rangeDistances, ranges, roundScores, scorecards, scoreChanges, scoringMutations, scoringSessions } from '../src/db/schema.js';
+import { hashToken } from '../src/modules/scoring/service.js';
+
+const config = { jwtSecret: 'scoring-test-secret-with-at-least-thirty-two-bytes' };
+const csrf = { 'x-arrowcast-scoring': '1' };
+async function setup(t: TestContext) {
+  const directory = mkdtempSync(join(tmpdir(), 'arrowcast-scoring-'));
+  const databasePath = join(directory, 'test.sqlite');
+  const store = openDatabase(databasePath); const db = store.db;
+  db.insert(ranges).values({ id: 'range', name: 'Indoor' }).run();
+  db.insert(rangeDistances).values({ rangeId: 'range', distanceMeters: 18 }).run();
+  db.insert(lanes).values([{ id: 'lane-1', rangeId: 'range', number: 1 }, { id: 'lane-2', rangeId: 'range', number: 2 }]).run();
+  db.insert(competitions).values({ id: 'competition', name: 'Test competition', date: '2026-11-01', startingTime: '09:00',
+    endingTime: '12:00', rangeId: 'range', status: 'Check-in', numberOfRounds: 2, arrowsPerRound: 2 }).run();
+  db.insert(competitionLanes).values(['lane-1', 'lane-2'].map((laneId) => ({ competitionId: 'competition', rangeId: 'range', laneId, distanceMeters: 18 }))).run();
+  db.insert(clubs).values({ clubNumber: 'club', name: 'Archery club' }).run();
+  for (const [id, name, laneId, targetLetter] of [['a', 'Archer A', 'lane-1', 'A'], ['c', 'Archer C', 'lane-1', 'C'], ['other', 'Other lane archer', 'lane-2', 'A']] as const) {
+    db.insert(participants).values({ id, name, federationNumber: id, clubNumber: 'club' }).run();
+    db.insert(competitionParticipants).values({ competitionId: 'competition', participantId: id, laneId, targetLetter, checkedIn: true }).run();
+  }
+  let app = buildApp({ ...config, databasePath });
+  t.after(async () => { await app.close(); store.close(); rmSync(directory, { recursive: true, force: true }); });
+  const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+  const admin = { authorization: `Bearer ${login.json().token}` };
+  const fixture = {
+    get app() { return app; }, db, admin,
+    async restart() { await app.close(); app = buildApp({ ...config, databasePath }); await app.ready(); },
+    async start() {
+      const response = await app.inject({ method: 'PATCH', url: '/api/v1/admin/competitions/competition/status', headers: admin, payload: { status: 'Active' } });
+      assert.equal(response.statusCode, 200, response.body);
+      return response.json().qrCodes as LaneQrCode[];
+    },
+    async exchange(code: LaneQrCode) {
+      const token = new URLSearchParams(code.path.split('#')[1]).get('token')!;
+      const response = await app.inject({ method: 'POST', url: `/api/v1/scoring/${code.grantId}/exchange`, headers: csrf, payload: { token } });
+      assert.equal(response.statusCode, 200, response.body);
+      assert.match(String(response.headers['set-cookie']), /HttpOnly/);
+      assert.match(String(response.headers['set-cookie']), /SameSite=Strict/i);
+      assert.match(String(response.headers['set-cookie']), new RegExp(`Path=/api/v1/scoring/${code.grantId}`));
+      const cookie = String(response.headers['set-cookie']).split(';')[0]!;
+      return { cookie, context: response.json() as ScoringContext };
+    },
+    context(code: LaneQrCode, cookie: string) { return app.inject({ url: `/api/v1/scoring/${code.grantId}/context`, headers: { cookie } }); },
+    save(code: LaneQrCode, cookie: string, values: Partial<ScoringMutation> = {}) {
+      const payload: ScoringMutation = { submissionId: randomUUID(), expectedVersion: 0, participantId: 'a', roundNumber: 1, arrows: ['10', '9'], submit: true, ...values };
+      return app.inject({ method: 'POST', url: `/api/v1/scoring/${code.grantId}/scores`, headers: { ...csrf, cookie }, payload });
+    },
+  };
+  return fixture;
+}
+
+test('range changes preserve registrations, clear placements and old score access, and respect the phase lock', async (t) => {
+  const f = await setup(t);
+  f.db.insert(ranges).values({ id: 'new-range', name: 'Outdoor' }).run();
+  f.db.insert(rangeDistances).values({ rangeId: 'new-range', distanceMeters: 25 }).run();
+  f.db.insert(lanes).values({ id: 'new-lane', rangeId: 'new-range', number: 3 }).run();
+  const url = '/api/v1/admin/competitions/competition';
+  const payload = { name: 'Moved', date: '2026-11-01', startingTime: '09:00', endingTime: '12:00',
+    numberOfRounds: 2, arrowsPerRound: 2, defaultTargetType: null,
+    rangeId: 'new-range', lanes: [{ laneId: 'new-lane', distanceMeters: 25 }] };
+  assert.equal((await f.app.inject({ method: 'PATCH', url, headers: f.admin, payload })).statusCode, 409);
+  const code = (await f.start())[0]!;
+  const session = await f.exchange(code);
+  assert.equal((await f.app.inject({ method: 'PATCH', url, headers: f.admin, payload })).statusCode, 409);
+  assert.equal((await f.app.inject({ method: 'PATCH', url: `${url}/status`, headers: f.admin, payload: { status: 'Scheduled' } })).statusCode, 200);
+  const moved = await f.app.inject({ method: 'PATCH', url, headers: f.admin, payload });
+  assert.equal(moved.statusCode, 200, moved.body);
+  assert.equal(moved.json().range.id, 'new-range');
+  const registrations = f.db.select().from(competitionParticipants).all();
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.every((participant) => participant.laneId === null && participant.targetLetter === null && participant.checkedIn));
+  assert.equal(f.db.select().from(laneScoringGrants).all().length, 0);
+  assert.equal(f.db.select().from(scoringSessions).all().length, 0);
+  assert.equal((await f.context(code, session.cookie)).statusCode, 401);
+  assert.deepEqual(f.db.select().from(competitionLanes).all().map((lane) => lane.laneId), ['new-lane']);
+});
+
+test('editing preserves scoring format locks and removing a scored competition clears dependent data and access', async (t) => {
+  const f = await setup(t);
+  const code = (await f.start())[0]!;
+  const session = await f.exchange(code);
+  assert.equal((await f.save(code, session.cookie)).statusCode, 200);
+  const url = '/api/v1/admin/competitions/competition';
+  const payload = { name: 'Updated during scoring', date: '2026-11-02', startingTime: '09:00', endingTime: '12:00',
+    numberOfRounds: 2, arrowsPerRound: 2, defaultTargetType: null };
+  assert.equal((await f.app.inject({ method: 'PATCH', url, headers: f.admin, payload })).statusCode, 200);
+  assert.equal((await f.app.inject({ method: 'PATCH', url, headers: f.admin, payload: { ...payload, numberOfRounds: 3 } })).statusCode, 409);
+  assert.equal((await f.context(code, session.cookie)).statusCode, 200);
+  f.db.insert(competitions).values({ id: 'keep', name: 'Keep competition', date: '2026-11-03', startingTime: '09:00',
+    endingTime: '12:00', rangeId: 'range' }).run();
+  f.db.insert(competitionLanes).values({ competitionId: 'keep', rangeId: 'range', laneId: 'lane-1', distanceMeters: 18 }).run();
+  const response = await f.app.inject({ method: 'DELETE', url, headers: f.admin });
+  assert.equal(response.statusCode, 204, response.body);
+  for (const table of [arrowScores, roundScores, scorecards, scoreChanges, scoringMutations, scoringSessions,
+    laneScoringGrants, laneScoringState, competitionParticipants]) {
+    assert.deepEqual(f.db.select().from(table).all(), [], table.toString());
+  }
+  assert.equal((await f.context(code, session.cookie)).statusCode, 401);
+  assert.equal((await f.app.inject({ url, headers: f.admin })).statusCode, 404);
+  assert.equal(f.db.select().from(participants).all().length, 3);
+  assert.equal(f.db.select().from(lanes).all().length, 2);
+  assert.deepEqual(f.db.select().from(competitionLanes).all().map((lane) => lane.competitionId), ['keep']);
+  assert.equal((await f.app.inject({ url: '/api/v1/admin/competitions/keep', headers: f.admin })).statusCode, 200);
+});
+
+test('QR access is separate from admin authentication and restricted to the competition lane', async (t) => {
+  const f = await setup(t);
+  const codes = await f.start(); assert.equal(codes.length, 2);
+  const code = codes[0]!; const otherCode = codes[1]!;
+  assert.ok(code.path.startsWith('/scoring/competition/lane-1/'));
+  const token = new URLSearchParams(code.path.split('#')[1]).get('token')!;
+  const stored = f.db.select().from(laneScoringGrants).where(eq(laneScoringGrants.id, code.grantId)).get()!;
+  assert.notEqual(stored.tokenHash, token); assert.equal(stored.tokenHash, hashToken(token));
+  assert.equal((await f.app.inject({ method: 'POST', url: `/api/v1/scoring/${code.grantId}/exchange`, payload: { token } })).statusCode, 403);
+  assert.equal((await f.app.inject({ method: 'POST', url: `/api/v1/scoring/${code.grantId}/exchange`, headers: csrf, payload: { token: 'a'.repeat(43) } })).statusCode, 401);
+  assert.equal((await f.app.inject({ url: `/api/v1/scoring/${code.grantId}/context`, headers: f.admin })).statusCode, 401);
+  const session = await f.exchange(code);
+  assert.deepEqual(session.context.participants.map((p) => p.id), ['a', 'c']);
+  assert.equal(session.context.currentParticipantId, 'a');
+  assert.equal((await f.context(otherCode, session.cookie)).statusCode, 401);
+  assert.equal((await f.app.inject({ url: '/api/v1/admin/competitions', headers: { cookie: session.cookie } })).statusCode, 401);
+  assert.equal((await f.save(code, session.cookie, { participantId: 'other' })).statusCode, 403);
+  for (const arrows of [['10'], ['10', '9', '8'], ['10', null], ['11', '9'], ['X', '9']] as (string | null)[][]) {
+    assert.equal((await f.save(code, session.cookie, { arrows })).statusCode, 400);
+  }
+  assert.equal((await f.app.inject({ method: 'POST', url: `/api/v1/scoring/${code.grantId}/scores`,
+    headers: { cookie: session.cookie }, payload: {} })).statusCode, 403);
+  assert.equal(f.db.select().from(scorecards).all().length, 0);
+  assert.equal((await f.app.inject({ method: 'POST', url: '/api/v1/admin/competitions/competition/scoring-codes' })).statusCode, 401);
+});
+
+test('drafts survive restart and device changes; Save rotates participants, wraps rounds and retries exactly once', async (t) => {
+  const f = await setup(t); const code = (await f.start())[0]!;
+  const first = await f.exchange(code);
+  const draftId = randomUUID();
+  const draft = { submissionId: draftId, arrows: ['10', null], submit: false };
+  const saved = await f.save(code, first.cookie, draft); assert.equal(saved.statusCode, 200, saved.body);
+  assert.deepEqual(saved.json(), { version: 1 });
+  assert.deepEqual((await f.save(code, first.cookie, draft)).json(), saved.json());
+  assert.equal((await f.save(code, first.cookie, { ...draft, arrows: ['9', null] })).statusCode, 409);
+  const second = await f.exchange(code);
+  assert.deepEqual(second.context.rounds[0]?.arrows, ['10', null]);
+  assert.equal(second.context.rounds[0]?.status, 'draft');
+  assert.equal(second.context.currentParticipantId, 'a');
+  await f.restart();
+  assert.deepEqual((await f.context(code, second.cookie)).json().rounds[0].arrows, ['10', null]);
+  const submissionId = randomUUID();
+  const submitted = await f.save(code, second.cookie, { submissionId, expectedVersion: 1 });
+  assert.equal(submitted.statusCode, 200, submitted.body);
+  const next = (await f.context(code, first.cookie)).json() as ScoringContext;
+  assert.equal(next.currentParticipantId, 'c'); assert.equal(next.currentRoundNumber, 1);
+  assert.equal((await f.save(code, first.cookie, { expectedVersion: 1, arrows: ['8', '8'], submit: false })).statusCode, 409);
+  assert.deepEqual((await f.save(code, second.cookie, { submissionId, expectedVersion: 1 })).json(), submitted.json());
+  assert.equal((await f.save(code, second.cookie, { participantId: 'c', expectedVersion: 2, arrows: ['8', '7'] })).statusCode, 200);
+  const wrapped = (await f.context(code, first.cookie)).json() as ScoringContext;
+  assert.equal(wrapped.currentParticipantId, 'a'); assert.equal(wrapped.currentRoundNumber, 2);
+  assert.equal((await f.save(code, first.cookie, { expectedVersion: 3, roundNumber: 2, arrows: ['M', '1'] })).statusCode, 200);
+  assert.equal((await f.save(code, second.cookie, { participantId: 'c', expectedVersion: 4, roundNumber: 2, arrows: ['6', '5'] })).statusCode, 200);
+  const done = (await f.context(code, first.cookie)).json() as ScoringContext;
+  assert.equal(done.completed, true); assert.equal(done.currentParticipantId, null);
+  assert.equal(done.rounds.length, 4); assert.equal(done.rounds.filter((r) => r.participantId === 'a').reduce((n, r) => n + r.total, 0), 20);
+  assert.equal(f.db.select().from(scoringMutations).all().length, 5);
+  assert.equal(f.db.select().from(scoreChanges).all().length, 5);
+  assert.equal(f.db.select().from(arrowScores).all().length, 8);
+  assert.equal((await f.save(code, first.cookie, { expectedVersion: 5, arrows: ['8', '9'] })).statusCode, 200);
+  const corrected = (await f.context(code, first.cookie)).json() as ScoringContext;
+  assert.equal(corrected.completed, true);
+  assert.equal(corrected.rounds.find((r) => r.participantId === 'a' && r.roundNumber === 1)?.total, 17);
+  assert.deepEqual(f.db.select().from(scoreChanges).all().at(-1)?.before, ['10', '9']);
+});
+
+test('lane participants can score out of order and correct earlier rounds without skipping unfinished scores', async (t) => {
+  const f = await setup(t); const code = (await f.start())[0]!; const session = await f.exchange(code);
+  assert.equal((await f.save(code, session.cookie, { participantId: 'c', arrows: ['M', null], submit: false })).statusCode, 200);
+  assert.equal((await f.save(code, session.cookie, { participantId: 'c', expectedVersion: 1, arrows: ['M', '8'] })).statusCode, 200);
+  let context = (await f.context(code, session.cookie)).json() as ScoringContext;
+  assert.equal(context.currentParticipantId, 'a'); assert.equal(context.currentRoundNumber, 1);
+  assert.equal((await f.save(code, session.cookie, { participantId: 'c', expectedVersion: 2, arrows: ['9', null], submit: false })).statusCode, 409);
+  assert.equal((await f.save(code, session.cookie, { participantId: 'c', expectedVersion: 2, arrows: ['9', '8'] })).statusCode, 200);
+  assert.equal((await f.save(code, session.cookie, { expectedVersion: 2 })).statusCode, 409);
+  assert.equal((await f.save(code, session.cookie, { expectedVersion: 3 })).statusCode, 200);
+  context = (await f.context(code, session.cookie)).json() as ScoringContext;
+  assert.equal(context.currentParticipantId, 'a'); assert.equal(context.currentRoundNumber, 2);
+  assert.equal(context.rounds.find((r) => r.participantId === 'c')?.total, 17);
+  const lock = await f.app.inject({ method: 'PATCH', url: '/api/v1/admin/competitions/competition/scoring-lock', headers: f.admin, payload: { scoringLocked: true } });
+  assert.equal(lock.statusCode, 200);
+  assert.equal((await f.save(code, session.cookie, { participantId: 'c', expectedVersion: 4 })).statusCode, 403);
+});
+
+test('lane scoring stays within one submitted round and blocks future drafts without changing progress', async (t) => {
+  const f = await setup(t);
+  f.db.update(competitions).set({ numberOfRounds: 3 }).where(eq(competitions.id, 'competition')).run();
+  const code = (await f.start())[0]!; const session = await f.exchange(code);
+  let version = 0;
+  async function save(participantId: string, roundNumber: number, submit = true) {
+    const response = await f.save(code, session.cookie, { participantId, roundNumber, submit,
+      expectedVersion: version, arrows: submit ? ['10', '9'] : ['10', null] });
+    assert.equal(response.statusCode, 200, response.body);
+    version++;
+  }
+  async function blocked(participantId: string, roundNumber: number) {
+    const before = (await f.context(code, session.cookie)).json();
+    const auditCount = f.db.select().from(scoreChanges).all().length;
+    for (const submit of [false, true]) {
+      const response = await f.save(code, session.cookie, { participantId, roundNumber, submit, expectedVersion: version });
+      assert.equal(response.statusCode, 409, response.body);
+      assert.match(response.json().message, /for everyone in your lane/);
+    }
+    assert.deepEqual((await f.context(code, session.cookie)).json(), before);
+    assert.equal(f.db.select().from(scoreChanges).all().length, auditCount);
+    assert.equal(f.db.select().from(scoringMutations).all().length, auditCount);
+  }
+  await blocked('a', 2);
+  await blocked('a', 3);
+  await save('a', 1);
+  await blocked('a', 2);
+  await save('c', 1, false);
+  await blocked('a', 2); // A draft does not finish the round.
+  await save('c', 1);
+  await save('c', 2);
+  await blocked('c', 3);
+  await save('c', 1); // Earlier corrections remain available.
+  await blocked('c', 3);
+  await save('a', 2);
+  await save('c', 3, false);
+  await save('c', 3);
+  await save('a', 3);
+  assert.equal((await f.context(code, session.cookie)).json().completed, true);
+  // The participant in lane 2 has no scores and does not block this lane.
+});
+
+test('scoring locks, closed competitions, grant rotation, expiry and revocation are enforced without losing scores', async (t) => {
+  const f = await setup(t); const code = (await f.start())[0]!; const session = await f.exchange(code);
+  assert.equal((await f.save(code, session.cookie, { arrows: ['10', null], submit: false })).statusCode, 200);
+  const base = '/api/v1/admin/competitions/competition';
+  for (const status of ['Scheduled', 'Check-in']) assert.equal((await f.app.inject({ method: 'PATCH', url: `${base}/status`, headers: f.admin, payload: { status } })).statusCode, 409);
+  assert.equal((await f.app.inject({ method: 'PATCH', url: `${base}/scoring-settings`, headers: f.admin, payload: { numberOfRounds: 3, arrowsPerRound: 3 } })).statusCode, 409);
+  const lock = (scoringLocked: boolean) => f.app.inject({ method: 'PATCH', url: `${base}/scoring-lock`, headers: f.admin, payload: { scoringLocked } });
+  assert.equal((await lock(true)).statusCode, 200);
+  assert.equal((await f.save(code, session.cookie, { expectedVersion: 1 })).statusCode, 403);
+  assert.equal((await lock(false)).statusCode, 200);
+  assert.equal((await f.app.inject({ method: 'PATCH', url: `${base}/status`, headers: f.admin, payload: { status: 'Closed' } })).statusCode, 200);
+  assert.equal((await f.save(code, session.cookie, { expectedVersion: 1 })).statusCode, 403);
+  assert.equal((await f.context(code, session.cookie)).statusCode, 403);
+  const token = new URLSearchParams(code.path.split('#')[1]).get('token');
+  assert.equal((await f.app.inject({ method: 'POST', url: `/api/v1/scoring/${code.grantId}/exchange`, headers: csrf, payload: { token } })).statusCode, 403);
+  assert.deepEqual((await f.app.inject({ url: `${base}/scoring-codes`, headers: f.admin })).json(), []);
+  assert.equal((await f.app.inject({ method: 'POST', url: `${base}/scoring-codes/restore`, headers: f.admin })).statusCode, 409);
+  assert.equal((await f.app.inject({ method: 'POST', url: `${base}/scoring-codes`, headers: f.admin })).statusCode, 409);
+  assert.ok(f.db.select().from(scoringSessions).all().every((session) => session.revokedAt !== null));
+  assert.equal((await f.app.inject({ method: 'PATCH', url: `${base}/status`, headers: f.admin, payload: { status: 'Active' } })).statusCode, 200);
+  assert.equal((await f.context(code, session.cookie)).statusCode, 401);
+  const replacement = await f.app.inject({ method: 'POST', url: `${base}/scoring-codes`, headers: f.admin });
+  assert.equal(replacement.statusCode, 200, replacement.body);
+  assert.equal((await f.context(code, session.cookie)).statusCode, 401);
+  assert.equal((await f.save(code, session.cookie, { expectedVersion: 1 })).statusCode, 401);
+  const newCode = replacement.json()[0] as LaneQrCode; const newSession = await f.exchange(newCode);
+  assert.deepEqual(newSession.context.rounds[0]?.arrows, ['10', null]);
+  f.db.update(scoringSessions).set({ expiresAt: Date.now() - 1 }).where(eq(scoringSessions.grantId, newCode.grantId)).run();
+  assert.equal((await f.context(newCode, newSession.cookie)).statusCode, 401);
+  const activeSession = await f.exchange(newCode);
+  f.db.update(laneScoringGrants).set({ expiresAt: Date.now() - 1 }).where(eq(laneScoringGrants.id, newCode.grantId)).run();
+  assert.equal((await f.context(newCode, activeSession.cookie)).statusCode, 401);
+  const renewed = (await f.app.inject({ method: 'POST', url: `${base}/scoring-codes`, headers: f.admin })).json()[0] as LaneQrCode;
+  const renewedSession = await f.exchange(renewed);
+  assert.equal((await f.app.inject({ method: 'DELETE', url: `${base}/scoring-codes`, headers: f.admin })).statusCode, 204);
+  assert.equal((await f.context(renewed, renewedSession.cookie)).statusCode, 401);
+  assert.equal(f.db.select().from(arrowScores).all().length, 1);
+});
+
+test('a failed write rolls back scores, lane progress, audit and idempotency together', async (t) => {
+  const f = await setup(t); const code = (await f.start())[0]!; const session = await f.exchange(code);
+  f.db.run(sql`CREATE TRIGGER fail_score_audit BEFORE INSERT ON score_changes BEGIN SELECT RAISE(ABORT, 'simulated audit failure'); END`);
+  const submissionId = randomUUID();
+  assert.equal((await f.save(code, session.cookie, { submissionId })).statusCode, 500);
+  for (const table of [scorecards, roundScores, arrowScores, scoringMutations, scoreChanges]) assert.equal(f.db.select().from(table).all().length, 0);
+  assert.equal((await f.context(code, session.cookie)).json().version, 0);
+  f.db.run(sql`DROP TRIGGER fail_score_audit`);
+  assert.equal((await f.save(code, session.cookie, { submissionId })).statusCode, 200);
+});
+
+test('competition scoring settings validate counts and preserve existing competitions on migration', async (t) => {
+  const f = await setup(t); const base = '/api/v1/admin/competitions/competition';
+  f.db.update(competitions).set({ status: 'Scheduled' }).where(eq(competitions.id, 'competition')).run();
+  assert.equal((await f.app.inject({ method: 'PATCH', url: `${base}/scoring-settings`, payload: { numberOfRounds: 5, arrowsPerRound: 3 } })).statusCode, 401);
+  for (const body of [{ numberOfRounds: 0, arrowsPerRound: 3 }, { numberOfRounds: 1.5, arrowsPerRound: 3 }, { numberOfRounds: 3, arrowsPerRound: 0 },
+    { numberOfRounds: '3', arrowsPerRound: 3 }, { numberOfRounds: 1001, arrowsPerRound: 3 }, { numberOfRounds: 3, arrowsPerRound: 37 }]) {
+    assert.equal((await f.app.inject({ method: 'PATCH', url: `${base}/scoring-settings`, headers: f.admin, payload: body })).statusCode, 400);
+  }
+  const settings = await f.app.inject({ method: 'PATCH', url: `${base}/scoring-settings`, headers: f.admin, payload: { numberOfRounds: 5, arrowsPerRound: 6 } });
+  assert.equal(settings.statusCode, 200); assert.equal(settings.json().numberOfRounds, 5); assert.equal(settings.json().arrowsPerRound, 6);
+  assert.throws(() => f.db.update(competitions).set({ numberOfRounds: 0 }).run());
+  assert.throws(() => f.db.update(competitions).set({ arrowsPerRound: 1.5 }).run());
+  const client = new SQLite(':memory:');
+  try {
+    client.pragma('foreign_keys = ON');
+    const journal = JSON.parse(readFileSync(new URL('../../../migrations/meta/_journal.json', import.meta.url), 'utf8'));
+    for (const entry of journal.entries.filter((entry: { idx: number }) => entry.idx < 15)) client.exec(readFileSync(new URL(`../../../migrations/${entry.tag}.sql`, import.meta.url), 'utf8'));
+    client.exec(`INSERT INTO ranges VALUES ('range', 'Indoor'); INSERT INTO lanes VALUES ('lane', 'range', 1);
+      INSERT INTO range_distances VALUES ('range', 18);
+      INSERT INTO competitions VALUES ('competition', 'Existing', '2026-11-01', '09:00', '12:00', 'range', 'Active');
+      INSERT INTO competition_lanes VALUES ('competition', 'range', 'lane', 18, NULL, 1);`);
+    client.transaction(() => client.exec(readFileSync(new URL('../../../migrations/0015_lane_scoring.sql', import.meta.url), 'utf8')))();
+    assert.deepEqual(client.prepare('SELECT status, number_of_rounds, arrows_per_round, scoring_locked FROM competitions').get(),
+      { status: 'Active', number_of_rounds: 10, arrows_per_round: 3, scoring_locked: 0 });
+    assert.deepEqual(client.pragma('foreign_key_check'), []);
+    assert.equal(client.prepare('SELECT * FROM competition_lanes').all().length, 1);
+  } finally { client.close(); }
+});
+
+
+test('admins retrieve identical QR codes after restart and standings rank submitted round averages', async (t) => {
+  const f = await setup(t);
+  const codes = await f.start();
+  const url = '/api/v1/admin/competitions/competition/scoring-codes';
+  assert.equal((await f.app.inject({ url })).statusCode, 401);
+  await f.restart();
+  assert.deepEqual((await f.app.inject({ url, headers: f.admin })).json(), codes);
+  const session = await f.exchange(codes[0]!);
+  const standingsUrl = '/api/v1/admin/competitions/competition/scoring-standings';
+  assert.equal((await f.app.inject({ url: standingsUrl })).statusCode, 401);
+  assert.equal((await f.save(codes[0]!, session.cookie, { submit: false, arrows: ['10', null] })).statusCode, 200);
+  let standings = (await f.app.inject({ url: standingsUrl, headers: f.admin })).json();
+  assert.ok(standings.every((p: { enteredRounds: number; totalScore: number }) => p.enteredRounds === 0 && p.totalScore === 0));
+  assert.equal((await f.save(codes[0]!, session.cookie, { expectedVersion: 1 })).statusCode, 200);
+  assert.equal((await f.save(codes[0]!, session.cookie, { expectedVersion: 2, participantId: 'c', arrows: ['8', '8'] })).statusCode, 200);
+  assert.equal((await f.save(codes[0]!, session.cookie, { expectedVersion: 3, roundNumber: 2, arrows: ['M', '1'] })).statusCode, 200);
+  standings = (await f.app.inject({ url: standingsUrl, headers: f.admin })).json();
+  assert.deepEqual(standings, [
+    { participantId: 'c', name: 'Archer C', enteredRounds: 1, totalRounds: 2, totalScore: 16, averageScore: 8 },
+    { participantId: 'a', name: 'Archer A', enteredRounds: 2, totalRounds: 2, totalScore: 20, averageScore: 5 },
+    { participantId: 'other', name: 'Other lane archer', enteredRounds: 0, totalRounds: 2, totalScore: 0, averageScore: 0 },
+  ]);
+  await f.app.inject({ method: 'POST', url, headers: f.admin });
+  const replacements = (await f.app.inject({ url, headers: f.admin })).json();
+  assert.equal(replacements.length, 2);
+  assert.ok(replacements.every((code: LaneQrCode) => !codes.some((old) => old.grantId === code.grantId)));
+});
+
+
+test('legacy QR codes recover without revoking printouts or scoring sessions', async (t) => {
+  const f = await setup(t);
+  const codes = await f.start();
+  const session = await f.exchange(codes[0]!);
+  f.db.update(laneScoringGrants).set({ token: null }).run();
+  const url = '/api/v1/admin/competitions/competition/scoring-codes';
+  assert.equal((await f.app.inject({ method: 'POST', url: `${url}/restore` })).statusCode, 401);
+  assert.equal((await f.app.inject({ method: 'POST', url: `${url}/restore`, headers: f.admin })).statusCode, 204);
+  const restored = (await f.app.inject({ url, headers: f.admin })).json() as LaneQrCode[];
+  assert.equal(restored.length, 2);
+  assert.ok(restored.every((code) => code.path.includes('#token=')));
+  assert.equal((await f.context(codes[0]!, session.cookie)).statusCode, 200);
+  assert.equal((await f.exchange(codes[0]!)).context.lane.id, 'lane-1');
+  assert.equal((await f.exchange(restored[0]!)).context.lane.id, 'lane-1');
+  await f.app.inject({ method: 'POST', url: `${url}/restore`, headers: f.admin });
+  assert.deepEqual((await f.app.inject({ url, headers: f.admin })).json(), restored);
+  await f.restart();
+  assert.deepEqual((await f.app.inject({ url, headers: f.admin })).json(), restored);
+  assert.equal((await f.save(codes[0]!, session.cookie)).statusCode, 200);
+});

@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { testAdminToken } from './admin';
 
 let token: string;
-test.beforeAll(async ({ request }) => {
-  const login = await request.post('/api/v1/auth/login', { data: { username: 'admin', password: 'admin' } });
-  token = (await login.json()).token;
+test.beforeAll(() => {
+  token = testAdminToken();
 });
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((value) => sessionStorage.setItem('arrowcast.admin.jwt', value), token);

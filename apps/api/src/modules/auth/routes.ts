@@ -11,6 +11,7 @@ import { competitionRoutes } from '../competitions/routes.js';
 import { targetTypeRoutes } from '../target-types/routes.js';
 import { participantRoutes } from '../participants/routes.js';
 import { participantManagementRoutes } from '../participants/management.js';
+import { adminScoringRoutes, scoringRoutes } from '../scoring/routes.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -59,6 +60,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
   });
 
   // Register every management API route inside this scope to enforce authentication.
+  await app.register(scoringRoutes, { db: config.db, prefix: '/scoring' });
   await app.register(async (admin) => {
     admin.addHook('onRequest', async (request, reply) => {
       try {
@@ -82,5 +84,6 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
     await admin.register(targetTypeRoutes, { db: config.db });
     await admin.register(participantRoutes, { db: config.db });
     await admin.register(participantManagementRoutes, { db: config.db });
+    await admin.register(adminScoringRoutes, { db: config.db });
   }, { prefix: '/admin' });
 }

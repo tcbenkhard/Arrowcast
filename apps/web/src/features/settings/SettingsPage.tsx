@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { TargetTypesPage } from '../target-types/TargetTypesPage';
 import { RangesPage } from '../ranges/RangesPage';
 import { SettingsCard } from './SettingsCard';
+import { ArrowcastHostname } from './ArrowcastHostname';
 
 interface ImportState {
   status: 'idle' | 'running' | 'completed' | 'failed';
@@ -65,6 +66,7 @@ export function SettingsPage({ token, onUnauthorized }: {
   return <section className="settings-page" aria-labelledby="settings-heading">
     <h2 id="settings-heading">Settings</h2>
     <div className="settings-cards">
+      <ArrowcastHostname />
       <SettingsCard id="participant-import" title="Deelnemers importeren" defaultExpanded>
         <p>Importeer deelnemers en verenigingen uit de nieuwste regiocompetities van Handboogsport.
           Bestaande deelnemers worden bijgewerkt. De import kan enkele minuten duren en gaat door als je deze pagina verlaat.</p>

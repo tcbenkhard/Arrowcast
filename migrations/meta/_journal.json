@@ -106,6 +106,27 @@
       "when": 1792440687249,
       "tag": "0014_shooting_assignments",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1792444779641,
+      "tag": "0015_lane_scoring",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1792477139682,
+      "tag": "0016_persist_scoring_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792480996241,
+      "tag": "0017_competition_default_target",
+      "breakpoints": true
     }
   ]
 }
