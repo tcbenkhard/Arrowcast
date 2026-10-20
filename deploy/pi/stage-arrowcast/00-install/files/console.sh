@@ -3,9 +3,10 @@ set -euo pipefail
 # Only the physical console receives credentials; never the journal or network.
 # shellcheck source=/dev/null
 source /etc/arrowcast/arrowcast.env
-printf '\033[2J\033[HArrowcast\n\nJoin Wi-Fi: ArrowCast (no password)\n'
-printf 'On that Wi-Fi, open http://10.42.0.1/admin\n'
-printf 'On Ethernet, open http://arrowcast.local/admin\n\n'
+printf '\033[2J\033[HArrowcast\n\nEthernet cable connected: Wi-Fi is disabled.\n'
+printf 'Without Ethernet: saved Wi-Fi, or ArrowCast hotspot (no password).\n'
+printf 'On the hotspot, open http://10.42.0.1/admin\n'
+printf 'On Ethernet or saved Wi-Fi, open http://arrowcast.local/admin\n\n'
 printf 'Username: admin\nInitial password: %s\nChange this password on first login.\n\n' "$INITIAL_ADMIN_PASSWORD"
 printf 'SSH: ssh pi@10.42.0.1\nInitial SSH password: arrowcast\n\n'
 printf 'If the name does not work, try an address below in your browser:\n'

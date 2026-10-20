@@ -13,6 +13,7 @@ import { participantRoutes } from '../participants/routes.js';
 import { participantManagementRoutes } from '../participants/management.js';
 import { adminScoringRoutes, scoringRoutes } from '../scoring/routes.js';
 import { updateRoutes } from '../updates/routes.js';
+import { networkRoutes } from '../network/routes.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -114,6 +115,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
     });
     await admin.register(rangeRoutes, { db: config.db });
     await admin.register(updateRoutes);
+    await admin.register(networkRoutes);
     await admin.register(competitionRoutes, { db: config.db });
     await admin.register(targetTypeRoutes, { db: config.db });
     await admin.register(participantRoutes, { db: config.db });

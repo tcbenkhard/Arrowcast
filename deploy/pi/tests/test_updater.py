@@ -8,12 +8,14 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[1] / 'stage-arrowcast/00-install/files/updater.py'
 spec = importlib.util.spec_from_file_location('updater', SOURCE)
 updater = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(updater)
+probe_connection = updater.updates_connected
 
 
 class UpdaterTests(unittest.TestCase):
@@ -47,6 +49,77 @@ class UpdaterTests(unittest.TestCase):
             db.execute("INSERT INTO competitions VALUES ('Closed')")
         updater.candidate = None
         updater.busy = False
+        updater.last_check = 0
+        updater.status = {'status': 'checking', 'message': '', 'availableVersion': None}
+        override = patch.object(updater, 'updates_connected', return_value=True)
+        override.start()
+        self.addCleanup(override.stop)
+
+    def test_network_probe_uses_internet_reachability_regardless_of_mode(self):
+        for mode, available in [('hotspot', False), ('hotspot', True), ('wifi', False), ('wifi', True),
+                                ('ethernet', False), ('ethernet', True)]:
+            with self.subTest(mode=mode, available=available), patch.object(updater.http.client, 'HTTPConnection') as http, \
+                    patch.object(updater.socket, 'socket'), \
+                    patch.object(updater.socket, 'AF_UNIX', 1, create=True):
+                response = http.return_value.getresponse.return_value
+                response.status = 200
+                response.read.return_value = json.dumps({'mode': mode, 'internetAvailable': available}).encode()
+                self.assertEqual(probe_connection(), available)
+                http.return_value.close.assert_called_once()
+
+    def test_network_service_unavailable_skips_checks(self):
+        with patch.object(updater.http.client, 'HTTPConnection') as http, \
+                patch.object(updater.socket, 'socket') as sock, \
+                patch.object(updater.socket, 'AF_UNIX', 1, create=True):
+            sock.return_value.connect.side_effect = OSError('not ready')
+            self.assertFalse(probe_connection())
+            http.return_value.request.assert_not_called()
+            http.return_value.close.assert_called_once()
+
+    def test_no_internet_never_checks_or_downloads_updates(self):
+        updater.candidate = {'version': 'v1.1.0'}
+        with patch.object(updater, 'updates_connected', return_value=False), \
+                patch.object(updater, 'release_candidate') as release, \
+                patch.object(updater, 'download') as download:
+            updater.check()
+            self.assertEqual(updater.status['status'], 'offline')
+            self.assertIsNone(updater.candidate)
+            updater.install()
+            release.assert_not_called()
+            download.assert_not_called()
+
+    def test_no_internet_status_hides_cached_update_and_rejects_installation(self):
+        updater.status = {'status': 'available', 'message': '', 'availableVersion': 'v1.1.0'}
+        updater.candidate = {'version': 'v1.1.0'}
+        handler = object.__new__(updater.Handler)
+        responses = []
+        handler.respond = lambda code, value: responses.append((code, value))
+        with patch.object(updater, 'updates_connected', return_value=False), \
+                patch.object(updater, 'current_version', return_value='v1.0.0'), \
+                patch.object(updater.threading.Thread, 'start') as start:
+            handler.path = '/status'
+            handler.do_GET()
+            handler.path = '/install'
+            handler.do_POST()
+            start.assert_not_called()
+        self.assertEqual([code for code, _ in responses], [200, 503])
+        for _, result in responses:
+            self.assertEqual(result['currentVersion'], 'v1.0.0')
+            self.assertEqual(result['status'], 'offline')
+            self.assertIsNone(result['availableVersion'])
+
+    def test_reconnecting_checks_immediately_despite_recent_cached_check(self):
+        updater.status = {'status': 'offline', 'message': updater.OFFLINE_MESSAGE, 'availableVersion': None}
+        updater.last_check = updater.time.monotonic()
+        handler = object.__new__(updater.Handler)
+        handler.path = '/status'
+        responses = []
+        handler.respond = lambda code, value: responses.append(value)
+        with patch.object(updater, 'current_version', return_value='v1.0.0'), \
+                patch.object(updater.threading.Thread, 'start') as start:
+            handler.do_GET()
+            start.assert_called_once()
+        self.assertEqual(responses[0]['status'], 'checking')
 
     def require_symlinks(self):
         if not self.symlinks:
@@ -57,6 +130,84 @@ class UpdaterTests(unittest.TestCase):
         for value in ['v1.0.0-beta', 'v1.0.0/../../', '1.02.3', 'latest']:
             with self.assertRaises(ValueError):
                 updater.version(value)
+
+    def test_release_check_requests_json_metadata(self):
+        updater.CONFIG.write_text(json.dumps({'repository': 'owner/arrowcast'}))
+
+        def github_response(request, **_kwargs):
+            if request.get_header('Accept') != 'application/vnd.github+json':
+                raise urllib.error.HTTPError(request.full_url, 415, 'Unsupported Media Type', {}, None)
+            response = io.BytesIO(json.dumps({'tag_name': 'v1.0.0'}).encode())
+            response.url = request.full_url
+            return response
+
+        with patch.object(updater.urllib.request, 'urlopen', side_effect=github_response) as request, \
+                patch.object(updater, 'current_version', return_value='v1.0.0'):
+            self.assertIsNone(updater.release_candidate())
+        self.assertEqual(request.call_args.args[0].full_url,
+                         'https://api.github.com/repos/owner/arrowcast/releases/latest')
+
+    def test_asset_download_requests_binary_data(self):
+        url = 'https://github.com/owner/arrowcast/releases/download/v1.1.0/update.sig'
+        response = io.BytesIO(b'\x00\xffsignature')
+        response.url = url
+        with patch.object(updater.urllib.request, 'urlopen', return_value=response) as request:
+            self.assertEqual(updater.download(url, 4096), b'\x00\xffsignature')
+        self.assertEqual(request.call_args.args[0].get_header('Accept'), 'application/octet-stream')
+
+    def test_no_published_release_in_accessible_repository_is_idle(self):
+        updater.CONFIG.write_text(json.dumps({'repository': 'owner/arrowcast'}))
+        updater.KEY.touch()
+        updater.candidate = {'version': 'v1.1.0'}
+        missing = urllib.error.HTTPError('https://api.github.com/repos/owner/arrowcast/releases/latest',
+                                         404, 'Not Found', {}, None)
+        self.addCleanup(missing.close)
+        with patch.object(updater, 'download', side_effect=[missing, b'{"full_name":"owner/arrowcast"}']) as download:
+            updater.check()
+        self.assertEqual(updater.status['status'], 'idle')
+        self.assertEqual(updater.status['message'], '')
+        self.assertIsNone(updater.status['availableVersion'])
+        self.assertIsNone(updater.candidate)
+        self.assertEqual(download.call_count, 2)
+        self.assertEqual(download.call_args.args[0], 'https://api.github.com/repos/owner/arrowcast')
+        self.assertEqual(download.call_args.kwargs['accept'], 'application/vnd.github+json')
+
+    def test_inaccessible_repository_still_fails(self):
+        updater.CONFIG.write_text(json.dumps({'repository': 'owner/arrowcast'}))
+        updater.KEY.touch()
+        missing = urllib.error.HTTPError('https://api.github.com/repos/owner/arrowcast',
+                                         404, 'Not Found', {}, None)
+        self.addCleanup(missing.close)
+        with patch.object(updater, 'download', side_effect=missing) as download:
+            updater.check()
+        self.assertEqual(updater.status['status'], 'failed')
+        self.assertIn('HTTP Error 404', updater.status['message'])
+        self.assertEqual(download.call_count, 2)
+
+    def test_other_release_http_errors_still_fail(self):
+        updater.CONFIG.write_text(json.dumps({'repository': 'owner/arrowcast'}))
+        for code in (403, 429, 500):
+            with self.subTest(code=code):
+                error = urllib.error.HTTPError('https://api.github.com/repos/owner/arrowcast/releases/latest',
+                                               code, 'Request failed', {}, None)
+                self.addCleanup(error.close)
+                with patch.object(updater, 'download', side_effect=error) as download:
+                    with self.assertRaises(urllib.error.HTTPError) as raised:
+                        updater.release_candidate()
+                self.assertIs(raised.exception, error)
+                download.assert_called_once()
+
+    def test_missing_update_manifest_still_fails(self):
+        updater.CONFIG.write_text(json.dumps({'repository': 'owner/arrowcast'}))
+        missing = urllib.error.HTTPError('https://github.com/owner/arrowcast/releases/download/v1.1.0/update.json',
+                                         404, 'Not Found', {}, None)
+        self.addCleanup(missing.close)
+        with patch.object(updater, 'download', side_effect=[b'{"tag_name":"v1.1.0"}', missing]) as download, \
+                patch.object(updater, 'current_version', return_value='v1.0.0'):
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                updater.release_candidate()
+        self.assertIs(raised.exception, missing)
+        self.assertEqual(download.call_count, 2)
 
     def test_archive_rejects_path_traversal_and_external_symlink(self):
         for name, link in [('../../outside', None), ('escape', '/etc/passwd')]:

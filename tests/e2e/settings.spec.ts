@@ -1,6 +1,31 @@
 import { expect, test } from '@playwright/test';
 import { testAdminToken } from './admin';
 
+test('participant import is disabled without internet and becomes available after reconnection', async ({ page }) => {
+  let online = false;
+  let posts = 0;
+  await page.route('**/api/v1/admin/participants/import', async (route) => {
+    if (route.request().method() === 'POST') posts++;
+    await route.fulfill({ json: { status: 'idle', progress: null, result: null, error: null,
+      available: online, message: online ? null : 'Arrowcast moet verbonden zijn met het internet om deelnemers te importeren.',
+    } });
+  });
+  await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
+  await page.goto('/admin/settings');
+  await page.getByRole('button', { name: 'Expand Deelnemers importeren', exact: true }).click();
+  const section = page.getByRole('region', { name: 'Deelnemers importeren', exact: true });
+  const button = section.getByRole('button', { name: 'Importeer deelnemers uit handboogsport', exact: true });
+  await expect(button).toBeDisabled();
+  await expect(section.getByRole('status')).toContainText('internet');
+  await expect(section.getByRole('alert')).toHaveCount(0);
+  online = true;
+  await expect(button).toBeEnabled();
+  await expect(section.getByText(/moet verbonden zijn met het internet/)).toHaveCount(0);
+  online = false;
+  await expect(button).toBeDisabled();
+  expect(posts).toBe(0);
+});
+
 test('settings starts an import, disables duplicate clicks and shows the result', async ({ page }) => {
   let started = false;
   let completed = false;

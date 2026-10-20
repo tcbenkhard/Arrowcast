@@ -3,12 +3,14 @@
 import hashlib
 from contextlib import closing, contextmanager
 import http.server
+import http.client
 import json
 import os
 from pathlib import Path
 import re
 import shutil
 import socketserver
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -16,6 +18,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 
 STATE = Path('/var/lib/arrowcast-update')
@@ -24,6 +27,8 @@ DATABASE = Path('/var/lib/arrowcast/arrowcast.sqlite')
 CONFIG = Path('/etc/arrowcast/update.json')
 KEY = Path('/etc/arrowcast/update-public.pem')
 SOCKET = Path('/run/arrowcast-update/control.sock')
+NETWORK_SOCKET = '/run/arrowcast-network/control.sock'
+OFFLINE_MESSAGE = 'Arrowcast must be connected to the internet to check for updates.'
 MAX_PACKAGE = 512 * 1024 * 1024
 lock = threading.Lock()
 status = {'status': 'checking', 'availableVersion': None, 'message': 'Checking for updates…'}
@@ -69,10 +74,10 @@ def current_version():
     return (APP / 'current/VERSION').read_text().strip()
 
 
-def download(url, limit):
+def download(url, limit, *, accept='application/octet-stream'):
     if not url.startswith('https://'):
         raise ValueError('Update downloads must use HTTPS.')
-    req = urllib.request.Request(url, headers={'User-Agent': 'Arrowcast-Updater', 'Accept': 'application/octet-stream'})
+    req = urllib.request.Request(url, headers={'User-Agent': 'Arrowcast-Updater', 'Accept': accept})
     with urllib.request.urlopen(req, timeout=60) as response:
         if not response.url.startswith('https://'):
             raise ValueError('Insecure update redirect.')
@@ -87,7 +92,18 @@ def release_candidate():
     repo = config['repository']
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
         raise ValueError('Invalid release repository.')
-    release = json.loads(download(f'https://api.github.com/repos/{repo}/releases/latest', 1024 * 1024))
+    try:
+        release = json.loads(download(f'https://api.github.com/repos/{repo}/releases/latest', 1024 * 1024,
+                                      accept='application/vnd.github+json'))
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        error.close()
+        # GitHub also returns 404 when there is no published stable release.
+        # Confirm repository access so a bad configuration still fails visibly.
+        download(f'https://api.github.com/repos/{repo}', 1024 * 1024,
+                 accept='application/vnd.github+json')
+        return None
     if release.get('draft') or release.get('prerelease'):
         raise ValueError('Release is not a published stable release.')
     tag = release['tag_name']
@@ -122,9 +138,32 @@ def set_status(kind, message, available=None):
         atomic_json(STATE / 'status.json', status)
 
 
+def updates_connected():
+    # Both features use the network broker's cached, verified internet reachability.
+    connection = http.client.HTTPConnection('localhost', timeout=2)
+    try:
+        connection.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        connection.sock.settimeout(2)
+        connection.sock.connect(NETWORK_SOCKET)
+        connection.request('GET', '/status')
+        response = connection.getresponse()
+        if response.status != 200:
+            return False
+        state = json.loads(response.read(65536))
+        return isinstance(state, dict) and state.get('internetAvailable') is True
+    except (OSError, ValueError, http.client.HTTPException):
+        return False
+    finally:
+        connection.close()
+
+
 def check():
     global candidate, last_check, busy
     try:
+        if not updates_connected():
+            candidate = None
+            set_status('offline', OFFLINE_MESSAGE)
+            return
         if not KEY.exists() or not CONFIG.exists():
             set_status('disabled', 'Updates are not configured for this image.')
             return
@@ -192,6 +231,10 @@ def install():
     stopped = False
     transaction = False
     try:
+        if not updates_connected():
+            candidate = None
+            set_status('offline', OFFLINE_MESSAGE)
+            return
         set_status('installing', 'Downloading and verifying update…')
         # Recheck the signed manifest at installation time; never accept a browser URL.
         manifest = release_candidate()
@@ -280,13 +323,18 @@ def install():
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        global busy
+        global busy, candidate, status
         if self.path != '/status':
             self.send_error(404)
             return
+        connected = updates_connected()
         with lock:
-            if not busy and time.monotonic() - last_check > 900:
+            if not connected and not (busy and status['status'] == 'installing'):
+                candidate = None
+                status = {'status': 'offline', 'message': OFFLINE_MESSAGE, 'availableVersion': None}
+            elif connected and not busy and (status['status'] == 'offline' or time.monotonic() - last_check > 900):
                 busy = True
+                status = {'status': 'checking', 'message': 'Checking for updates…', 'availableVersion': None}
                 threading.Thread(target=check, daemon=True).start()
             result = {**status, 'currentVersion': current_version()}
         self.respond(200, result)
@@ -295,6 +343,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         global busy
         if self.path != '/install':
             self.send_error(404)
+            return
+        if not updates_connected():
+            self.respond(503, {'status': 'offline', 'message': OFFLINE_MESSAGE,
+                               'availableVersion': None, 'currentVersion': current_version()})
             return
         with lock:
             if busy or status['status'] not in ('available', 'failed') or candidate is None:

@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { openDatabase } from '../src/db/index.js';
 import { clubs, participants } from '../src/db/schema.js';
-import { latestCompetitions, parseRegion, saveParticipants, scrapeLatestParticipants } from '../src/modules/participants/import.js';
+import { createPageFetcher, latestCompetitions, parseRegion, saveParticipants, scrapeLatestParticipants } from '../src/modules/participants/import.js';
+
+test('page fetcher stops before requesting the source when internet access is lost', async (t) => {
+  const request = t.mock.method(globalThis, 'fetch', async () => { throw new Error('Must not fetch'); });
+  await assert.rejects(createPageFetcher(async () => false)('https://mijn.handboogsport.nl/bondscompetities/'), /Internetverbinding/);
+  assert.equal(request.mock.callCount(), 0);
+});
 
 const regionHtml = `<h1>Regiocompetitie individueel</h1>
   <h2 id="filters" data-url="/bondscompetities/uitslagen/indoor-2026-2027/regio-individueel/~2/~1/">Filters</h2>
