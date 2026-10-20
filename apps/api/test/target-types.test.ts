@@ -1,3 +1,4 @@
+import { loginAdmin } from './helpers.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,7 +21,7 @@ test('target types are seeded, authenticated, validated, unique and persisted ac
     for (const method of ['GET', 'POST'] as const) {
       assert.equal((await app.inject({ method, url: '/api/v1/admin/target-types' })).statusCode, 401);
     }
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const headers = { authorization: `Bearer ${login.json().token}` };
     const list = await app.inject({ url: '/api/v1/admin/target-types', headers });
     assert.equal(list.statusCode, 200);
@@ -81,7 +82,7 @@ test('bulk deletion validates input, preserves types in use and persists deletio
   try {
     const url = '/api/v1/admin/target-types';
     assert.equal((await app.inject({ method: 'DELETE', url, payload: { names: ['Unused'] } })).statusCode, 401);
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const headers = { authorization: `Bearer ${login.json().token}` };
     for (const payload of [{}, { names: [] }, { names: [''] }, { names: ['   '] }, { names: ['x', 'x'] }, { names: [42] }]) {
       assert.equal((await app.inject({ method: 'DELETE', url, headers, payload })).statusCode, 400);

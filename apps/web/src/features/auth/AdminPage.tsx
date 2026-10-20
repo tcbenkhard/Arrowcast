@@ -4,6 +4,7 @@ import { Link, Navigate, NavLink, Route, Routes } from 'react-router';
 import { CompetitionDetailPage } from '../competitions/CompetitionDetailPage';
 import { CompetitionsPage } from '../competitions/CompetitionsPage';
 import { SettingsPage } from '../settings/SettingsPage';
+import { PasswordChangeForm } from './PasswordChangeForm';
 
 const storageKey = 'arrowcast.admin.jwt';
 
@@ -24,6 +25,7 @@ function storeToken(token: string | null) {
 interface Session {
   username: string;
   expiresAt: number;
+  forceChangePassword: boolean;
 }
 
 export function AdminPage() {
@@ -102,6 +104,14 @@ export function AdminPage() {
         </> : <p role="status">Sessie controleren…</p>}
       </main>
     );
+  }
+
+  if (session.forceChangePassword) {
+    return <PasswordChangeForm token={token} onLogout={logout} onChanged={(newToken) => {
+      storeToken(newToken);
+      setSession(null);
+      setToken(newToken);
+    }} />;
   }
 
   return (

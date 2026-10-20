@@ -11,7 +11,7 @@ import { writeFileSync, renameSync } from 'node:fs';
 const env = ['NODE_ENV=production', 'HOST=127.0.0.1', 'PORT=3000',
   'DATABASE_PATH=/var/lib/arrowcast/arrowcast.sqlite',
   `JWT_SECRET=${randomBytes(48).toString('hex')}`,
-  `INITIAL_ADMIN_PASSWORD=${randomBytes(18).toString('base64url')}`, ''].join('\n');
+  'INITIAL_ADMIN_PASSWORD=admin', ''].join('\n');
 writeFileSync('/etc/arrowcast/arrowcast.env.tmp', env, { mode: 0o640, flush: true });
 renameSync('/etc/arrowcast/arrowcast.env.tmp', '/etc/arrowcast/arrowcast.env');
 JS
@@ -20,9 +20,7 @@ chown root:arrowcast /etc/arrowcast/arrowcast.env
 chmod 0640 /etc/arrowcast/arrowcast.env
 # Set the initial SSH password once; preserve later changes made with passwd.
 if [[ ! -f /etc/arrowcast/ssh-password-initialised ]]; then
-  # shellcheck source=/dev/null
-  source /etc/arrowcast/arrowcast.env
-  printf 'pi:%s\n' "$INITIAL_ADMIN_PASSWORD" | chpasswd
+  printf 'pi:arrowcast\n' | chpasswd
   touch /etc/arrowcast/ssh-password-initialised
 fi
 # The image contains no shared host keys.

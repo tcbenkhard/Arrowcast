@@ -1,3 +1,4 @@
+import { loginAdmin } from './helpers.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,8 +23,7 @@ test('create ranges requires authentication and persists distances and lanes acr
     assert.equal(unauthorized.statusCode, 401);
     const unauthorizedList = await app.inject({ url: '/api/v1/admin/ranges' });
     assert.equal(unauthorizedList.statusCode, 401);
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
-      payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const headers = { authorization: `Bearer ${login.json().token}` };
     const emptyList = await app.inject({ url: '/api/v1/admin/ranges', headers });
     assert.equal(emptyList.statusCode, 200);
@@ -69,8 +69,7 @@ test('invalid range requests write nothing and a failed child insert rolls back 
     await app.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
-    payload: { username: 'admin', password: 'admin' } });
+  const login = await loginAdmin(app);
   const headers = { authorization: `Bearer ${login.json().token}` };
   for (const invalid of [
     {}, { ...payload, name: '   ' }, { ...payload, name: 5 },

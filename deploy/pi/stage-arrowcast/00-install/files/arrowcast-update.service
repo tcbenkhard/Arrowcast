@@ -1,0 +1,24 @@
+[Unit]
+Description=Arrowcast signed application update broker
+After=network.target
+Before=arrowcast.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/python3 /usr/local/lib/arrowcast/updater.py --recover
+ExecStart=/usr/bin/python3 /usr/local/lib/arrowcast/updater.py
+RuntimeDirectory=arrowcast-update
+RuntimeDirectoryMode=0755
+StateDirectory=arrowcast-update
+StateDirectoryMode=0755
+UMask=0022
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+ProtectHome=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/arrowcast /var/lib/arrowcast /var/lib/arrowcast-update
+
+[Install]
+WantedBy=multi-user.target

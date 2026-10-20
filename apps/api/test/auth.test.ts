@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { test } from 'node:test';
 import { buildApp } from '../src/app.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const password = 'admin';
 const config = {
@@ -22,7 +25,7 @@ test('login issues a JWT that grants access to the protected admin endpoint', as
   assert.ok(expiresAt > Date.now() && expiresAt <= Date.now() + 3600000);
   const me = await app.inject({ url: '/api/v1/admin/me', headers: { authorization: `Bearer ${token}` } });
   assert.equal(me.statusCode, 200);
-  assert.deepEqual(me.json(), { username: 'admin', role: 'admin', expiresAt });
+  assert.deepEqual(me.json(), { username: 'admin', role: 'admin', expiresAt, forceChangePassword: true });
 });
 
 test('invalid credentials have the same generic response', async (t) => {
@@ -86,4 +89,56 @@ test('login limits brute force attempts per IP', async (t) => {
   });
   assert.equal(blocked.statusCode, 429);
   assert.ok(blocked.headers['retry-after']);
+});
+
+test('first login blocks management until password change and revokes all earlier tokens', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'arrowcast-password-'));
+  const persistentConfig = { ...config, databasePath: join(directory, 'auth.sqlite') };
+  let app = buildApp(persistentConfig);
+  t.after(async () => { await app.close(); rmSync(directory, { recursive: true, force: true }); });
+  const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
+    payload: { username: 'admin', password: 'admin' } });
+  assert.equal(login.json().forceChangePassword, true);
+  const secondLogin = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
+    payload: { username: 'admin', password: 'admin' } });
+  const headers = { authorization: `Bearer ${login.json().token}` };
+  for (const url of ['/api/v1/admin/ranges', '/api/v1/admin/updates', '/api/v1/admin/participants/import']) {
+    const blocked = await app.inject({ url, headers });
+    assert.equal(blocked.statusCode, 403);
+    assert.equal(blocked.json().code, 'PASSWORD_CHANGE_REQUIRED');
+  }
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v1/admin/password',
+    payload: { currentPassword: 'admin', newPassword: 'new-pass' } })).statusCode, 401);
+  for (const payload of [
+    { currentPassword: 'wrong', newPassword: 'new-pass' },
+    { currentPassword: 'admin', newPassword: '1234567' },
+    { currentPassword: 'admin', newPassword: '        ' },
+  ]) {
+    assert.equal((await app.inject({ method: 'POST', url: '/api/v1/admin/password', headers, payload })).statusCode, 400);
+  }
+  const changed = await app.inject({ method: 'POST', url: '/api/v1/admin/password', headers,
+    payload: { currentPassword: 'admin', newPassword: 'new-pass' } });
+  assert.equal(changed.statusCode, 200);
+  assert.equal(changed.json().forceChangePassword, false);
+  for (const token of [login.json().token, secondLogin.json().token]) {
+    assert.equal((await app.inject({ url: '/api/v1/admin/me',
+      headers: { authorization: `Bearer ${token}` } })).statusCode, 401);
+  }
+  const newHeaders = { authorization: `Bearer ${changed.json().token}` };
+  assert.equal((await app.inject({ url: '/api/v1/admin/ranges', headers: newHeaders })).statusCode, 200);
+  const reuse = await app.inject({ method: 'POST', url: '/api/v1/admin/password', headers: newHeaders,
+    payload: { currentPassword: 'new-pass', newPassword: 'new-pass' } });
+  assert.equal(reuse.statusCode, 400);
+  await app.close();
+  app = buildApp(persistentConfig);
+  const restored = await app.inject({ url: '/api/v1/admin/me', headers: newHeaders });
+  assert.equal(restored.statusCode, 200);
+  assert.equal(restored.json().forceChangePassword, false);
+  const oldPassword = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
+    payload: { username: 'admin', password: 'admin' } });
+  assert.equal(oldPassword.statusCode, 401);
+  const newLogin = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
+    payload: { username: 'admin', password: 'new-pass' } });
+  assert.equal(newLogin.statusCode, 200);
+  assert.equal(newLogin.json().forceChangePassword, false);
 });

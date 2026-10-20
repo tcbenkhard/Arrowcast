@@ -31,6 +31,14 @@ try {
   const response = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
     payload: { username: 'admin', password: process.env.INITIAL_ADMIN_PASSWORD } });
   assert.equal(response.statusCode, 200);
+  assert.equal(response.json().forceChangePassword, true);
+  const headers = { authorization: `Bearer ${response.json().token}` };
+  const blocked = await app.inject({ url: '/api/v1/admin/ranges', headers });
+  assert.equal(blocked.statusCode, 403);
+  const changed = await app.inject({ method: 'POST', url: '/api/v1/admin/password', headers,
+    payload: { currentPassword: process.env.INITIAL_ADMIN_PASSWORD, newPassword: 'build-smoke-changed-password' } });
+  assert.equal(changed.statusCode, 200);
+  assert.equal(changed.json().forceChangePassword, false);
   const denied = await app.inject('/api/v1/admin/me');
   assert.equal(denied.statusCode, 401);
 } finally { await app.close(); }
@@ -49,6 +57,16 @@ nginx -t
 nmcli --offline connection modify connection.id ArrowCast \
   < /etc/NetworkManager/system-connections/arrowcast.nmconnection > /dev/null
 dnsmasq --test --conf-file=/etc/arrowcast/dnsmasq.conf
+# Keep each application's working directory intact when current changes.
+mkdir -p /opt/arrowcast-factory
+find /opt/arrowcast -mindepth 1 -maxdepth 1 -exec mv -t /opt/arrowcast-factory -- {} +
+mkdir -p /opt/arrowcast/releases
+mv /opt/arrowcast-factory /opt/arrowcast/releases/factory
+ln -s releases/factory /opt/arrowcast/current
+# First-boot tooling uses this stable runtime path.
+ln -s current/runtime /opt/arrowcast/runtime
+install -d -m 0755 /var/lib/arrowcast-update
+systemctl enable arrowcast-update.service
 systemctl enable arrowcast-first-boot.service arrowcast.service arrowcast-console.service nginx avahi-daemon
 systemctl enable NetworkManager arrowcast-hotspot.service arrowcast-dhcp.service
 mkdir -p /etc/systemd/system/ssh.service.d /etc/ssh/sshd_config.d

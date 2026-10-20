@@ -63,3 +63,29 @@ test('the public home stays public and scoring requires a lane link', async ({ p
   await page.goto('/scoring');
   await expect(page.getByRole('heading', { name: 'Pagina niet gevonden' })).toBeVisible();
 });
+
+test('first login requires a new password, survives reload and unlocks the portal', async ({ page }) => {
+  await page.goto('/admin/settings');
+  await page.getByLabel('Gebruikersnaam').fill('first-login');
+  await page.getByLabel('Wachtwoord', { exact: true }).fill('admin');
+  await page.getByRole('button', { name: 'Inloggen', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Wachtwoord wijzigen', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Admin navigation' })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Wachtwoord wijzigen', exact: true })).toBeVisible();
+  await page.getByLabel('Huidig wachtwoord', { exact: true }).fill('admin');
+  await page.getByLabel('Nieuw wachtwoord', { exact: true }).fill('new-pass');
+  await page.getByLabel('Bevestig nieuw wachtwoord', { exact: true }).fill('a-different-password');
+  await page.getByRole('button', { name: 'Wachtwoord opslaan', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('komen niet overeen');
+  await page.getByLabel('Bevestig nieuw wachtwoord', { exact: true }).fill('new-pass');
+  await page.getByRole('button', { name: 'Wachtwoord opslaan', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Uitloggen', exact: true }).click();
+  await page.getByLabel('Gebruikersnaam').fill('first-login');
+  await page.getByLabel('Wachtwoord', { exact: true }).fill('new-pass');
+  await page.getByRole('button', { name: 'Inloggen', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+});

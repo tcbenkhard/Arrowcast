@@ -28,6 +28,15 @@ git -C "$generator_dir" checkout --detach FETCH_HEAD
 
 cp "$repo_dir/deploy/pi/config" "$generator_dir/config"
 cp -a "$repo_dir/deploy/pi/stage-arrowcast" "$generator_dir/"
+python3 - "$generator_dir/stage-arrowcast/00-install/files/update.json" <<'PY'
+import json, os, sys
+with open(sys.argv[1], 'w') as stream:
+    json.dump({'repository': os.environ.get('ARROWCAST_UPDATE_REPOSITORY', '')}, stream)
+PY
+printf '%s' "${ARROWCAST_UPDATE_PUBLIC_KEY:-}" > "$generator_dir/stage-arrowcast/00-install/files/update-public.pem"
+if [[ -n ${ARROWCAST_UPDATE_PUBLIC_KEY:-} ]]; then
+  openssl pkey -pubin -in "$generator_dir/stage-arrowcast/00-install/files/update-public.pem" -noout
+fi
 find "$generator_dir/stage-arrowcast" -name '*.sh' -exec chmod +x {} +
 touch "$generator_dir/stage2/SKIP_IMAGES"
 # ENABLE_CLOUD_INIT alone does not skip the stage's package installation.
@@ -49,6 +58,9 @@ version="${ARROWCAST_IMAGE_VERSION:-${source_revision:0:12}}"
 printf '%s\n' "$version" > "$source_dir/VERSION"
 cd "$generator_dir"
 ./build.sh
+mapfile -t packages < <(find work -path '*/stage-arrowcast/arrowcast-update.tar.xz' -type f)
+[[ ${#packages[@]} == 1 ]]
+cp "${packages[0]}" "$build_dir/output/arrowcast-update.tar.xz"
 shopt -s nullglob
 images=(deploy/*.img.xz)
 [[ ${#images[@]} == 1 ]]

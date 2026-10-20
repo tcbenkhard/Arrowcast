@@ -1,3 +1,4 @@
+import { loginAdmin } from './helpers.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -33,7 +34,7 @@ async function setup(t: TestContext) {
   }
   let app = buildApp({ ...config, databasePath });
   t.after(async () => { await app.close(); store.close(); rmSync(directory, { recursive: true, force: true }); });
-  const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+  const login = await loginAdmin(app);
   const admin = { authorization: `Bearer ${login.json().token}` };
   const fixture = {
     get app() { return app; }, db, admin,

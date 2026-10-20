@@ -3,6 +3,7 @@ import { TargetTypesPage } from '../target-types/TargetTypesPage';
 import { RangesPage } from '../ranges/RangesPage';
 import { SettingsCard } from './SettingsCard';
 import { ArrowcastHostname } from './ArrowcastHostname';
+import { Updates } from './Updates';
 
 interface ImportState {
   status: 'idle' | 'running' | 'completed' | 'failed';
@@ -67,7 +68,8 @@ export function SettingsPage({ token, onUnauthorized }: {
     <h2 id="settings-heading">Settings</h2>
     <div className="settings-cards">
       <ArrowcastHostname />
-      <SettingsCard id="participant-import" title="Deelnemers importeren" defaultExpanded>
+      <Updates token={token} onUnauthorized={onUnauthorized} />
+      <SettingsCard id="participant-import" title="Deelnemers importeren">
         <p>Importeer deelnemers en verenigingen uit de nieuwste regiocompetities van Handboogsport.
           Bestaande deelnemers worden bijgewerkt. De import kan enkele minuten duren en gaat door als je deze pagina verlaat.</p>
         <button disabled={!state || pending || running || !!error} onClick={() => { void startImport(); }}>

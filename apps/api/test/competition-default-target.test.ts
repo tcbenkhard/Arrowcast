@@ -1,3 +1,4 @@
+import { loginAdmin } from './helpers.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildApp } from '../src/app.js';
@@ -5,7 +6,7 @@ import { buildApp } from '../src/app.js';
 test('competition defaults persist, initialize lanes, allow overrides and protect referenced targets', async () => {
   const app = buildApp({ jwtSecret: 'default-target-test-secret-at-least-thirty-two-bytes', databasePath: ':memory:' });
   try {
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const headers = { authorization: `Bearer ${login.json().token}` };
     for (const name of ['Default face', 'Other face']) {
       assert.equal((await app.inject({ method: 'POST', url: '/api/v1/admin/target-types', headers, payload: { name } })).statusCode, 201);

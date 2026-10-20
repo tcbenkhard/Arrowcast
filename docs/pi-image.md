@@ -2,9 +2,10 @@
 
 The **Raspberry Pi image** GitHub Actions workflow builds a complete ARM64
 Raspberry Pi OS Lite appliance with Arrowcast installed. Docker is not included.
-It broadcasts an open Wi-Fi network named **ArrowCast** at each boot. Application
-updates, backup/restore UI, browser onboarding and joining an existing Wi-Fi
-network are not implemented by this change.
+It broadcasts an open Wi-Fi network named **ArrowCast** at each boot. Signed
+application updates are available in Settings on images configured as described
+below. Backup/restore UI, browser onboarding and joining an existing Wi-Fi
+network are not implemented.
 
 ## Build and download
 
@@ -30,8 +31,8 @@ repository releases remain private. Each image must be smaller than GitHub's
 ## Install
 
 Initial hardware target: Raspberry Pi 4 or Pi 5, at least 2 GB RAM, a 32 GB or
-larger microSD card, matching power supply, and an HDMI screen for the first
-administrator password. Ethernet to a router is optional. Hardware boot and load
+larger microSD card and matching power supply. HDMI for connection information
+and Ethernet to a router are optional. Hardware boot and load
 validation are still required before claiming these as supported minimums.
 
 1. Download the `.img.xz` and `SHA256SUMS`. Optionally verify the checksum using
@@ -41,13 +42,14 @@ validation are still required before claiming these as supported minimums.
 3. Select the SD card carefully and write it. This erases the selected card.
    Skip OS customisation for this first version. Imager Wi-Fi/user
    customisation against this custom image has not been validated.
-4. Insert the card, connect HDMI and optionally Ethernet, then connect power. Initial boot
+4. Insert the card, optionally connect HDMI and Ethernet, then connect power. Initial boot
    expands storage and creates credentials; allow several minutes and any reboot
    needed for resizing. No internet connection is required on the Pi.
 5. Join **ArrowCast** from your phone or computer; no Wi-Fi password is needed.
    Choose **Stay connected** / **Use without internet** if prompted. Open
-   `http://10.42.0.1/admin`. Use username `admin`
-   and the unique password shown on the Pi's HDMI screen. Save it privately.
+   `http://10.42.0.1/admin`. Log in with username `admin` and password `admin`.
+   Before opening the portal, enter the current password and choose and confirm
+   a new password of at least 8 characters. Save your chosen password privately.
 6. Alternatively, connect via the same Ethernet/router network and open
    `http://arrowcast.local/admin`, or use the Ethernet address shown on HDMI.
    The fixed `10.42.0.1` address is for devices joined to **ArrowCast**.
@@ -58,7 +60,7 @@ validation are still required before claiming these as supported minimums.
 ## ArrowCast Wi-Fi
 
 - Name: **ArrowCast** (case-sensitive), visible on 2.4 GHz channel 6.
-- Password: none. The administrator login still needs the generated password.
+- Password: none. The administrator login is separate and requires first-login password setup.
 - Pi address: **10.42.0.1**; phones receive an address automatically by DHCP.
 - The hotspot is always enabled, including when Ethernet is connected. It uses
   the built-in `wlan0` adapter; that adapter cannot also join another Wi-Fi network
@@ -78,14 +80,19 @@ validation are still required before claiming these as supported minimums.
 
 The credentials screen is available on HDMI at each boot. It is deliberately
 not a Linux login prompt. SSH is enabled: run `ssh pi@10.42.0.1` on the hotspot
-and use the initial administrator password shown on HDMI. The `pi` account has
+and use the initial SSH password `arrowcast`. The `pi` account has
 sudo access; use `passwd` to change its SSH password independently of the website.
-There is no shared Linux password, and the build does not include application
-secrets or a populated database. SSH host keys are generated on the device.
-First boot generates the password and JWT secret on the Pi. Existing databases
-and passwords survive subsequent boots. There is currently no password-change
-or password-recovery UI; keep the generated password safe. Anyone with physical
-access to the screen can see it, so keep the Pi in a controlled location.
+The build does not include application secrets or a populated database. SSH host
+keys are generated on the device. Raspberry Pi Imager OS customisation is not
+needed. The initial website login is `admin` / `admin`; the portal requires a new
+password before allowing management actions. First boot generates a unique JWT
+secret on the Pi. The chosen password is stored only as a scrypt hash in the
+database, and survives subsequent boots and application updates. The console
+shows initial setup information; it cannot reveal your changed password. The
+environment's `INITIAL_ADMIN_PASSWORD` only seeds a missing account and does not
+reset an existing password. Existing accounts still using the default password
+are flagged for password setup when upgrading; existing custom passwords remain
+unchanged. There is no password-recovery UI.
 
 This initial image serves HTTP on the local network. Use it on a trusted LAN;
 it does not configure HTTPS or internet exposure. Do not forward its port through
@@ -116,8 +123,8 @@ without preserving its data separately.
   environment configuration is `/etc/arrowcast/arrowcast.env` (root and service
   group only). The application cannot modify installed code.
 - `arrowcast-first-boot.service` creates persistent secrets atomically, before
-  the application starts. Production refuses a missing JWT secret or missing/
-  short initial administrator password. Development retains its existing seed.
+  the application starts. Production refuses a missing JWT secret. New
+  administrators start with `admin` / `admin` and must change the password.
 - System logs have bounded storage. Automatic apt timer activity is disabled
   to avoid service restarts during competitions. There is no host update system
   yet: this initial image is for testing, and requires an OS maintenance policy
@@ -141,6 +148,77 @@ the wired network. Confirm the administrator password is still required.
 Build-tool and Node versions are pinned and npm uses the lockfile. OS packages
 come from live Debian/Raspberry Pi repositories, so builds are not bit-for-bit
 reproducible and may include newer OS packages on later runs.
+
+## Application updates
+
+Settings includes an **Updates** section. It shows **No updates available**, or
+**Update available** with an **Update** button. The administrator confirms before
+installation. Downloads and checks need internet access on the Pi, currently
+through Ethernet. Joining the ArrowCast hotspot alone does not provide this.
+Checks run when Settings is opened and are cached for 15 minutes; the page polls
+installation progress and reconnects after the application restarts. Connection,
+verification and configuration errors are displayed separately from no updates.
+
+Before building the first update-capable image, generate a signing key on a
+trusted machine (OpenSSL):
+
+```sh
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out update-private.pem
+openssl pkey -in update-private.pem -pubout -out update-public.pem
+```
+
+In GitHub repository **Settings > Secrets and variables > Actions**, add the
+private PEM contents as the secret `ARROWCAST_UPDATE_PRIVATE_KEY` and the public
+PEM contents as the variable `ARROWCAST_UPDATE_PUBLIC_KEY`. Keep the private key
+out of the repository and retain a secure backup. The image contains only the
+public key and repository name. Keep using the same key for releases installed
+on those devices. Key rotation requires a separately planned trust migration.
+The updater currently supports public GitHub repositories; private releases
+need a separate authenticated distribution design.
+
+Tag builds require these settings and a stable version such as `v1.2.0`.
+Manual image builds without a public key still work, but display that updates
+are not configured. A manually built image with the key can install a published
+stable release. Previously built images do not acquire the updater automatically;
+installing this image on an existing card still requires preserving its data.
+
+The workflow packages the exact compiled ARM64 application from the image,
+including Node and native SQLite dependencies, into `arrowcast-update.tar.xz`.
+The draft release includes a signed `update.json` manifest and `update.sig`.
+Test the exact installation image **and upgrade from the previous release** on
+Pi 4 and Pi 5, then publish the draft. Devices discover the latest published
+stable release through GitHub; they ignore drafts and prereleases and refuse
+versions older than or equal to their installed version.
+
+`arrowcast-update.service` is a root-owned broker with a group-restricted Unix
+socket. Only authenticated administrator API routes can request checks and
+installation through the web application. Requests cannot supply a download URL
+or shell command. The broker verifies the manifest signature, compatibility,
+package size and SHA256 before extracting into a new release directory. It
+requires 3 GiB free plus twice the database size, and refuses installation while
+any competition is Active (including a second check after scoring writes stop).
+
+During installation nginx and the API reject normal requests with HTTP 503.
+The broker stops Arrowcast, creates a consistent SQLite backup, switches
+`/opt/arrowcast/current`, and restarts the application. Database migrations run
+on startup. Until the expected version passes its health check, scoring remains
+unavailable. A failed activation restores both the previous release and database.
+A durable transaction journal also restores an interrupted activation on boot
+or broker restart before normal service resumes. The database and device secrets
+remain under `/var/lib/arrowcast` and `/etc/arrowcast`; the updater does not
+replace the credentials. Recovery artifacts live under `/var/lib/arrowcast-update`,
+with the database backup readable only by root. Prior application directories
+are retained; monitor available storage over repeated upgrades.
+
+Updates cover application code and its bundled Node runtime. The systemd units,
+updater, nginx configuration, kernel, firmware and OS packages belong to the base
+image and require a separate maintenance procedure. This is not a full OS A/B
+update system. Simulated recovery tests do not replace physical power-loss,
+boot and SD-card testing before production use.
+
+For local builds, pass `ARROWCAST_UPDATE_REPOSITORY=owner/repository` and the
+public PEM in `ARROWCAST_UPDATE_PUBLIC_KEY` through sudo alongside
+`ARROWCAST_IMAGE_VERSION`. Private signing keys are used only in the release job.
 
 ## Local builder and troubleshooting
 

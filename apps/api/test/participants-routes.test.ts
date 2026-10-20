@@ -1,3 +1,4 @@
+import { loginAdmin } from './helpers.js';
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'node:test';
@@ -24,7 +25,7 @@ test('import endpoints require admin authentication', async () => {
       assert.equal((await app.inject({ url: `/api/v1/admin${path}` })).statusCode, 401);
     }
     assert.equal((await app.inject({ method: 'DELETE', url: '/api/v1/admin/competitions/test/participants', payload: { participantIds: ['test'] } })).statusCode, 401);
-    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'admin', password: 'admin' } });
+    const login = await loginAdmin(app);
     const status = await app.inject({ url: `/api/v1/admin${url}`, headers: { authorization: `Bearer ${login.json().token}` } });
     assert.equal(status.statusCode, 200);
     assert.equal(status.json().status, 'idle');

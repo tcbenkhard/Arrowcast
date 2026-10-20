@@ -52,7 +52,7 @@ test('migrations run once and the admin seed never resets an existing account', 
     assert.equal(otherUser.statusCode, 200);
     const client = new SQLite(path);
     try {
-      assert.equal((client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count, 18);
+      assert.equal((client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count, 19);
       assert.equal((client.prepare('SELECT count(*) AS count FROM users').get() as { count: number }).count, 2);
       client.prepare('DELETE FROM users WHERE username = ?').run('another-admin');
       const removedUser = await app.inject({ url: '/api/v1/admin/me',
@@ -96,6 +96,20 @@ test('participants preserve membership numbers and reference an existing club', 
     assert.throws(() => database.db.delete(clubs).run(), /FOREIGN KEY constraint failed/);
   } finally {
     database.close();
+  }
+});
+
+test('existing default passwords require changing while custom passwords remain usable', async () => {
+  for (const password of ['admin', 'existing-private-password']) {
+    const database = openDatabase(':memory:');
+    try {
+      const passwordHash = await hashPassword(password);
+      database.db.insert(users).values({ username: 'admin', passwordHash }).run();
+      await seedAdmin(database.db);
+      const user = database.db.select().from(users).get()!;
+      assert.equal(user.passwordHash, passwordHash);
+      assert.equal(user.forceChangePassword, password === 'admin');
+    } finally { database.close(); }
   }
 });
 
