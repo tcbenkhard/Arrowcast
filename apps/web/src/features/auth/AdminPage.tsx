@@ -7,42 +7,20 @@ import { CompetitionDetailPage } from '../competitions/CompetitionDetailPage';
 import { CompetitionsPage } from '../competitions/CompetitionsPage';
 import { SettingsPage } from '../settings/SettingsPage';
 import { PasswordChangeForm } from './PasswordChangeForm';
-
-const storageKey = 'arrowcast.admin.jwt';
-
-function savedToken(): string | null {
-  try { return sessionStorage.getItem(storageKey); }
-  catch { return null; }
-}
-
-function storeToken(token: string | null) {
-  try {
-    if (token) sessionStorage.setItem(storageKey, token);
-    else sessionStorage.removeItem(storageKey);
-  } catch {
-    // Authentication still works in memory if browser storage is unavailable.
-  }
-}
-
-interface Session {
-  username: string;
-  name: string;
-  role: 'admin' | 'competition_manager';
-  expiresAt: number;
-  forceChangePassword: boolean;
-  language: Language;
-}
+import { decodeJson, managementRequest } from '../../lib/http';
+import { readAdminToken, writeAdminToken } from './session';
+import type { AdminSession } from './session';
 
 export function AdminPage() {
-  const [token, setToken] = useState(savedToken);
-  const [session, setSession] = useState<Session | null>(null);
+  const [token, setToken] = useState(readAdminToken);
+  const [session, setSession] = useState<AdminSession | null>(null);
   const [loginError, setLoginError] = useState('');
   const [checkError, setCheckError] = useState('');
   const [retry, setRetry] = useState(0);
   const [changingPassword, setChangingPassword] = useState(false);
 
   const logout = useCallback((message = '') => {
-    storeToken(null);
+    writeAdminToken(null);
     setToken(null);
     setSession(null);
     setLoginError(message);
@@ -57,18 +35,14 @@ export function AdminPage() {
     setSession(null);
     void (async () => {
       try {
-        const response = await fetch('/api/v1/admin/me', {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-          cache: 'no-store',
-        });
+        const response = await managementRequest('/api/v1/admin/me', token, { signal: controller.signal });
         if (controller.signal.aborted) return;
         if (response.status === 401) {
           logout(t("AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in"));
           return;
         }
         if (!response.ok) throw new Error(t("AdminPage.session_check_failed"));
-        const result = await response.json() as Session;
+        const result = await decodeJson<AdminSession>(response);
         if (controller.signal.aborted) return;
         if (result.expiresAt <= Date.now()) {
           logout(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in"));
@@ -95,7 +69,7 @@ export function AdminPage() {
 
   if (!token) {
     return <LoginForm error={message(loginError)} onLogin={(newToken) => {
-      storeToken(newToken);
+      writeAdminToken(newToken);
       setLoginError('');
       setToken(newToken);
     }} />;
@@ -118,7 +92,7 @@ export function AdminPage() {
     return <PasswordChangeForm token={token} onLogout={logout}
       onCancel={session.forceChangePassword ? undefined : () => setChangingPassword(false)}
       onChanged={(newToken) => {
-      storeToken(newToken);
+      writeAdminToken(newToken);
       setChangingPassword(false);
       setSession(null);
       setToken(newToken);
@@ -162,9 +136,8 @@ function ProfileMenu({ username, token, onLogout, onChangePassword }: {
   async function changeLanguage(value: Language) {
     setPending(true); setError('');
     try {
-      const response = await fetch('/api/v1/admin/me/language', {
-        method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: value }),
+      const response = await managementRequest('/api/v1/admin/me/language', token, {
+        method: 'PATCH', json: { language: value },
       });
       if (!response.ok) { setError(t('language.saveError')); return; }
       setLanguage(value);

@@ -2,6 +2,7 @@ import { t } from '@arrowcast/contracts/i18n';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { LaneQrCode, ScoringContext, ScoringMutation } from '@arrowcast/contracts';
+import { calculateRoundTotal, isValidRound } from '@arrowcast/scoring';
 import type { AppDatabase } from '../../db/index.js';
 import { arrowScores, competitionLanes, competitionParticipants, competitions, laneScoringGrants,
   laneScoringState, lanes, participants, roundScores, scorecards, scoreChanges, scoringMutations, scoringSessions } from '../../db/schema.js';
@@ -133,7 +134,7 @@ export function scoringContext(db: Database, grant: typeof laneScoringGrants.$in
       const arrows: (string | null)[] = Array.from({ length: competition.arrowsPerRound }, () => null);
       for (const arrow of db.select().from(arrowScores).where(eq(arrowScores.roundScoreId, round.id)).all()) arrows[arrow.arrowIndex - 1] = arrow.symbol;
       rounds.push({ participantId: person.id, roundNumber: round.roundNumber, status: round.status, arrows,
-        total: arrows.reduce<number>((sum, value) => sum + (value === 'M' || value === null ? 0 : Number(value)), 0) });
+        total: calculateRoundTotal(arrows) });
     }
   }
   return { competition: { id: competition.id, name: competition.name, numberOfRounds: competition.numberOfRounds,
@@ -160,9 +161,10 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
   const assignment = db.select().from(competitionParticipants).where(and(eq(competitionParticipants.competitionId, grant.competitionId),
     eq(competitionParticipants.participantId, body.participantId), eq(competitionParticipants.laneId, grant.laneId))).get();
   if (!assignment) throw new ScoringError(403, t("service.this_participant_is_not_assigned_to_your_lane"));
-  if (body.roundNumber > competition.numberOfRounds || body.arrows.length !== competition.arrowsPerRound
-    || body.arrows.some((s) => s !== null && !/^(M|[1-9]|10)$/.test(s))
-    || (body.submit && body.arrows.some((s) => s === null))) throw new ScoringError(400, t("service.enter_the_configured_number_of_valid_arrow_scores"));
+  if (body.roundNumber > competition.numberOfRounds
+    || !isValidRound(body.arrows, competition.arrowsPerRound, body.submit)) {
+    throw new ScoringError(400, t("service.enter_the_configured_number_of_valid_arrow_scores"));
+  }
   if (body.roundNumber > state.currentRoundNumber) {
     throw new ScoringError(409, t("service.finish_round_for_everyone_in_your_lane_before_entering", { p0: state.currentRoundNumber, p1: body.roundNumber }));
   }

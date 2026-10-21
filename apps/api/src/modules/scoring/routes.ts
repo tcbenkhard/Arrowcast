@@ -4,6 +4,7 @@ import cookie from '@fastify/cookie';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ScoringMutation, ScoringStanding } from '@arrowcast/contracts';
+import { calculateAverageScore } from '@arrowcast/scoring';
 import type { AppDatabase } from '../../db/index.js';
 import { arrowScores, competitionParticipants, competitions, laneScoringGrants, lanes, participants, roundScores, scorecards, scoringSessions } from '../../db/schema.js';
 import { hashToken, initializeLaneScoring, issueLaneCodes, newToken, revokeGrants, saveScores,
@@ -130,7 +131,7 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
         const enteredRounds = total?.rounds.size ?? 0;
         const totalScore = total?.total ?? 0;
         return { ...person, enteredRounds, totalRounds: competition.numberOfRounds, totalScore,
-          averageScore: enteredRounds ? totalScore / (enteredRounds * competition.arrowsPerRound) : 0 };
+          averageScore: calculateAverageScore(totalScore, enteredRounds, competition.arrowsPerRound) };
       }).sort((a, b) => b.averageScore - a.averageScore || a.name.localeCompare(b.name, 'nl'));
     });
   });

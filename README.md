@@ -67,14 +67,15 @@ apps/
     src/plugins/       Toekomstige Fastify-plugins
 packages/
   contracts/           Gedeelde scoring-API-contracten
-  scoring/             Leeg package voor pure scoreberekeningen
+  scoring/             Pure scorevalidatie, totalen en gemiddelden
 migrations/            SQL-migraties met Drizzle-journal en schemasnapshots
 tests/e2e/             Playwright-tests voor de authenticatieflow
 ```
 
-De `.gitkeep`-bestanden bewaren de lege folders in versiebeheer. Frontend en
-backend delen scoringtypes via het contracts-package. De frontend importeert
-geen backendcode. Het scoring-package is gereserveerd voor verdere berekeningen.
+De `.gitkeep`-bestanden bewaren alleen bewust gereserveerde, nog lege
+featurefolders in versiebeheer. Frontend en backend delen scoringtypes via het
+contracts-package. Pure, database-onafhankelijke scoringsregels staan in het
+scoring-package. De frontend importeert geen backendcode.
 
 ## Bouwen en controleren
 
@@ -86,8 +87,12 @@ Alle commando's worden vanuit de projectroot uitgevoerd:
 | `npm run build:api` | Alleen backend naar `apps/api/dist/` |
 | `npm run build` | Beide apps en beide gedeelde packages |
 | `npm run typecheck` | Strikte TypeScript-controle van alle workspaces |
-| `npm test` | Backendtests voor JWT-toegang, validatie en loginlimieten |
+| `npm run lint` | TypeScript- en repositoryhygiënecontroles |
+| `npm test` | Unit- en API-tests in alle workspaces |
 | `npm run test:e2e` | Browsercontroles van login, herstel, logout en tokenverloop |
+| `npm run test:deployment` | Python-tests en syntaxcontrole van appliance-scripts |
+| `npm run audit:dependencies` | Dependency-audit; hoge kwetsbaarheden falen |
+| `npm run check` | Lint, build, unit/API- en deploymentcontroles |
 | `npm run db:generate -- --name=beschrijving` | Nieuwe SQL-migratie genereren uit het schema |
 | `npm run db:migrate` | Openstaande migraties uitvoeren zonder de API te starten |
 | `npm run start:api` | Gebouwde backend starten |
@@ -95,7 +100,8 @@ Alle commando's worden vanuit de projectroot uitgevoerd:
 
 Voor de aparte builds is geen voorafgaande build van de andere app nodig.
 Installeer afhankelijkheden altijd vanuit de projectroot met de gedeelde lockfile.
-CI voert `npm ci`, de typecontrole, de volledige build en beide testsuites uit.
+CI voert installatie, repositoryhygiëne, typecontrole, de volledige build,
+unit/API/browser/deploymenttests en de dependency-audit uit.
 
 Installeer voor de browsertests eenmalig Chromium met `npx playwright install chromium`.
 De tests starten eigen servers op poorten 3000 en 5173; houd die poorten vrij.

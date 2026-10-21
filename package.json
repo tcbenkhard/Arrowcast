@@ -15,7 +15,12 @@
     "db:migrate": "npm run db:migrate --workspace=@arrowcast/api",
     "db:import-participants": "npm run db:import-participants --workspace=@arrowcast/api --",
     "auth:setup": "npm run auth:setup --workspace=@arrowcast/api",
-    "test": "npm run test --workspace=@arrowcast/api",
+    "test": "npm run test --workspaces --if-present",
+    "test:api": "npm run test --workspace=@arrowcast/api",
+    "test:deployment": "bash scripts/check-deployment.sh",
+    "check:repository": "bash scripts/check-repository.sh",
+    "lint": "npm run typecheck && npm run check:repository",
+    "audit:dependencies": "npm audit --audit-level=high",
     "test:e2e": "playwright test",
     "dev:web": "npm run dev --workspace=@arrowcast/web",
     "dev:api": "npm run dev --workspace=@arrowcast/api",
@@ -23,6 +28,7 @@
     "build:web": "npm run build --workspace=@arrowcast/web",
     "build:api": "npm run build --workspace=@arrowcast/api",
     "typecheck": "npm run typecheck --workspaces",
+    "check": "npm run lint && npm run build && npm test && npm run test:deployment",
     "start:api": "npm run start --workspace=@arrowcast/api"
   },
   "devDependencies": {

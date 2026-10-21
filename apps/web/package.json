@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -17,10 +18,12 @@
     "react-router": "8.4.0"
   },
   "devDependencies": {
+    "@types/node": "24.19.2",
     "@types/qrcode": "^1.5.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
-    "vite": "8.3.4"
+    "vite": "8.3.4",
+    "tsx": "4.23.15"
   }
 }
