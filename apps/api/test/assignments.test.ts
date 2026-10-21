@@ -21,6 +21,9 @@ import {
 } from '../src/db/schema.js';
 import { AssignmentError, planAssignments } from '../src/modules/competitions/assignments.js';
 
+type AssignmentParticipant = Pick<typeof participants.$inferSelect, 'id' | 'clubNumber'> &
+  Pick<typeof competitionParticipants.$inferSelect, 'checkedIn' | 'laneId' | 'targetLetter'>;
+
 const laneList = Array.from({ length: 7 }, (_, i) => ({
   laneId: `lane-${i}`,
   number: i + 1,
@@ -164,26 +167,30 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
     const headers = { authorization: `Bearer ${login.json().token}` };
     const status = (value: string) =>
       app.inject({ method: 'PATCH', url: `${base}/status`, headers, payload: { status: value } });
-    const getPeople = async () => (await app.inject({ url: `${base}/participants`, headers })).json();
+    const getPeople = async () => {
+      const response = await app.inject({ url: `${base}/participants`, headers });
+      assert.equal(response.statusCode, 200);
+      return response.json<AssignmentParticipant[]>();
+    };
     const reassign = () => app.inject({ method: 'POST', url: `${base}/assignments/reassign`, headers });
     assert.equal((await app.inject({ method: 'POST', url: `${base}/assignments/reassign` })).statusCode, 401);
     assert.equal((await reassign()).statusCode, 409);
     assert.equal((await status('Check-in')).statusCode, 200);
     const initial = await getPeople();
-    assert.ok(initial.every((p: any) => p.laneId && p.targetLetter && p.checkedIn === false));
+    assert.ok(initial.every((p) => p.laneId && p.targetLetter && p.checkedIn === false));
     for (const lane of laneList.slice(0, 3)) {
-      const onLane = initial.filter((p: any) => p.laneId === lane.laneId);
-      assert.equal(new Set(onLane.map((p: any) => p.clubNumber)).size, onLane.length);
+      const onLane = initial.filter((p) => p.laneId === lane.laneId);
+      assert.equal(new Set(onLane.map((p) => p.clubNumber)).size, onLane.length);
     }
     assert.equal((await status('Scheduled')).statusCode, 200);
     addPerson('late');
     assert.equal((await status('Check-in')).statusCode, 200);
     const filled = await getPeople();
     assert.deepEqual(
-      filled.filter((p: any) => p.id !== 'late'),
+      filled.filter((p) => p.id !== 'late'),
       initial,
     );
-    assert.ok(filled.every((p: any) => ['A', 'B'].includes(p.targetLetter)));
+    assert.ok(filled.every((p) => ['A', 'B'].includes(p.targetLetter ?? '')));
     const checkIn = (id: string, checkedIn: boolean) =>
       app.inject({ method: 'PATCH', url: `${base}/participants/${id}/check-in`, headers, payload: { checkedIn } });
     assert.equal((await checkIn('missing', true)).statusCode, 404);
@@ -198,11 +205,11 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
     db.$client.exec('DROP TRIGGER fail_reassignment');
     assert.equal((await reassign()).statusCode, 200);
     const rebuilt = await getPeople();
-    const present = rebuilt.filter((p: any) => p.checkedIn);
+    const present = rebuilt.filter((p) => p.checkedIn);
     assert.equal(present.length, 2);
-    assert.ok(present.every((p: any) => p.targetLetter === 'A'));
-    assert.deepEqual(present.map((p: any) => p.laneId).sort(), ['lane-0', 'lane-2']);
-    assert.ok(rebuilt.filter((p: any) => !p.checkedIn).every((p: any) => p.laneId === null && p.targetLetter === null));
+    assert.ok(present.every((p) => p.targetLetter === 'A'));
+    assert.deepEqual(present.map((p) => p.laneId).sort(), ['lane-0', 'lane-2']);
+    assert.ok(rebuilt.filter((p) => !p.checkedIn).every((p) => p.laneId === null && p.targetLetter === null));
     assert.equal((await checkIn('person-1', false)).statusCode, 200);
     assert.equal((await checkIn('person-1', true)).statusCode, 200);
     assert.equal((await status('Scheduled')).statusCode, 200);
@@ -211,7 +218,7 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
     assert.equal((await status('Check-in')).statusCode, 409);
     assert.equal((await app.inject({ url: base, headers })).json().status, 'Scheduled');
     assert.deepEqual(
-      (await getPeople()).filter((p: any) => p.laneId),
+      (await getPeople()).filter((p) => p.laneId),
       present,
     );
     const occupied = db
