@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -19,7 +20,7 @@ export function PasswordChangeForm({ token, onChanged, onLogout, onCancel }: {
     if (password !== confirmation) { setError(t("PasswordChangeForm.de_nieuwe_wachtwoorden_komen_niet_overeen")); return; }
     setPending(true);
     try {
-      const response = await fetch('/api/v1/admin/password', {
+      const response = await managementRequest('/api/v1/admin/password', token, {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword: password }),
       });

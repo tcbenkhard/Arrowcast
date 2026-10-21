@@ -1,4 +1,5 @@
 import { t, message, getLanguage } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import type { LaneQrCode } from '@arrowcast/contracts';
@@ -20,19 +21,19 @@ export function LaneScoringCodes({ competitionId, name, status, codes, onCodesCh
   useEffect(() => {
     if (codes.length) { setHasCodes(true); setLoaded(true); return; }
     let cancelled = false;
-    void fetch(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, {
+    void managementRequest(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, token, {
       headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
     }).then(async (response) => {
       if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in")); return; }
       if (!response.ok) throw new Error(t("LaneScoringCodes.could_not_load_qr_code_status"));
       let grants = await response.json() as LaneQrCode[];
       if (!cancelled && grants.some((grant) => typeof grant.path !== 'string')) {
-        const restored = await fetch(`/api/v1/admin/competitions/${competitionId}/scoring-codes/restore`, {
+        const restored = await managementRequest(`/api/v1/admin/competitions/${competitionId}/scoring-codes/restore`, token, {
           method: 'POST', headers: { Authorization: `Bearer ${token}` },
         });
         if (restored.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in")); return; }
         if (!restored.ok) throw new Error(t("LaneScoringCodes.could_not_restore_qr_codes"));
-        const refreshed = await fetch(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, {
+        const refreshed = await managementRequest(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
         });
         if (refreshed.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in")); return; }
@@ -67,7 +68,7 @@ export function LaneScoringCodes({ competitionId, name, status, codes, onCodesCh
     if (hasCodes && !window.confirm(t("LaneScoringCodes.replace_all_lane_qr_codes_previous_codes_and_their"))) return;
     setPending(true); setError('');
     try {
-      const response = await fetch(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, {
+      const response = await managementRequest(`/api/v1/admin/competitions/${competitionId}/scoring-codes`, token, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in")); return; }

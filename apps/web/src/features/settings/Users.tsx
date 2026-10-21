@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useModal } from '../../hooks/useModal';
@@ -44,7 +45,7 @@ export function Users({ token, onUnauthorized }: AuthProps) {
     setLoading(true); setError('');
     void (async () => {
       try {
-        const response = await fetch('/api/v1/admin/users', {
+        const response = await managementRequest('/api/v1/admin/users', token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (response.status === 401) { onUnauthorized(t(expiredMessage)); return; }
@@ -107,7 +108,7 @@ function UserModal({ token, onUnauthorized, user, onClose, onSaved, onRemoved }:
     if (!user || pending) return;
     setPending(true); setError('');
     try {
-      const response = await fetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}`, {
+      const response = await managementRequest(`/api/v1/admin/users/${encodeURIComponent(user.username)}`, token, {
         method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 401) { onUnauthorized(t(expiredMessage)); return; }
@@ -129,7 +130,7 @@ function UserModal({ token, onUnauthorized, user, onClose, onSaved, onRemoved }:
     }
     setPending(true);
     try {
-      const response = await fetch(user ? `/api/v1/admin/users/${encodeURIComponent(user.username)}` : '/api/v1/admin/users', {
+      const response = await managementRequest(user ? `/api/v1/admin/users/${encodeURIComponent(user.username)}` : '/api/v1/admin/users', token, {
         method: user ? 'PUT' : 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), username: username.trim(), role, language, ...((!user || password) ? { password } : {}) }),

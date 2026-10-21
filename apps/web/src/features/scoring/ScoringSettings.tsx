@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useRef, useState } from 'react';
 import { ScoringStandings } from './ScoringStandings';
 
@@ -36,7 +37,7 @@ export function ScoringSettings({ competition, token, onUnauthorized, onChange }
     if (pending) return;
     setPending(true); setError(''); setNotice('');
     try {
-      const response = await fetch(`/api/v1/admin/competitions/${competition.id}/scoring-lock`, {
+      const response = await managementRequest(`/api/v1/admin/competitions/${competition.id}/scoring-lock`, token, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ scoringLocked: !competition.scoringLocked }),
       });

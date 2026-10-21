@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import type { CompetitionStatus } from './status';
 import { CompetitionStatusBadge } from './CompetitionStatusBadge';
 import { useModal } from '../../hooks/useModal';
@@ -62,7 +63,7 @@ export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
     setError('');
     void (async () => {
       try {
-        const response = await fetch('/api/v1/admin/competitions', {
+        const response = await managementRequest('/api/v1/admin/competitions', token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (controller.signal.aborted) return;
@@ -144,7 +145,7 @@ function AddCompetitionModal({ token, onUnauthorized, onClose, onCreated }: Auth
     setLoadError('');
     void (async () => {
       try {
-        const responses = await Promise.all(['/api/v1/admin/ranges', '/api/v1/admin/target-types'].map((url) => fetch(url, {
+        const responses = await Promise.all(['/api/v1/admin/ranges', '/api/v1/admin/target-types'].map((url) => managementRequest(url, token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         })));
         if (controller.signal.aborted) return;
@@ -171,7 +172,7 @@ function AddCompetitionModal({ token, onUnauthorized, onClose, onCreated }: Auth
     if (!range || selectedLanes.length === 0) { setError(t('competition.selectRangeLane')); return; }
     setPending(true);
     try {
-      const response = await fetch('/api/v1/admin/competitions', {
+      const response = await managementRequest('/api/v1/admin/competitions', token, {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), date, startingTime, endingTime, rangeId,
           numberOfRounds, arrowsPerRound, defaultTargetType: defaultTargetType || null, lanes: selectedLanes }),

@@ -3,10 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import type { ScoringContext, ScoringMutation } from '@arrowcast/contracts';
 import { LanguageSelect } from '../../components/LanguageSelect';
-
-class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
-}
+import { HttpError, requireJson, scoringRequest } from '../../lib/http';
 const headers = { 'Content-Type': 'application/json', 'X-Arrowcast-Scoring': '1' };
 const buttons = ['10', '9', '8', '7', '6', '5', '4', '3', '2', '1', 'M'];
 const arrowValue = (symbol: string | null) => symbol === 'M' || symbol === null ? 0 : Number(symbol);
@@ -51,17 +48,21 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
   }, [scrollAfterSave]);
 
   async function requestContext(exchange = false): Promise<ScoringContext> {
-    const response = await fetch(`${base}/${exchange ? 'exchange' : 'context'}`, exchange ? {
-      method: 'POST', headers, body: JSON.stringify({ token: rawToken.current }), credentials: 'same-origin', cache: 'no-store',
-    } : { credentials: 'same-origin', cache: 'no-store' });
-    const result = await response.json() as ScoringContext & { message?: string };
-    if (!response.ok) throw new ApiError(response.status, result.message ?? t("ScoringPage.could_not_load_lane_scores"));
-    if (result.competition.id !== competitionId || result.lane.id !== laneId) throw new ApiError(403, t("ScoringPage.this_qr_code_belongs_to_a_different_competition_or"));
+    const response = await scoringRequest(`${base}/${exchange ? 'exchange' : 'context'}`, exchange ? {
+      method: 'POST', headers, json: { token: rawToken.current },
+    } : {});
+    let result: ScoringContext & { message?: string };
+    try { result = await requireJson<ScoringContext & { message?: string }>(response); }
+    catch (error) {
+      if (error instanceof HttpError && !error.body) throw new HttpError(error.status, t("ScoringPage.could_not_load_lane_scores"));
+      throw error;
+    }
+    if (result.competition.id !== competitionId || result.lane.id !== laneId) throw new HttpError(403, t("ScoringPage.this_qr_code_belongs_to_a_different_competition_or"));
     if (exchange) rawToken.current = null;
     return result;
   }
   function endAccess(err: unknown) {
-    if (!(err instanceof ApiError) || (err.status !== 401 && err.status !== 403)) return false;
+    if (!(err instanceof HttpError) || (err.status !== 401 && err.status !== 403)) return false;
     setContext(null); setArrows([]); pendingOperation.current = null;
     correctionDirty.current = false;
     setConflict(false); setRetryable(false); setNotice(''); setError(err.message);
@@ -96,7 +97,7 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
       .catch((err: unknown) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : t("ScoringPage.could_not_connect_check_your_connection_and_try_again"));
-          setRetryable(!(err instanceof ApiError) || err.status >= 500);
+          setRetryable(!(err instanceof HttpError) || err.status >= 500);
         }
       });
     return () => { cancelled = true; };
@@ -140,9 +141,12 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
     busyRef.current = true; setBusy(true); setError(''); setNotice(t("CompetitionsPage.saving")); setRetryable(false);
     pendingOperation.current = operation;
     try {
-      const response = await fetch(`${base}/scores`, { method: 'POST', headers, body: JSON.stringify(operation), credentials: 'same-origin' });
-      const result = await response.json() as { message?: string };
-      if (!response.ok) throw new ApiError(response.status, result.message ?? t("ScoringPage.could_not_save_scores"));
+      const response = await scoringRequest(`${base}/scores`, { method: 'POST', headers, json: operation });
+      try { await requireJson<{ message?: string }>(response); }
+      catch (error) {
+        if (error instanceof HttpError && !error.body) throw new HttpError(error.status, t("ScoringPage.could_not_save_scores"));
+        throw error;
+      }
       const next = await requestContext();
       const wasCorrection = context?.rounds.some((round) => round.participantId === operation.participantId
         && round.roundNumber === operation.roundNumber && round.status === 'submitted');
@@ -153,7 +157,7 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
       if (endAccess(err)) return;
       setNotice('');
       setError(err instanceof Error ? err.message : t("ScoringPage.connection_lost_your_input_is_still_shown_retry_to"));
-      if (err instanceof ApiError && err.status < 500) { setConflict(true); }
+      if (err instanceof HttpError && err.status < 500) { setConflict(true); }
       else setRetryable(true);
     } finally { busyRef.current = false; setBusy(false); }
   }

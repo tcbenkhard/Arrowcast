@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useModal } from '../../hooks/useModal';
@@ -42,7 +43,7 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
     void (async () => {
       try {
         const responses = await Promise.all(['/api/v1/admin/target-types', '/api/v1/admin/ranges',
-          `/api/v1/admin/competitions/${encodeURIComponent(competition.id)}/lanes`].map((url) => fetch(url, {
+          `/api/v1/admin/competitions/${encodeURIComponent(competition.id)}/lanes`].map((url) => managementRequest(url, token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         })));
         if (controller.signal.aborted) return;
@@ -79,7 +80,7 @@ export function CompetitionDetailsModal({ mode, competition, token, onUnauthoriz
     }
     setPending(true);
     try {
-      const response = await fetch(`/api/v1/admin/competitions/${encodeURIComponent(competition.id)}`, {
+      const response = await managementRequest(`/api/v1/admin/competitions/${encodeURIComponent(competition.id)}`, token, {
         method: removing ? 'DELETE' : 'PATCH',
         headers: { Authorization: `Bearer ${token}`, ...(!removing ? { 'Content-Type': 'application/json' } : {}) },
         ...(!removing ? { body: JSON.stringify({ ...draft, name: draft.name.trim(), defaultTargetType: draft.defaultTargetType || null,

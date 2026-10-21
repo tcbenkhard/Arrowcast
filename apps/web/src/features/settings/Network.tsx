@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { SettingsCard } from './SettingsCard';
@@ -27,7 +28,7 @@ export function Network({ token, onUnauthorized }: { token: string; onUnauthoriz
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
       try {
-        const response = await fetch('/api/v1/admin/network', {
+        const response = await managementRequest('/api/v1/admin/network', token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (response.status === 401) { onUnauthorized(t("PasswordChangeForm.log_opnieuw_in_om_verder_te_gaan")); return; }
@@ -53,7 +54,7 @@ export function Network({ token, onUnauthorized }: { token: string; onUnauthoriz
     submitting.current = true;
     setPending(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/v1/admin/network', {
+      const response = await managementRequest('/api/v1/admin/network', token, {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ssid, password }),
       });

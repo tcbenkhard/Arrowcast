@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useModal } from '../../hooks/useModal';
 import { SettingsCard } from '../settings/SettingsCard';
 import { useEffect, useRef, useState } from 'react';
@@ -41,7 +42,7 @@ export function RangesPage({ token, onUnauthorized }: AuthProps) {
     setError('');
     void (async () => {
       try {
-        const response = await fetch('/api/v1/admin/ranges', {
+        const response = await managementRequest('/api/v1/admin/ranges', token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (controller.signal.aborted) return;
@@ -141,7 +142,7 @@ function AddRangeModal({ token, onUnauthorized, onClose, onCreated }: AuthProps 
     }
     setPending(true);
     try {
-      const response = await fetch('/api/v1/admin/ranges', {
+      const response = await managementRequest('/api/v1/admin/ranges', token, {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), supportedDistancesMeters, lanes: numbers.map((number) => ({ number })) }),
       });

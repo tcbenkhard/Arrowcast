@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
 import { SettingsCard } from './SettingsCard';
 
@@ -18,7 +19,7 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
       try {
-        const response = await fetch('/api/v1/admin/updates', {
+        const response = await managementRequest('/api/v1/admin/updates', token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (response.status === 401) { onUnauthorized(t("PasswordChangeForm.log_opnieuw_in_om_verder_te_gaan")); return; }
@@ -41,7 +42,7 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
     if (!window.confirm(t("Updates.install_this_update_arrowcast_will_briefly_stop_do_not"))) return;
     setPending(true); setError('');
     try {
-      const response = await fetch('/api/v1/admin/updates', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const response = await managementRequest('/api/v1/admin/updates', token, { method: 'POST' });
       if (response.status === 401) { onUnauthorized(t("PasswordChangeForm.log_opnieuw_in_om_verder_te_gaan")); return; }
       const result = await response.json() as UpdateState & { message: string };
       if (!response.ok) throw new Error(result.message || t("Updates.could_not_start_update"));

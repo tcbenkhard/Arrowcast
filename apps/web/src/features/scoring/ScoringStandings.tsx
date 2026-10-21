@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
 import type { ScoringStanding } from '@arrowcast/contracts';
 
@@ -13,7 +14,7 @@ export function ScoringStandings({ competitionId, token, onUnauthorized, showAss
     let timer: ReturnType<typeof setTimeout>;
     async function load() {
       try {
-        const response = await fetch(`/api/v1/admin/competitions/${encodeURIComponent(competitionId)}/scoring-standings`, {
+        const response = await managementRequest(`/api/v1/admin/competitions/${encodeURIComponent(competitionId)}/scoring-standings`, token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (controller.signal.aborted) return;

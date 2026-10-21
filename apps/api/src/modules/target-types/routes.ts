@@ -3,6 +3,7 @@ import { asc, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
 import { competitionLanes, competitionParticipants, competitions, targetTypes } from '../../db/schema.js';
+import { administratorOnly } from '../auth/policies.js';
 
 export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDatabase }) {
   app.get('/target-types', {
@@ -11,6 +12,7 @@ export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDa
     .map((type) => type.name));
 
   app.post<{ Body: { name: string } }>('/target-types', {
+    onRequest: administratorOnly,
     schema: {
       body: { type: 'object', additionalProperties: false, required: ['name'],
         properties: { name: { type: 'string', minLength: 1, maxLength: 100, pattern: '\\S' } } },
@@ -24,6 +26,7 @@ export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDa
   });
 
   app.delete<{ Body: { names: string[] } }>('/target-types', {
+    onRequest: administratorOnly,
     schema: {
       body: { type: 'object', additionalProperties: false, required: ['names'], properties: {
         names: { type: 'array', minItems: 1, maxItems: 500, uniqueItems: true,

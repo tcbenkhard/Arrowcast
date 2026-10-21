@@ -87,12 +87,15 @@ Alle commando's worden vanuit de projectroot uitgevoerd:
 | `npm run build:api` | Alleen backend naar `apps/api/dist/` |
 | `npm run build` | Beide apps en beide gedeelde packages |
 | `npm run typecheck` | Strikte TypeScript-controle van alle workspaces |
-| `npm run lint` | TypeScript- en repositoryhygiënecontroles |
+| `npm run format:check` | Deterministische Biome-opmaakcontrole |
+| `npm run lint` | Biome-broncodecontrole zonder waarschuwingen |
+| `npm run deadcode` | Controle op ongebruikte imports en variabelen |
+| `npm run check:repository` | Repositoryhygiënecontrole |
 | `npm test` | Unit- en API-tests in alle workspaces |
 | `npm run test:e2e` | Browsercontroles van login, herstel, logout en tokenverloop |
-| `npm run test:deployment` | Python-tests en syntaxcontrole van appliance-scripts |
+| `npm run test:deployment` | Python-tests, shellsyntax en ShellCheck voor appliance-scripts |
 | `npm run audit:dependencies` | Dependency-audit; hoge kwetsbaarheden falen |
-| `npm run check` | Lint, build, unit/API- en deploymentcontroles |
+| `npm run check` | Opmaak, lint, dead code, typecheck, build, tests en deploymentcontroles |
 | `npm run db:generate -- --name=beschrijving` | Nieuwe SQL-migratie genereren uit het schema |
 | `npm run db:migrate` | Openstaande migraties uitvoeren zonder de API te starten |
 | `npm run start:api` | Gebouwde backend starten |
@@ -100,7 +103,7 @@ Alle commando's worden vanuit de projectroot uitgevoerd:
 
 Voor de aparte builds is geen voorafgaande build van de andere app nodig.
 Installeer afhankelijkheden altijd vanuit de projectroot met de gedeelde lockfile.
-CI voert installatie, repositoryhygiëne, typecontrole, de volledige build,
+CI voert installatie, opmaak, lint, dead-code- en repositoryhygiëne, typecontrole, de volledige build,
 unit/API/browser/deploymenttests en de dependency-audit uit.
 
 Installeer voor de browsertests eenmalig Chromium met `npx playwright install chromium`.

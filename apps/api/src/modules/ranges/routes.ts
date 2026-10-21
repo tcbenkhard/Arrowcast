@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
 import { lanes, rangeDistances, ranges } from '../../db/schema.js';
+import { administratorOnly } from '../auth/policies.js';
 
 interface CreateRangeBody {
   name: string;
@@ -47,6 +48,7 @@ export async function rangeRoutes(app: FastifyInstance, options: { db: AppDataba
     }));
   }));
   app.post<{ Body: CreateRangeBody }>('/ranges', {
+    onRequest: administratorOnly,
     schema: {
       body: {
         type: 'object',

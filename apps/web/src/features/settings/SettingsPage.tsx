@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useRef, useState } from 'react';
 import { TargetTypesPage } from '../target-types/TargetTypesPage';
 import { RangesPage } from '../ranges/RangesPage';
@@ -32,7 +33,7 @@ export function SettingsPage({ token, onUnauthorized }: {
     let timer: ReturnType<typeof setTimeout>;
     async function refresh() {
       try {
-        const response = await fetch('/api/v1/admin/participants/import', {
+        const response = await managementRequest('/api/v1/admin/participants/import', token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in")); return; }
@@ -54,7 +55,7 @@ export function SettingsPage({ token, onUnauthorized }: {
     starting.current = true;
     setPending(true); setError('');
     try {
-      const response = await fetch('/api/v1/admin/participants/import', {
+      const response = await managementRequest('/api/v1/admin/participants/import', token, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 401) { onUnauthorized(t("AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in")); return; }

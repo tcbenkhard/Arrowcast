@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { competitionStatuses } from './status';
 import type { CompetitionStatus } from './status';
 import { CompetitionStatusBadge } from './CompetitionStatusBadge';
@@ -96,7 +97,7 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
     setError('');
     void (async () => {
       try {
-        const response = await fetch(`/api/v1/admin/competitions/${encodeURIComponent(competitionId!)}`, {
+        const response = await managementRequest(`/api/v1/admin/competitions/${encodeURIComponent(competitionId!)}`, token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (controller.signal.aborted) return;
@@ -139,7 +140,7 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
     }
     statusInProgress.current = true; setChangingStatus(true); setStatusError('');
     try {
-      const response = await fetch(`/api/v1/admin/competitions/${encodeURIComponent(competition.id)}/status`, {
+      const response = await managementRequest(`/api/v1/admin/competitions/${encodeURIComponent(competition.id)}/status`, token, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
@@ -253,8 +254,8 @@ function CompetitionLanes({ competitionId, token, onUnauthorized, onChange, stat
       try {
         const options = { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' as const, signal: controller.signal };
         const [response, typesResponse] = await Promise.all([
-          fetch(`/api/v1/admin/competitions/${encodeURIComponent(competitionId)}/lanes`, options),
-          fetch('/api/v1/admin/target-types', options),
+          managementRequest(`/api/v1/admin/competitions/${encodeURIComponent(competitionId)}/lanes`, token, options),
+          managementRequest('/api/v1/admin/target-types', token, options),
         ]);
         if (controller.signal.aborted) return;
         if (response.status === 401 || typesResponse.status === 401) { onUnauthorized(t(expiredMessage)); return; }
@@ -361,7 +362,7 @@ function LaneConfiguration({ lane, targetTypes, bulkUpdate, selected, onSelect, 
     // Queued writes finish even if the user navigates away.
     saves.current = saves.current.then(async () => {
       try {
-        const response = await fetch(`/api/v1/admin/competitions/${encodeURIComponent(competitionId)}/lanes/${encodeURIComponent(lane.laneId)}`, {
+        const response = await managementRequest(`/api/v1/admin/competitions/${encodeURIComponent(competitionId)}/lanes/${encodeURIComponent(lane.laneId)}`, token, {
           method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ targetType: next.targetType || null, numberOfTargets: next.numberOfTargets }),
         });

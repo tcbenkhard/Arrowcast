@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { SettingsCard } from '../settings/SettingsCard';
@@ -30,7 +31,7 @@ export function TargetTypesPage({ token, onUnauthorized }: AuthProps) {
     setLoading(true); setLoadError('');
     void (async () => {
       try {
-        const response = await fetch('/api/v1/admin/target-types', {
+        const response = await managementRequest('/api/v1/admin/target-types', token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (controller.signal.aborted) return;
@@ -68,7 +69,7 @@ export function TargetTypesPage({ token, onUnauthorized }: AuthProps) {
     removalInProgress.current = true;
     setRemoving(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/v1/admin/target-types', {
+      const response = await managementRequest('/api/v1/admin/target-types', token, {
         method: 'DELETE', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ names }),
       });
@@ -92,7 +93,7 @@ export function TargetTypesPage({ token, onUnauthorized }: AuthProps) {
     if (!name.trim()) { setError(t("TargetTypesPage.enter_a_target_type_name")); return; }
     setPending(true);
     try {
-      const response = await fetch('/api/v1/admin/target-types', {
+      const response = await managementRequest('/api/v1/admin/target-types', token, {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim() }),
       });

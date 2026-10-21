@@ -1,4 +1,5 @@
 import { t, message } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { useModal } from '../../hooks/useModal';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
@@ -55,7 +56,7 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
     }
     importInProgress.current = true; setImporting(true);
     try {
-      const response = await fetch(`${url}/import`, {
+      const response = await managementRequest(`${url}/import`, token, {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' }, body: file,
       });
       if (response.status === 401) { onUnauthorized(t(expiredMessage)); return; }
@@ -72,7 +73,10 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
     void (async () => {
       try {
         const options = { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' as const, signal: controller.signal };
-        const [response, targetsResponse] = await Promise.all([fetch(url, options), fetch('/api/v1/admin/target-types', options)]);
+        const [response, targetsResponse] = await Promise.all([
+          managementRequest(url, token, options),
+          managementRequest('/api/v1/admin/target-types', token, options),
+        ]);
         if (response.status === 401 || targetsResponse.status === 401) { onUnauthorized(t(expiredMessage)); return; }
         if (!response.ok || !targetsResponse.ok) throw new Error();
         const result = await response.json() as Participant[];
@@ -115,7 +119,7 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
     removalInProgress.current = true;
     setRemoving(true); setRemoveError(''); setNotice('');
     try {
-      const response = await fetch(url, {
+      const response = await managementRequest(url, token, {
         method: 'DELETE', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantIds: ids }),
       });
@@ -134,7 +138,7 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
     targetUpdateInProgress.current = true;
     setUpdatingTarget(true); setTargetError(''); setNotice('');
     try {
-      const response = await fetch(url, {
+      const response = await managementRequest(url, token, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantIds: ids, targetType }),
       });
@@ -154,7 +158,7 @@ export function CompetitionParticipants({ competitionId, token, onUnauthorized, 
     try {
       const endpoint = person ? `${url}/${encodeURIComponent(person.id)}/check-in`
         : `/api/v1/admin/competitions/${encodeURIComponent(competitionId)}/assignments/reassign`;
-      const response = await fetch(endpoint, {
+      const response = await managementRequest(endpoint, token, {
         method: person ? 'PATCH' : 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(person ? { checkedIn: !person.checkedIn } : {}),
@@ -279,7 +283,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
     setBowsLoading(true); setBowsError('');
     void (async () => {
       try {
-        const responses = await Promise.all(['/api/v1/admin/bow-types', '/api/v1/admin/target-types'].map((endpoint) => fetch(endpoint, {
+        const responses = await Promise.all(['/api/v1/admin/bow-types', '/api/v1/admin/target-types'].map((endpoint) => managementRequest(endpoint, token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         })));
         if (responses.some((response) => response.status === 401)) { onUnauthorized(t(expiredMessage)); return; }
@@ -302,7 +306,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const response = await fetch(`/api/v1/admin/participants?q=${encodeURIComponent(query.trim())}`, {
+          const response = await managementRequest(`/api/v1/admin/participants?q=${encodeURIComponent(query.trim())}`, token, {
             headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
           });
           if (response.status === 401) { onUnauthorized(t(expiredMessage)); return; }
@@ -324,7 +328,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
     setClubsLoading(true); setClubsError('');
     void (async () => {
       try {
-        const response = await fetch('/api/v1/admin/clubs', {
+        const response = await managementRequest('/api/v1/admin/clubs', token, {
           headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
         });
         if (response.status === 401) { onUnauthorized(t(expiredMessage)); return; }
@@ -343,7 +347,7 @@ function ParticipantModal({ token, onUnauthorized, url, onClose, onAdded, defaul
     if (!targetTypes.includes(targetType)) { setError(t('participants.selectTarget')); return; }
     saving.current = true; setPending(true); setError(''); setNotice('');
     try {
-      const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, bowType, targetType }) });
+      const response = await managementRequest(url, token, { method: 'POST', json: { ...body, bowType, targetType } });
       if (response.status === 401) { onUnauthorized(t(expiredMessage)); return; }
       if (!response.ok) {
         const result = await response.json() as { message?: string };
