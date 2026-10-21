@@ -1,3 +1,5 @@
+* text=auto eol=lf
+
 *.sh text eol=lf
 deploy/pi/config text eol=lf
 deploy/pi/pi-gen-revision text eol=lf

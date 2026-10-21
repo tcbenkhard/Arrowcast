@@ -12,7 +12,10 @@ test('admin requires login, reports bad credentials, restores login and logs out
   await page.getByRole('button', { name: 'Log in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Competitions', exact: true })).toBeVisible();
   await expect(page).toHaveURL('/admin/competitions');
-  await expect(page.getByRole('navigation', { name: 'Admin navigation' }).getByRole('link')).toHaveText(['Competitions', 'Settings']);
+  await expect(page.getByRole('navigation', { name: 'Admin navigation' }).getByRole('link')).toHaveText([
+    'Competitions',
+    'Settings',
+  ]);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Competitions', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings', exact: true }).click();

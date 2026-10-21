@@ -9,10 +9,17 @@ export function useModal(onClose: () => void, pending: boolean) {
     let startedOutside = false;
     const outside = (event: MouseEvent) => {
       const rect = element.getBoundingClientRect();
-      return event.target === element && (event.clientX < rect.left || event.clientX > rect.right
-        || event.clientY < rect.top || event.clientY > rect.bottom);
+      return (
+        event.target === element &&
+        (event.clientX < rect.left ||
+          event.clientX > rect.right ||
+          event.clientY < rect.top ||
+          event.clientY > rect.bottom)
+      );
     };
-    const pointerDown = (event: PointerEvent) => { startedOutside = outside(event); };
+    const pointerDown = (event: PointerEvent) => {
+      startedOutside = outside(event);
+    };
     const click = (event: MouseEvent) => {
       if (startedOutside && outside(event) && !state.current.pending) state.current.onClose();
       startedOutside = false;

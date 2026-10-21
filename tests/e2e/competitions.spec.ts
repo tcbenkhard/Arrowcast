@@ -7,8 +7,10 @@ const rangeName = 'Competition browser range';
 
 test.beforeAll(async ({ request }) => {
   token = testAdminToken();
-  const range = await request.post('/api/v1/admin/ranges', { headers: { Authorization: `Bearer ${token}` },
-    data: { name: rangeName, supportedDistancesMeters: [18, 25], lanes: [{ number: 1 }, { number: 2 }] } });
+  const range = await request.post('/api/v1/admin/ranges', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { name: rangeName, supportedDistancesMeters: [18, 25], lanes: [{ number: 1 }, { number: 2 }] },
+  });
   rangeId = (await range.json()).id;
 });
 
@@ -23,9 +25,17 @@ test('edit competition details, keep input on failure and confirm removal', asyn
   const headers = { Authorization: `Bearer ${token}` };
   const ranges = await request.get('/api/v1/admin/ranges', { headers });
   const range = (await ranges.json()).find((value: { id: string }) => value.id === rangeId);
-  const created = await request.post('/api/v1/admin/competitions', { headers,
-    data: { name: 'Editable browser competition', date: '2026-12-01', startingTime: '09:00', endingTime: '12:00', rangeId,
-      lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }] } });
+  const created = await request.post('/api/v1/admin/competitions', {
+    headers,
+    data: {
+      name: 'Editable browser competition',
+      date: '2026-12-01',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      rangeId,
+      lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
+    },
+  });
   const competition = await created.json();
   await page.goto(`/admin/competitions/${competition.id}`);
   const details = page.getByRole('region', { name: 'Details', exact: true });
@@ -48,9 +58,13 @@ test('edit competition details, keep input on failure and confirm removal', asyn
   await edit.getByLabel('Arrows per round').fill('6');
   await edit.getByLabel('Default target', { exact: true }).selectOption('60 cm blazoen (10-rings)');
   const detailUrl = `**/api/v1/admin/competitions/${competition.id}`;
-  await page.route(detailUrl, (route) => route.fulfill({ status: 500, json: { message: 'Could not save competition.' } }));
+  await page.route(detailUrl, (route) =>
+    route.fulfill({ status: 500, json: { message: 'Could not save competition.' } }),
+  );
   await edit.getByRole('button', { name: 'Save changes' }).click();
-  await expect(edit.getByRole('alert')).toContainText('Something went wrong. Check your input and connection and try again.');
+  await expect(edit.getByRole('alert')).toContainText(
+    'Something went wrong. Check your input and connection and try again.',
+  );
   await expect(edit.getByLabel('Name', { exact: true })).toHaveValue('Updated browser competition');
   await page.unroute(detailUrl);
   await edit.getByRole('button', { name: 'Save changes' }).click();
@@ -77,9 +91,13 @@ test('edit competition details, keep input on failure and confirm removal', asyn
   await remove.getByRole('button', { name: 'Cancel' }).click();
   expect((await request.get(`/api/v1/admin/competitions/${competition.id}`, { headers })).ok()).toBeTruthy();
   await details.getByRole('button', { name: 'Remove', exact: true }).click();
-  await page.route(detailUrl, (route) => route.fulfill({ status: 500, json: { message: 'Could not remove competition.' } }));
+  await page.route(detailUrl, (route) =>
+    route.fulfill({ status: 500, json: { message: 'Could not remove competition.' } }),
+  );
   await remove.getByRole('button', { name: 'Remove competition' }).click();
-  await expect(remove.getByRole('alert')).toContainText('Something went wrong. Check your input and connection and try again.');
+  await expect(remove.getByRole('alert')).toContainText(
+    'Something went wrong. Check your input and connection and try again.',
+  );
   await page.unroute(detailUrl);
   await remove.getByRole('button', { name: 'Remove competition' }).click();
   await expect(page).toHaveURL('/admin/competitions');
@@ -92,13 +110,31 @@ test('editing shows lanes for the selected range and refreshes saved lanes', asy
   const headers = { Authorization: `Bearer ${token}` };
   const rangesResponse = await request.get('/api/v1/admin/ranges', { headers });
   const range = (await rangesResponse.json()).find((value: { id: string }) => value.id === rangeId);
-  const other = await (await request.post('/api/v1/admin/ranges', { headers,
-    data: { name: 'Replacement range', supportedDistancesMeters: [25, 50], lanes: [{ number: 8 }, { number: 9 }] } })).json();
-  const third = await (await request.post('/api/v1/admin/ranges', { headers,
-    data: { name: 'Another replacement range', supportedDistancesMeters: [18], lanes: [{ number: 10 }] } })).json();
-  const competition = await (await request.post('/api/v1/admin/competitions', { headers,
-    data: { name: 'Moving browser competition', date: '2026-12-05', startingTime: '09:00', endingTime: '12:00', rangeId,
-      lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }] } })).json();
+  const other = await (
+    await request.post('/api/v1/admin/ranges', {
+      headers,
+      data: { name: 'Replacement range', supportedDistancesMeters: [25, 50], lanes: [{ number: 8 }, { number: 9 }] },
+    })
+  ).json();
+  const third = await (
+    await request.post('/api/v1/admin/ranges', {
+      headers,
+      data: { name: 'Another replacement range', supportedDistancesMeters: [18], lanes: [{ number: 10 }] },
+    })
+  ).json();
+  const competition = await (
+    await request.post('/api/v1/admin/competitions', {
+      headers,
+      data: {
+        name: 'Moving browser competition',
+        date: '2026-12-05',
+        startingTime: '09:00',
+        endingTime: '12:00',
+        rangeId,
+        lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
+      },
+    })
+  ).json();
   try {
     await page.goto(`/admin/competitions/${competition.id}`);
     const details = page.getByRole('region', { name: 'Details', exact: true });
@@ -148,12 +184,22 @@ test('editing shows lanes for the selected range and refreshes saved lanes', asy
 
 test('editing the current range adds and removes lanes and persists distances', async ({ page, request }) => {
   const headers = { Authorization: `Bearer ${token}` };
-  const range = (await (await request.get('/api/v1/admin/ranges', { headers })).json())
-    .find((value: { id: string }) => value.id === rangeId);
-  const competition = await (await request.post('/api/v1/admin/competitions', { headers, data: {
-    name: 'Editable lane selection', date: '2026-12-05', startingTime: '09:00', endingTime: '12:00', rangeId,
-    lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
-  } })).json();
+  const range = (await (await request.get('/api/v1/admin/ranges', { headers })).json()).find(
+    (value: { id: string }) => value.id === rangeId,
+  );
+  const competition = await (
+    await request.post('/api/v1/admin/competitions', {
+      headers,
+      data: {
+        name: 'Editable lane selection',
+        date: '2026-12-05',
+        startingTime: '09:00',
+        endingTime: '12:00',
+        rangeId,
+        lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
+      },
+    })
+  ).json();
   try {
     await page.goto(`/admin/competitions/${competition.id}`);
     const details = page.getByRole('region', { name: 'Details', exact: true });
@@ -186,9 +232,14 @@ test('editing the current range adds and removes lanes and persists distances', 
   }
 });
 
-test('create competitions, validate times, select lane distances and preserve chronological order after reload', async ({ page }) => {
-  for (const [name, date, start] of [['Later browser competition', '2026-11-02', '09:00'],
-    ['Afternoon browser competition', '2026-11-01', '13:00'], ['Morning browser competition', '2026-11-01', '09:00']]) {
+test('create competitions, validate times, select lane distances and preserve chronological order after reload', async ({
+  page,
+}) => {
+  for (const [name, date, start] of [
+    ['Later browser competition', '2026-11-02', '09:00'],
+    ['Afternoon browser competition', '2026-11-01', '13:00'],
+    ['Morning browser competition', '2026-11-01', '09:00'],
+  ]) {
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     const modal = page.getByRole('dialog', { name: 'Add competition' });
     await expect(modal.getByLabel('Name', { exact: true })).toBeFocused();
@@ -209,14 +260,21 @@ test('create competitions, validate times, select lane distances and preserve ch
   }
   await page.reload();
   await expect(page.locator('tbody tr th')).toHaveText([
-    'Morning browser competition', 'Afternoon browser competition', 'Later browser competition',
+    'Morning browser competition',
+    'Afternoon browser competition',
+    'Later browser competition',
   ]);
   await expect(page.getByRole('row', { name: /Morning browser competition/ })).toContainText(rangeName);
 });
 
-test('modal cancels, resets assignments when changing range, and keeps input after failed saves', async ({ page, request }) => {
-  const other = await request.post('/api/v1/admin/ranges', { headers: { Authorization: `Bearer ${token}` },
-    data: { name: 'Other competition range', supportedDistancesMeters: [50], lanes: [{ number: 3 }] } });
+test('modal cancels, resets assignments when changing range, and keeps input after failed saves', async ({
+  page,
+  request,
+}) => {
+  const other = await request.post('/api/v1/admin/ranges', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { name: 'Other competition range', supportedDistancesMeters: [50], lanes: [{ number: 3 }] },
+  });
   const otherId = (await other.json()).id;
   const add = page.getByRole('button', { name: 'Add', exact: true });
   const modal = page.getByRole('dialog', { name: 'Add competition' });
@@ -253,12 +311,25 @@ test('modal cancels, resets assignments when changing range, and keeps input aft
 test('competition details load lanes separately and persist target configuration', async ({ page, request }) => {
   const rangeResponse = await request.get('/api/v1/admin/ranges', { headers: { Authorization: `Bearer ${token}` } });
   const range = (await rangeResponse.json()).find((value: { id: string }) => value.id === rangeId);
-  const created = await request.post('/api/v1/admin/competitions', { headers: { Authorization: `Bearer ${token}` },
-    data: { name: 'Detail browser competition', date: '2026-12-01', startingTime: '09:00', endingTime: '12:00', rangeId,
-      lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }, { laneId: range.lanes[1].id, distanceMeters: 25 }] } });
+  const created = await request.post('/api/v1/admin/competitions', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      name: 'Detail browser competition',
+      date: '2026-12-01',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      rangeId,
+      lanes: [
+        { laneId: range.lanes[0].id, distanceMeters: 18 },
+        { laneId: range.lanes[1].id, distanceMeters: 25 },
+      ],
+    },
+  });
   const competition = await created.json();
   await page.reload();
-  await page.route(`**/api/v1/admin/competitions/${competition.id}/lanes`, (route) => route.fulfill({ status: 500, json: {} }));
+  await page.route(`**/api/v1/admin/competitions/${competition.id}/lanes`, (route) =>
+    route.fulfill({ status: 500, json: {} }),
+  );
   await page.getByRole('link', { name: 'Detail browser competition', exact: true }).click();
   await expect(page).toHaveURL(`/admin/competitions/${competition.id}`);
   const details = page.getByRole('region', { name: 'Details', exact: true });
@@ -276,11 +347,20 @@ test('competition details load lanes separately and persist target configuration
   const lane = page.getByRole('row', { name: 'Lane 1 configuration' });
   await expect(lane.getByLabel('Target type')).toHaveValue('');
   await expect(lane.getByLabel('Number of targets')).toHaveValue('1');
-  await expect(lanes.getByRole('columnheader')).toHaveText(['', 'Lane', 'Distance', 'Target type', 'Number of targets']);
+  await expect(lanes.getByRole('columnheader')).toHaveText([
+    '',
+    'Lane',
+    'Distance',
+    'Target type',
+    'Number of targets',
+  ]);
   await page.clock.install();
   await page.clock.pauseAt(new Date(Date.now() + 1000));
-  const immediateSave = page.waitForResponse((response) => response.request().method() === 'PUT'
-    && response.url().endsWith(`/competitions/${competition.id}/lanes/${range.lanes[0].id}`));
+  const immediateSave = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PUT' &&
+      response.url().endsWith(`/competitions/${competition.id}/lanes/${range.lanes[0].id}`),
+  );
   await lane.getByLabel('Target type').selectOption('Dutch Target 40 cm (3-spot)');
   // Saving must work while browser timers are paused.
   expect((await immediateSave).ok()).toBeTruthy();
@@ -294,13 +374,21 @@ test('competition details load lanes separately and persist target configuration
   const laneUrl = `**/api/v1/admin/competitions/${competition.id}/lanes/${range.lanes[0].id}`;
   let releaseSave!: () => void;
   let saveStarted!: () => void;
-  const started = new Promise<void>((resolve) => { saveStarted = resolve; });
-  const release = new Promise<void>((resolve) => { releaseSave = resolve; });
+  const started = new Promise<void>((resolve) => {
+    saveStarted = resolve;
+  });
+  const release = new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  });
   let firstSave = true;
   const queuedChanges: { targetType: string; numberOfTargets: number }[] = [];
   await page.route(laneUrl, async (route) => {
     queuedChanges.push(route.request().postDataJSON());
-    if (firstSave) { firstSave = false; saveStarted(); await release; }
+    if (firstSave) {
+      firstSave = false;
+      saveStarted();
+      await release;
+    }
     await route.continue();
   });
   await lane.getByLabel('Target type').selectOption('60 cm blazoen (10-rings)');
@@ -390,17 +478,29 @@ test('competition details load lanes separately and persist target configuration
   await expect(page.getByRole('alert')).toHaveText('Competition not found.');
 });
 
-
-test('competition flow starts in Scheduled, handles a failed update and advances through Closed', async ({ page, request }) => {
-  const range = (await (await request.get('/api/v1/admin/ranges', { headers: { Authorization: `Bearer ${token}` } })).json()).find((value: { id: string }) => value.id === rangeId);
-  const created = await request.post('/api/v1/admin/competitions', { headers: { Authorization: `Bearer ${token}` }, data: {
-    name: 'Flow browser competition', date: '2026-12-03', startingTime: '09:00', endingTime: '12:00', rangeId,
-    lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
-  } });
+test('competition flow starts in Scheduled, handles a failed update and advances through Closed', async ({
+  page,
+  request,
+}) => {
+  const range = (
+    await (await request.get('/api/v1/admin/ranges', { headers: { Authorization: `Bearer ${token}` } })).json()
+  ).find((value: { id: string }) => value.id === rangeId);
+  const created = await request.post('/api/v1/admin/competitions', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      name: 'Flow browser competition',
+      date: '2026-12-03',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      rangeId,
+      lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
+    },
+  });
   const competition = await created.json();
   expect(competition.status).toBe('Scheduled');
   const configured = await request.put(`/api/v1/admin/competitions/${competition.id}/lanes/${range.lanes[0].id}`, {
-    headers: { Authorization: `Bearer ${token}` }, data: { targetType: '40 cm', numberOfTargets: 1 },
+    headers: { Authorization: `Bearer ${token}` },
+    data: { targetType: '40 cm', numberOfTargets: 1 },
   });
   expect(configured.ok()).toBe(true);
   await page.goto(`/admin/competitions/${competition.id}`);
@@ -415,10 +515,16 @@ test('competition flow starts in Scheduled, handles a failed update and advances
   const statusUrl = `**/api/v1/admin/competitions/${competition.id}/status`;
   await page.route(statusUrl, (route) => route.fulfill({ status: 500, json: { message: 'Could not update status.' } }));
   await details.getByRole('button', { name: 'Start check-in', exact: true }).click();
-  await expect(details.getByRole('alert')).toContainText('Something went wrong. Check your input and connection and try again.');
+  await expect(details.getByRole('alert')).toContainText(
+    'Something went wrong. Check your input and connection and try again.',
+  );
   await expect(flow.locator('[aria-current="step"]')).toContainText('Scheduled');
   await page.unroute(statusUrl);
-  for (const [status, label] of [['Check-in', 'Start check-in'], ['Active', 'Start competition'], ['Closed', 'End competition']]) {
+  for (const [status, label] of [
+    ['Check-in', 'Start check-in'],
+    ['Active', 'Start competition'],
+    ['Closed', 'End competition'],
+  ]) {
     if (status === 'Active' || status === 'Closed') page.once('dialog', (dialog) => dialog.accept());
     await details.getByRole('button', { name: label, exact: true }).click();
     await expect(flow.locator('[aria-current="step"]')).toContainText(status);
@@ -436,7 +542,9 @@ test('competition flow starts in Scheduled, handles a failed update and advances
   await expect(flow.getByRole('button')).toHaveCount(3);
   await page.route(statusUrl, (route) => route.fulfill({ status: 500, json: { message: 'Could not update status.' } }));
   await flow.getByRole('button', { name: 'Move back to Active', exact: true }).click();
-  await expect(details.getByRole('alert')).toContainText('Something went wrong. Check your input and connection and try again.');
+  await expect(details.getByRole('alert')).toContainText(
+    'Something went wrong. Check your input and connection and try again.',
+  );
   await expect(flow.locator('[aria-current="step"]')).toContainText('Closed');
   await page.unroute(statusUrl);
   const scheduled = flow.getByRole('button', { name: 'Move back to Scheduled', exact: true });
@@ -450,24 +558,53 @@ test('competition flow starts in Scheduled, handles a failed update and advances
   await expect(flow.locator('[aria-current="step"]')).toContainText('Check-in');
   await flow.getByRole('button', { name: 'Move back to Scheduled', exact: true }).click();
   await expect(flow.locator('[aria-current="step"]')).toContainText('Scheduled');
-
 });
-
 
 for (const allCheckedIn of [true, false]) {
   test(`starting a competition confirms participant locking with allCheckedIn=${allCheckedIn}`, async ({ page }) => {
-    const competition = { id: 'start-confirmation', name: 'Start confirmation', date: '2026-12-01', startingTime: '09:00', endingTime: '12:00',
-      status: 'Check-in', range: { id: 'range', name: 'Range' } };
+    const competition = {
+      id: 'start-confirmation',
+      name: 'Start confirmation',
+      date: '2026-12-01',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      status: 'Check-in',
+      range: { id: 'range', name: 'Range' },
+    };
     const base = '**/api/v1/admin/competitions/start-confirmation';
     await page.route(base, (route) => route.fulfill({ json: competition }));
     await page.route('**/api/v1/admin/target-types', (route) => route.fulfill({ json: ['Face A'] }));
-    await page.route(`${base}/lanes`, (route) => route.fulfill({ json: [
-      { laneId: 'lane', number: 1, distanceMeters: 18, targetType: 'Face A', numberOfTargets: 1 },
-    ] }));
-    await page.route(`${base}/participants`, (route) => route.fulfill({ json: [
-      { id: '1', name: 'Checked-in archer', federationNumber: '1', clubNumber: '1', clubName: 'Club', bowType: 'Recurve', targetType: 'Face A', checkedIn: true },
-      { id: '2', name: 'Second archer', federationNumber: '2', clubNumber: '1', clubName: 'Club', bowType: 'Recurve', targetType: 'Face A', checkedIn: allCheckedIn },
-    ] }));
+    await page.route(`${base}/lanes`, (route) =>
+      route.fulfill({
+        json: [{ laneId: 'lane', number: 1, distanceMeters: 18, targetType: 'Face A', numberOfTargets: 1 }],
+      }),
+    );
+    await page.route(`${base}/participants`, (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: '1',
+            name: 'Checked-in archer',
+            federationNumber: '1',
+            clubNumber: '1',
+            clubName: 'Club',
+            bowType: 'Recurve',
+            targetType: 'Face A',
+            checkedIn: true,
+          },
+          {
+            id: '2',
+            name: 'Second archer',
+            federationNumber: '2',
+            clubNumber: '1',
+            clubName: 'Club',
+            bowType: 'Recurve',
+            targetType: 'Face A',
+            checkedIn: allCheckedIn,
+          },
+        ],
+      }),
+    );
     let statusRequests = 0;
     await page.route(`${base}/status`, (route) => {
       statusRequests++;
@@ -495,19 +632,39 @@ for (const allCheckedIn of [true, false]) {
 }
 
 test('warnings below the flow follow lane edits, participant target changes and removals', async ({ page }) => {
-  const competition = { id: 'warnings', name: 'Warnings competition', date: '2026-12-01', startingTime: '09:00', endingTime: '12:00',
-    status: 'Scheduled', range: { id: 'range', name: 'Range' } };
-  const lanes = [{ laneId: 'lane', number: 1, distanceMeters: 18, targetType: null as string | null, numberOfTargets: 0 }];
-  let people = Array.from({ length: 4 }, (_, index) => ({ id: String(index), name: `Archer ${index}`, federationNumber: String(index),
-    clubNumber: '1', clubName: 'Club', bowType: index === 3 ? null : 'Recurve', targetType: index === 3 ? null : 'Face A' }));
+  const competition = {
+    id: 'warnings',
+    name: 'Warnings competition',
+    date: '2026-12-01',
+    startingTime: '09:00',
+    endingTime: '12:00',
+    status: 'Scheduled',
+    range: { id: 'range', name: 'Range' },
+  };
+  const lanes = [
+    { laneId: 'lane', number: 1, distanceMeters: 18, targetType: null as string | null, numberOfTargets: 0 },
+  ];
+  let people = Array.from({ length: 4 }, (_, index) => ({
+    id: String(index),
+    name: `Archer ${index}`,
+    federationNumber: String(index),
+    clubNumber: '1',
+    clubName: 'Club',
+    bowType: index === 3 ? null : 'Recurve',
+    targetType: index === 3 ? null : 'Face A',
+  }));
   await page.route('**/api/v1/admin/competitions/warnings', (route) => route.fulfill({ json: competition }));
   await page.route('**/api/v1/admin/target-types', (route) => route.fulfill({ json: ['Face A', 'Face B'] }));
   await page.route('**/api/v1/admin/competitions/warnings/lanes', (route) => route.fulfill({ json: lanes }));
-  await page.route('**/api/v1/admin/competitions/warnings/lanes/lane', (route) => route.fulfill({ json: { ...lanes[0], ...route.request().postDataJSON() } }));
+  await page.route('**/api/v1/admin/competitions/warnings/lanes/lane', (route) =>
+    route.fulfill({ json: { ...lanes[0], ...route.request().postDataJSON() } }),
+  );
   await page.route('**/api/v1/admin/competitions/warnings/participants', async (route) => {
     if (route.request().method() === 'PATCH') {
       const body = route.request().postDataJSON();
-      people = people.map((person) => body.participantIds.includes(person.id) ? { ...person, targetType: body.targetType } : person);
+      people = people.map((person) =>
+        body.participantIds.includes(person.id) ? { ...person, targetType: body.targetType } : person,
+      );
       await route.fulfill({ json: { updatedParticipantIds: body.participantIds, targetType: body.targetType } });
     } else if (route.request().method() === 'DELETE') {
       const ids = route.request().postDataJSON().participantIds;
@@ -538,7 +695,15 @@ test('warnings below the flow follow lane edits, participant target changes and 
   await expect(flow.locator('[aria-current="step"]')).toContainText('Scheduled');
   expect(statusRequests).toBe(0);
 
-  expect(await warnings.evaluate((element) => !!(document.querySelector('.competition-flow-strip')!.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  expect(
+    await warnings.evaluate(
+      (element) =>
+        !!(
+          document.querySelector('.competition-flow-strip')!.compareDocumentPosition(element) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+    ),
+  ).toBe(true);
   const lane = page.getByRole('row', { name: 'Lane 1 configuration', exact: true });
   await lane.getByLabel('Target type', { exact: true }).selectOption('Face B');
   await lane.getByLabel('Number of targets', { exact: true }).selectOption('2');
@@ -580,14 +745,29 @@ test('warnings below the flow follow lane edits, participant target changes and 
   expect(statusRequests).toBe(2);
 });
 
-
 test('check-in controls persist, show assignments and refresh after reassignment', async ({ page }) => {
-  const competition = { id: 'assignments', name: 'Shooting assignments', date: '2026-12-01', startingTime: '09:00', endingTime: '12:00',
-    status: 'Scheduled', range: { id: 'range', name: 'Range' } };
+  const competition = {
+    id: 'assignments',
+    name: 'Shooting assignments',
+    date: '2026-12-01',
+    startingTime: '09:00',
+    endingTime: '12:00',
+    status: 'Scheduled',
+    range: { id: 'range', name: 'Range' },
+  };
   const lanes = [{ laneId: 'lane', number: 1, distanceMeters: 18, targetType: 'Face A', numberOfTargets: 2 }];
-  let people = Array.from({ length: 2 }, (_, index) => ({ id: String(index), name: `Shooter ${index}`, federationNumber: String(index),
-    clubNumber: '1', clubName: 'Club', bowType: 'Recurve', targetType: 'Face A', checkedIn: false,
-    laneId: null as string | null, targetLetter: null as string | null }));
+  let people = Array.from({ length: 2 }, (_, index) => ({
+    id: String(index),
+    name: `Shooter ${index}`,
+    federationNumber: String(index),
+    clubNumber: '1',
+    clubName: 'Club',
+    bowType: 'Recurve',
+    targetType: 'Face A',
+    checkedIn: false,
+    laneId: null as string | null,
+    targetLetter: null as string | null,
+  }));
   const base = '**/api/v1/admin/competitions/assignments';
   await page.route(base, (route) => route.fulfill({ json: competition }));
   await page.route('**/api/v1/admin/target-types', (route) => route.fulfill({ json: ['Face A'] }));
@@ -595,7 +775,8 @@ test('check-in controls persist, show assignments and refresh after reassignment
   await page.route(`${base}/participants`, (route) => route.fulfill({ json: people }));
   await page.route(`${base}/status`, (route) => {
     competition.status = route.request().postDataJSON().status;
-    if (competition.status === 'Check-in') people = people.map((p, i) => ({ ...p, laneId: 'lane', targetLetter: i ? 'B' : 'A' }));
+    if (competition.status === 'Check-in')
+      people = people.map((p, i) => ({ ...p, laneId: 'lane', targetLetter: i ? 'B' : 'A' }));
     return route.fulfill({ json: competition });
   });
   let failCheckIn = true;
@@ -603,7 +784,7 @@ test('check-in controls persist, show assignments and refresh after reassignment
     if (failCheckIn) return route.fulfill({ status: 500, json: { message: 'Check-in failed.' } });
     const id = route.request().url().split('/').at(-2)!;
     const { checkedIn } = route.request().postDataJSON();
-    people = people.map((p) => p.id === id ? { ...p, checkedIn } : p);
+    people = people.map((p) => (p.id === id ? { ...p, checkedIn } : p));
     return route.fulfill({ json: { checkedIn } });
   });
   let failReassign = true;
@@ -632,7 +813,9 @@ test('check-in controls persist, show assignments and refresh after reassignment
   await expect(section.getByRole('row', { name: /Shooter 0/ })).toBeVisible();
   await expect(section.getByRole('row', { name: /Shooter 1/ })).toHaveCount(0);
   await checkIn.click();
-  await expect(section.getByRole('alert')).toHaveText('Something went wrong. Check your input and connection and try again.');
+  await expect(section.getByRole('alert')).toHaveText(
+    'Something went wrong. Check your input and connection and try again.',
+  );
   await expect(checkIn).not.toBeChecked();
   failCheckIn = false;
   await checkIn.click();
@@ -658,7 +841,9 @@ test('check-in controls persist, show assignments and refresh after reassignment
   await expect(section.getByRole('row', { name: /Shooter 1/ })).toContainText('Lane 1 B');
   page.once('dialog', (dialog) => dialog.accept());
   await reassign.click();
-  await expect(section.getByRole('alert')).toHaveText('Something went wrong. Check your input and connection and try again.');
+  await expect(section.getByRole('alert')).toHaveText(
+    'Something went wrong. Check your input and connection and try again.',
+  );
   await expect(section.getByRole('row', { name: /Shooter 1/ })).toContainText('Lane 1 B');
   failReassign = false;
   page.once('dialog', (dialog) => dialog.accept());
@@ -679,16 +864,26 @@ test('check-in controls persist, show assignments and refresh after reassignment
   }
 });
 
-test('competition default initializes lanes and participant targets while allowing individual overrides', async ({ page, request }) => {
+test('competition default initializes lanes and participant targets while allowing individual overrides', async ({
+  page,
+  request,
+}) => {
   const token = testAdminToken();
   const headers = { Authorization: `Bearer ${token}` };
   for (const name of ['Browser default face', 'Browser override face']) {
     expect((await request.post('/api/v1/admin/target-types', { headers, data: { name } })).ok()).toBeTruthy();
   }
-  const range = await (await request.post('/api/v1/admin/ranges', { headers, data: {
-    name: 'Default target browser range', supportedDistancesMeters: [18], lanes: [{ number: 1 }, { number: 2 }],
-  } })).json();
-  const bows = await (await request.get('/api/v1/admin/bow-types', { headers })).json() as string[];
+  const range = await (
+    await request.post('/api/v1/admin/ranges', {
+      headers,
+      data: {
+        name: 'Default target browser range',
+        supportedDistancesMeters: [18],
+        lanes: [{ number: 1 }, { number: 2 }],
+      },
+    })
+  ).json();
+  const bows = (await (await request.get('/api/v1/admin/bow-types', { headers })).json()) as string[];
   await page.addInitScript((value) => sessionStorage.setItem('arrowcast.admin.jwt', value), token);
   await page.goto('/admin/competitions');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -718,7 +913,9 @@ test('competition default initializes lanes and participant targets while allowi
   const modal = page.getByRole('dialog', { name: 'Add participant', exact: true });
   for (const [index, target] of ['Browser default face', 'Browser override face'].entries()) {
     await expect(modal.getByLabel('Target', { exact: true })).toHaveValue('Browser default face');
-    await modal.getByRole('combobox', { name: 'Search by name or federation number' }).fill(`Default browser archer ${index}`);
+    await modal
+      .getByRole('combobox', { name: 'Search by name or federation number' })
+      .fill(`Default browser archer ${index}`);
     await modal.getByRole('option', { name: 'New participant', exact: true }).click();
     await expect(modal.getByLabel('Target', { exact: true })).toHaveValue('Browser default face');
     await modal.getByLabel('Federation number', { exact: true }).fill(`default-browser-${index}`);
@@ -731,8 +928,12 @@ test('competition default initializes lanes and participant targets while allowi
   await expect(modal.getByLabel('Target', { exact: true })).toHaveValue('Browser default face');
   await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.reload();
-  await expect(participants.getByRole('row').filter({ hasText: 'Default browser archer 0' })).toContainText('Browser default face');
-  await expect(participants.getByRole('row').filter({ hasText: 'Default browser archer 1' })).toContainText('Browser override face');
+  await expect(participants.getByRole('row').filter({ hasText: 'Default browser archer 0' })).toContainText(
+    'Browser default face',
+  );
+  await expect(participants.getByRole('row').filter({ hasText: 'Default browser archer 1' })).toContainText(
+    'Browser override face',
+  );
   await participants.getByRole('button', { name: 'Add participant', exact: true }).click();
   await expect(modal.getByLabel('Target', { exact: true })).toHaveValue('Browser default face');
 });

@@ -1,9 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { testAdminToken } from './admin';
 
-test('a profile language switch updates all pages immediately and survives a fresh browser preference', async ({ page, request }) => {
+test('a profile language switch updates all pages immediately and survives a fresh browser preference', async ({
+  page,
+  request,
+}) => {
   const token = testAdminToken();
-  await request.patch('/api/v1/admin/me/language', { headers: { Authorization: `Bearer ${token}` }, data: { language: 'nl' } });
+  await request.patch('/api/v1/admin/me/language', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { language: 'nl' },
+  });
   await page.addInitScript((jwt) => sessionStorage.setItem('arrowcast.admin.jwt', jwt), token);
   await page.goto('/admin');
   await expect(page.getByRole('link', { name: 'Wedstrijden', exact: true })).toBeVisible();

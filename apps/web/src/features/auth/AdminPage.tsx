@@ -7,42 +7,20 @@ import { CompetitionDetailPage } from '../competitions/CompetitionDetailPage';
 import { CompetitionsPage } from '../competitions/CompetitionsPage';
 import { SettingsPage } from '../settings/SettingsPage';
 import { PasswordChangeForm } from './PasswordChangeForm';
-
-const storageKey = 'arrowcast.admin.jwt';
-
-function savedToken(): string | null {
-  try { return sessionStorage.getItem(storageKey); }
-  catch { return null; }
-}
-
-function storeToken(token: string | null) {
-  try {
-    if (token) sessionStorage.setItem(storageKey, token);
-    else sessionStorage.removeItem(storageKey);
-  } catch {
-    // Authentication still works in memory if browser storage is unavailable.
-  }
-}
-
-interface Session {
-  username: string;
-  name: string;
-  role: 'admin' | 'competition_manager';
-  expiresAt: number;
-  forceChangePassword: boolean;
-  language: Language;
-}
+import { decodeJson, managementRequest } from '../../lib/http';
+import { readAdminToken, writeAdminToken } from './session';
+import type { AdminSession } from './session';
 
 export function AdminPage() {
-  const [token, setToken] = useState(savedToken);
-  const [session, setSession] = useState<Session | null>(null);
+  const [token, setToken] = useState(readAdminToken);
+  const [session, setSession] = useState<AdminSession | null>(null);
   const [loginError, setLoginError] = useState('');
   const [checkError, setCheckError] = useState('');
   const [retry, setRetry] = useState(0);
   const [changingPassword, setChangingPassword] = useState(false);
 
   const logout = useCallback((message = '') => {
-    storeToken(null);
+    writeAdminToken(null);
     setToken(null);
     setSession(null);
     setLoginError(message);
@@ -57,28 +35,24 @@ export function AdminPage() {
     setSession(null);
     void (async () => {
       try {
-        const response = await fetch('/api/v1/admin/me', {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-          cache: 'no-store',
-        });
+        const response = await managementRequest('/api/v1/admin/me', token, { signal: controller.signal });
         if (controller.signal.aborted) return;
         if (response.status === 401) {
-          logout(t("AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in"));
+          logout(t('AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in'));
           return;
         }
-        if (!response.ok) throw new Error(t("AdminPage.session_check_failed"));
-        const result = await response.json() as Session;
+        if (!response.ok) throw new Error(t('AdminPage.session_check_failed'));
+        const result = await decodeJson<AdminSession>(response);
         if (controller.signal.aborted) return;
         if (result.expiresAt <= Date.now()) {
-          logout(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in"));
+          logout(t('AdminPage.je_sessie_is_verlopen_log_opnieuw_in'));
           return;
         }
         setSession(result);
         setLanguage(result.language);
       } catch {
         if (!controller.signal.aborted) {
-          setCheckError(t("AdminPage.je_sessie_kon_niet_worden_gecontroleerd_controleer_de_verbinding"));
+          setCheckError(t('AdminPage.je_sessie_kon_niet_worden_gecontroleerd_controleer_de_verbinding'));
         }
       }
     })();
@@ -87,108 +61,179 @@ export function AdminPage() {
 
   useEffect(() => {
     if (!session) return;
-    const timer = window.setTimeout(() => {
-      logout(t("AdminPage.je_sessie_is_verlopen_log_opnieuw_in"));
-    }, Math.max(0, session.expiresAt - Date.now()));
+    const timer = window.setTimeout(
+      () => {
+        logout(t('AdminPage.je_sessie_is_verlopen_log_opnieuw_in'));
+      },
+      Math.max(0, session.expiresAt - Date.now()),
+    );
     return () => window.clearTimeout(timer);
   }, [session]);
 
   if (!token) {
-    return <LoginForm error={message(loginError)} onLogin={(newToken) => {
-      storeToken(newToken);
-      setLoginError('');
-      setToken(newToken);
-    }} />;
+    return (
+      <LoginForm
+        error={message(loginError)}
+        onLogin={(newToken) => {
+          writeAdminToken(newToken);
+          setLoginError('');
+          setToken(newToken);
+        }}
+      />
+    );
   }
 
   if (!session) {
     return (
       <main className="auth-card">
-        <h1>{t("AdminPage.arrowcast")}</h1>
-        {checkError ? <>
-          <p role="alert">{message(checkError)}</p>
-          <button onClick={() => setRetry((value) => value + 1)}>{t("AdminPage.opnieuw_proberen")}</button>
-          <button className="secondary" onClick={() => logout()}>{t("AdminPage.terug_naar_inloggen")}</button>
-        </> : <p role="status">{t("AdminPage.sessie_controleren")}</p>}
+        <h1>{t('AdminPage.arrowcast')}</h1>
+        {checkError ? (
+          <>
+            <p role="alert">{message(checkError)}</p>
+            <button onClick={() => setRetry((value) => value + 1)}>{t('AdminPage.opnieuw_proberen')}</button>
+            <button className="secondary" onClick={() => logout()}>
+              {t('AdminPage.terug_naar_inloggen')}
+            </button>
+          </>
+        ) : (
+          <p role="status">{t('AdminPage.sessie_controleren')}</p>
+        )}
       </main>
     );
   }
 
   if (session.forceChangePassword || changingPassword) {
-    return <PasswordChangeForm token={token} onLogout={logout}
-      onCancel={session.forceChangePassword ? undefined : () => setChangingPassword(false)}
-      onChanged={(newToken) => {
-      storeToken(newToken);
-      setChangingPassword(false);
-      setSession(null);
-      setToken(newToken);
-    }} />;
+    return (
+      <PasswordChangeForm
+        token={token}
+        onLogout={logout}
+        onCancel={session.forceChangePassword ? undefined : () => setChangingPassword(false)}
+        onChanged={(newToken) => {
+          writeAdminToken(newToken);
+          setChangingPassword(false);
+          setSession(null);
+          setToken(newToken);
+        }}
+      />
+    );
   }
 
   return (
     <main>
       <header className="admin-header">
-        <h1>{t("AdminPage.arrowcast")}</h1>
-        <ProfileMenu username={session.username} onLogout={() => logout()}
+        <h1>{t('AdminPage.arrowcast')}</h1>
+        <ProfileMenu
+          username={session.username}
+          onLogout={() => logout()}
           token={token}
-          onChangePassword={() => setChangingPassword(true)} />
+          onChangePassword={() => setChangingPassword(true)}
+        />
       </header>
-      <nav className="admin-nav" aria-label={t("AdminPage.admin_navigation")}>
-        <NavLink to="/admin/competitions">{t("AdminPage.competitions")}</NavLink>
-        {session.role === 'admin' && <NavLink className="settings-tab" to="/admin/settings">{t("AdminPage.settings")}</NavLink>}
+      <nav className="admin-nav" aria-label={t('AdminPage.admin_navigation')}>
+        <NavLink to="/admin/competitions">{t('AdminPage.competitions')}</NavLink>
+        {session.role === 'admin' && (
+          <NavLink className="settings-tab" to="/admin/settings">
+            {t('AdminPage.settings')}
+          </NavLink>
+        )}
       </nav>
       <Routes>
-        <Route path="settings" element={session.role === 'admin'
-          ? <SettingsPage token={token} onUnauthorized={logout} />
-          : <Navigate to="/admin/competitions" replace />} />
+        <Route
+          path="settings"
+          element={
+            session.role === 'admin' ? (
+              <SettingsPage token={token} onUnauthorized={logout} />
+            ) : (
+              <Navigate to="/admin/competitions" replace />
+            )
+          }
+        />
         <Route index element={<Navigate to="/admin/competitions" replace />} />
         <Route path="target-types" element={<Navigate to="/admin/settings" replace />} />
         <Route path="ranges" element={<Navigate to="/admin/settings" replace />} />
-        <Route path="competitions/:competitionId" element={<CompetitionDetailPage token={token} onUnauthorized={logout} />} />
+        <Route
+          path="competitions/:competitionId"
+          element={<CompetitionDetailPage token={token} onUnauthorized={logout} />}
+        />
         <Route path="competitions" element={<CompetitionsPage token={token} onUnauthorized={logout} />} />
-        <Route path="*" element={<section className="panel"><h2>{t("App.pagina_niet_gevonden")}</h2>
-          <Link to="/admin">{t("App.naar_het_beheerportal")}</Link></section>} />
+        <Route
+          path="*"
+          element={
+            <section className="panel">
+              <h2>{t('App.pagina_niet_gevonden')}</h2>
+              <Link to="/admin">{t('App.naar_het_beheerportal')}</Link>
+            </section>
+          }
+        />
       </Routes>
     </main>
   );
 }
 
-function ProfileMenu({ username, token, onLogout, onChangePassword }: {
-  username: string; token: string; onLogout: () => void; onChangePassword: () => void;
+function ProfileMenu({
+  username,
+  token,
+  onLogout,
+  onChangePassword,
+}: {
+  username: string;
+  token: string;
+  onLogout: () => void;
+  onChangePassword: () => void;
 }) {
   const language = useLanguage();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   async function changeLanguage(value: Language) {
-    setPending(true); setError('');
+    setPending(true);
+    setError('');
     try {
-      const response = await fetch('/api/v1/admin/me/language', {
-        method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: value }),
+      const response = await managementRequest('/api/v1/admin/me/language', token, {
+        method: 'PATCH',
+        json: { language: value },
       });
-      if (!response.ok) { setError(t('language.saveError')); return; }
+      if (!response.ok) {
+        setError(t('language.saveError'));
+        return;
+      }
       setLanguage(value);
       document.getElementById('profile-dropdown')?.hidePopover();
-    } catch { setError(t('language.saveError')); }
-    finally { setPending(false); }
+    } catch {
+      setError(t('language.saveError'));
+    } finally {
+      setPending(false);
+    }
   }
-  return <div className="profile-menu">
-    <button className="profile-avatar" popoverTarget="profile-dropdown"
-      aria-label={t("AdminPage.profile", { p0: username })} title={username}>
-      {Array.from(username.trim())[0]?.toLocaleUpperCase() || '?'}
-    </button>
-    <div id="profile-dropdown" className="profile-dropdown" popover="auto">
-      <label htmlFor="profile-language">{t('language.label')}</label>
-      <select id="profile-language" value={language} disabled={pending}
-        onChange={(event) => { void changeLanguage(event.target.value as Language); }}>
-        <option value="nl">{t('language.nl')}</option><option value="en">{t('language.en')}</option>
-      </select>
-      {error && <p role="alert">{message(error)}</p>}
-      <button onClick={onChangePassword}>{t("AdminPage.change_password")}</button>
-      <hr />
-      <button onClick={onLogout}>{t("AdminPage.logoff")}</button>
+  return (
+    <div className="profile-menu">
+      <button
+        className="profile-avatar"
+        popoverTarget="profile-dropdown"
+        aria-label={t('AdminPage.profile', { p0: username })}
+        title={username}
+      >
+        {Array.from(username.trim())[0]?.toLocaleUpperCase() || '?'}
+      </button>
+      <div id="profile-dropdown" className="profile-dropdown" popover="auto">
+        <label htmlFor="profile-language">{t('language.label')}</label>
+        <select
+          id="profile-language"
+          value={language}
+          disabled={pending}
+          onChange={(event) => {
+            void changeLanguage(event.target.value as Language);
+          }}
+        >
+          <option value="nl">{t('language.nl')}</option>
+          <option value="en">{t('language.en')}</option>
+        </select>
+        {error && <p role="alert">{message(error)}</p>}
+        <button onClick={onChangePassword}>{t('AdminPage.change_password')}</button>
+        <hr />
+        <button onClick={onLogout}>{t('AdminPage.logoff')}</button>
+      </div>
     </div>
-  </div>;
+  );
 }
 
 function LoginForm({ error, onLogin }: { error: string; onLogin: (token: string) => void }) {
@@ -210,18 +255,20 @@ function LoginForm({ error, onLogin }: { error: string; onLogin: (token: string)
         body: JSON.stringify({ username: username.trim(), password }),
       });
       if (!response.ok) {
-        setRequestError(response.status === 401
-          ? t("AdminPage.gebruikersnaam_of_wachtwoord_is_onjuist")
-          : response.status === 429
-            ? t("AdminPage.te_veel_inlogpogingen_probeer_het_over_een_minuut_opnieuw")
-            : t("AdminPage.inloggen_is_tijdelijk_niet_mogelijk_probeer_opnieuw"));
+        setRequestError(
+          response.status === 401
+            ? t('AdminPage.gebruikersnaam_of_wachtwoord_is_onjuist')
+            : response.status === 429
+              ? t('AdminPage.te_veel_inlogpogingen_probeer_het_over_een_minuut_opnieuw')
+              : t('AdminPage.inloggen_is_tijdelijk_niet_mogelijk_probeer_opnieuw'),
+        );
         return;
       }
-      const result = await response.json() as { token: string };
+      const result = (await response.json()) as { token: string };
       setPassword('');
       onLogin(result.token);
     } catch {
-      setRequestError(t("AdminPage.geen_verbinding_met_de_server_probeer_opnieuw"));
+      setRequestError(t('AdminPage.geen_verbinding_met_de_server_probeer_opnieuw'));
     } finally {
       setPending(false);
     }
@@ -229,24 +276,51 @@ function LoginForm({ error, onLogin }: { error: string; onLogin: (token: string)
 
   return (
     <main className="auth-card">
-      <p className="eyebrow">{t("AdminPage.arrowcast_beheer")}</p>
-      <h1>{t("AdminPage.inloggen")}</h1>
+      <p className="eyebrow">{t('AdminPage.arrowcast_beheer')}</p>
+      <h1>{t('AdminPage.inloggen')}</h1>
       <label htmlFor="login-language">{t('language.label')}</label>
       <select id="login-language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
-        <option value="nl">{t('language.nl')}</option><option value="en">{t('language.en')}</option>
+        <option value="nl">{t('language.nl')}</option>
+        <option value="en">{t('language.en')}</option>
       </select>
-      <p>{t("AdminPage.log_in_om_het_beheerportal_te_openen")}</p>
-      <form onSubmit={(event) => { void submit(event); }} aria-busy={pending}>
-        <label htmlFor="username">{t("AdminPage.gebruikersnaam")}</label>
-        <input id="username" name="username" autoComplete="username" required
-          maxLength={100} value={username} disabled={pending}
-          onChange={(event) => setUsername(event.target.value)} />
-        <label htmlFor="password">{t("AdminPage.wachtwoord")}</label>
-        <input id="password" name="password" type="password" autoComplete="current-password"
-          required maxLength={1024} value={password} disabled={pending}
-          onChange={(event) => setPassword(event.target.value)} />
-        {(requestError || error) && <p className="error" role="alert">{message(requestError || error)}</p>}
-        <button type="submit" disabled={pending}>{pending ? t("AdminPage.bezig_met_inloggen") : t("AdminPage.inloggen")}</button>
+      <p>{t('AdminPage.log_in_om_het_beheerportal_te_openen')}</p>
+      <form
+        onSubmit={(event) => {
+          void submit(event);
+        }}
+        aria-busy={pending}
+      >
+        <label htmlFor="username">{t('AdminPage.gebruikersnaam')}</label>
+        <input
+          id="username"
+          name="username"
+          autoComplete="username"
+          required
+          maxLength={100}
+          value={username}
+          disabled={pending}
+          onChange={(event) => setUsername(event.target.value)}
+        />
+        <label htmlFor="password">{t('AdminPage.wachtwoord')}</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          maxLength={1024}
+          value={password}
+          disabled={pending}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+        {(requestError || error) && (
+          <p className="error" role="alert">
+            {message(requestError || error)}
+          </p>
+        )}
+        <button type="submit" disabled={pending}>
+          {pending ? t('AdminPage.bezig_met_inloggen') : t('AdminPage.inloggen')}
+        </button>
       </form>
     </main>
   );

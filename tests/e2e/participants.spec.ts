@@ -1,18 +1,36 @@
 import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 
-test('participant modal searches, adds existing people with the keyboard and creates new participants', async ({ page, request }) => {
+test('participant modal searches, adds existing people with the keyboard and creates new participants', async ({
+  page,
+  request,
+}) => {
   const token = testAdminToken();
   const headers = { Authorization: `Bearer ${token}` };
-  const rangeResponse = await request.post('/api/v1/admin/ranges', { headers,
-    data: { name: 'Participant range', supportedDistancesMeters: [18], lanes: [{ number: 1 }] } });
+  const rangeResponse = await request.post('/api/v1/admin/ranges', {
+    headers,
+    data: { name: 'Participant range', supportedDistancesMeters: [18], lanes: [{ number: 1 }] },
+  });
   const range = await rangeResponse.json();
-  const created = await request.post('/api/v1/admin/competitions', { headers, data: {
-    name: 'Participant competition', date: '2026-12-01', startingTime: '09:00', endingTime: '12:00', rangeId: range.id,
-    lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
-  } });
+  const created = await request.post('/api/v1/admin/competitions', {
+    headers,
+    data: {
+      name: 'Participant competition',
+      date: '2026-12-01',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      rangeId: range.id,
+      lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
+    },
+  });
   const competition = await created.json();
-  const existing = { id: 'existing', name: 'Zoë van Dijk', federationNumber: '000123', clubNumber: '0012', clubName: 'Testclub' };
+  const existing = {
+    id: 'existing',
+    name: 'Zoë van Dijk',
+    federationNumber: '000123',
+    clubNumber: '0012',
+    clubName: 'Testclub',
+  };
   const people: (typeof existing & { bowType: string; targetType: string | null })[] = [];
   await page.route('**/api/v1/admin/target-types', (route) => route.fulfill({ json: ['Custom face'] }));
   const searches: string[] = [];
@@ -21,27 +39,48 @@ test('participant modal searches, adds existing people with the keyboard and cre
     searches.push(new URL(route.request().url()).searchParams.get('q')!);
     await route.fulfill({ json: [existing] });
   });
-  await page.route('**/api/v1/admin/clubs', (route) => route.fulfill({ json: [{ clubNumber: '0012', name: 'Testclub' }] }));
-  await page.route('**/api/v1/admin/bow-types', (route) => route.fulfill({ json: ['Barebow', 'Compound', 'Longbow', 'Recurve', 'Traditional'] }));
+  await page.route('**/api/v1/admin/clubs', (route) =>
+    route.fulfill({ json: [{ clubNumber: '0012', name: 'Testclub' }] }),
+  );
+  await page.route('**/api/v1/admin/bow-types', (route) =>
+    route.fulfill({ json: ['Barebow', 'Compound', 'Longbow', 'Recurve', 'Traditional'] }),
+  );
   await page.route(`**/api/v1/admin/competitions/${competition.id}/participants`, async (route) => {
-    if (route.request().method() === 'GET') { await route.fulfill({ json: people }); return; }
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: people });
+      return;
+    }
     if (route.request().method() === 'PATCH') {
-      if (fail) { await route.fulfill({ status: 500, json: {} }); return; }
+      if (fail) {
+        await route.fulfill({ status: 500, json: {} });
+        return;
+      }
       const body = route.request().postDataJSON();
       for (const person of people) if (body.participantIds.includes(person.id)) person.targetType = body.targetType;
       await route.fulfill({ json: { updatedParticipantIds: body.participantIds, targetType: body.targetType } });
       return;
     }
     if (route.request().method() === 'DELETE') {
-      if (fail) { await route.fulfill({ status: 500, json: {} }); return; }
+      if (fail) {
+        await route.fulfill({ status: 500, json: {} });
+        return;
+      }
       const ids = route.request().postDataJSON().participantIds as string[];
       people.splice(0, people.length, ...people.filter((person) => !ids.includes(person.id)));
       await route.fulfill({ json: { removedParticipantIds: ids } });
       return;
     }
-    if (fail) { await route.fulfill({ status: 409, json: { message: 'This federation number already exists. Select the existing participant.' } }); return; }
+    if (fail) {
+      await route.fulfill({
+        status: 409,
+        json: { message: 'This federation number already exists. Select the existing participant.' },
+      });
+      return;
+    }
     const body = route.request().postDataJSON();
-    const person = body.participantId ? { ...existing, bowType: body.bowType, targetType: body.targetType } : { id: 'new', ...body, clubName: 'Testclub' };
+    const person = body.participantId
+      ? { ...existing, bowType: body.bowType, targetType: body.targetType }
+      : { id: 'new', ...body, clubName: 'Testclub' };
     people.push(person);
     await route.fulfill({ status: 201, json: person });
   });
@@ -75,18 +114,21 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await search.press('ArrowDown');
   await expect(modal.locator('[role="option"]').nth(1)).toHaveAttribute('aria-selected', 'true');
   // A long result list must follow keyboard selection while focus stays in the search field.
-  await page.route('**/api/v1/admin/participants?q=scroll', (route) => route.fulfill({ json:
-    Array.from({ length: 20 }, (_, index) => ({ ...existing, id: `scroll-${index}`, name: `Archer ${index}` })),
-  }));
+  await page.route('**/api/v1/admin/participants?q=scroll', (route) =>
+    route.fulfill({
+      json: Array.from({ length: 20 }, (_, index) => ({ ...existing, id: `scroll-${index}`, name: `Archer ${index}` })),
+    }),
+  );
   await search.fill('scroll');
   const suggestions = modal.getByRole('listbox', { name: 'Participant suggestions' });
   await expect(suggestions.getByRole('option')).toHaveCount(21);
-  const activeIsVisible = () => suggestions.evaluate((list) => {
-    const selected = list.querySelector('[aria-selected="true"]')!;
-    const item = selected.getBoundingClientRect();
-    const viewport = list.getBoundingClientRect();
-    return item.top >= viewport.top && item.bottom <= viewport.bottom;
-  });
+  const activeIsVisible = () =>
+    suggestions.evaluate((list) => {
+      const selected = list.querySelector('[aria-selected="true"]')!;
+      const item = selected.getBoundingClientRect();
+      const viewport = list.getBoundingClientRect();
+      return item.top >= viewport.top && item.bottom <= viewport.bottom;
+    });
   for (let index = 0; index < 19; index++) await search.press('ArrowDown');
   await expect(search).toHaveAttribute('aria-activedescendant', 'participant-option-20');
   await expect.poll(activeIsVisible).toBe(true);
@@ -123,7 +165,10 @@ test('participant modal searches, adds existing people with the keyboard and cre
   expect(people).toHaveLength(0);
   await expect(modal.getByRole('button', { name: 'Add participant', exact: true })).toBeDisabled();
   await expect(modal.getByLabel('Target', { exact: true })).toHaveAttribute('required', '');
-  await expect(modal.getByLabel('Target', { exact: true }).locator('option')).toHaveText(['Select a target', 'Custom face']);
+  await expect(modal.getByLabel('Target', { exact: true }).locator('option')).toHaveText([
+    'Select a target',
+    'Custom face',
+  ]);
   await modal.getByLabel('Target', { exact: true }).selectOption('Custom face');
   await modal.getByRole('button', { name: 'Add participant', exact: true }).click();
   await expect(modal).toBeVisible();
@@ -168,7 +213,10 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await expect(modal).not.toBeVisible();
   await expect(add).toBeFocused();
   const selectAll = section.getByRole('checkbox', { name: 'Select all participants', exact: true });
-  const selectExisting = section.getByRole('checkbox', { name: 'Select participant Zoë van Dijk (000123)', exact: true });
+  const selectExisting = section.getByRole('checkbox', {
+    name: 'Select participant Zoë van Dijk (000123)',
+    exact: true,
+  });
   const action = section.getByRole('button', { name: 'Unregister', exact: true });
   await expect(action).not.toBeVisible();
   await selectExisting.check();

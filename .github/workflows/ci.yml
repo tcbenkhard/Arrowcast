@@ -16,8 +16,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run deadcode
+      - run: npm run check:repository
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      - run: npm run test:deployment
+      - run: npm run audit:dependencies
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

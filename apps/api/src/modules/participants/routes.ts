@@ -7,9 +7,14 @@ import { internetAvailable } from '../network/connectivity.js';
 type ImportResult = Awaited<ReturnType<typeof scrapeLatestParticipants>>;
 type Scrape = (progress: (message: string) => void) => Promise<ImportResult>;
 
-export async function participantRoutes(app: FastifyInstance, options: {
-  db: AppDatabase; scrape?: Scrape; canImport?: () => Promise<boolean>;
-}) {
+export async function participantRoutes(
+  app: FastifyInstance,
+  options: {
+    db: AppDatabase;
+    scrape?: Scrape;
+    canImport?: () => Promise<boolean>;
+  },
+) {
   let state: {
     status: 'idle' | 'running' | 'completed' | 'failed';
     progress: string | null;
@@ -22,27 +27,38 @@ export async function participantRoutes(app: FastifyInstance, options: {
   const scrape = options.scrape ?? ((progress) => scrapeLatestParticipants(createPageFetcher(canImport), progress));
 
   // Finish an active transaction/import before the parent closes the database.
-  app.addHook('onClose', async () => { await running; });
+  app.addHook('onClose', async () => {
+    await running;
+  });
   app.get('/participants/import', async () => {
     const available = await canImport();
     return { ...state, available, message: available ? null : offlineMessage };
   });
   app.post('/participants/import', async (_request, reply) => {
-    if (!await canImport()) return reply.code(503).send({ ...state, available: false, message: offlineMessage });
-    if (state.status === 'running') return reply.code(409).send({ message: t("routes.er_loopt_al_een_deelnemersimport", {}, 'nl') });
+    if (!(await canImport())) return reply.code(503).send({ ...state, available: false, message: offlineMessage });
+    if (state.status === 'running')
+      return reply.code(409).send({ message: t('routes.er_loopt_al_een_deelnemersimport', {}, 'nl') });
     state = { status: 'running', progress: t('import.findingLatest', {}, 'nl'), result: null, error: null };
     running = (async () => {
       try {
-        const data = await scrape((message) => { state.progress = message; });
+        const data = await scrape((message) => {
+          state.progress = message;
+        });
         saveParticipants(options.db, data);
         state = {
-          status: 'completed', progress: null, error: null,
+          status: 'completed',
+          progress: null,
+          error: null,
           result: { season: data.season, participants: data.participants.length, clubs: data.clubs.length },
         };
       } catch (error) {
         app.log.error({ err: error }, 'Deelnemersimport mislukt');
-        state = { status: 'failed', progress: null, result: null,
-          error: t("routes.importeren_is_mislukt_er_zijn_geen_gegevens_opgeslagen_probeer", {}, 'nl') };
+        state = {
+          status: 'failed',
+          progress: null,
+          result: null,
+          error: t('routes.importeren_is_mislukt_er_zijn_geen_gegevens_opgeslagen_probeer', {}, 'nl'),
+        };
       }
     })();
     return reply.code(202).send({ status: 'running', available: true });

@@ -8,8 +8,9 @@ import { verifyPassword } from '../src/modules/auth/password.js';
 import { readAuthConfig } from '../src/modules/auth/config.js';
 
 test('production bootstrap requires device secrets and preserves an existing administrator', async (t) => {
-  const saved = Object.fromEntries(['NODE_ENV', 'JWT_SECRET', 'INITIAL_ADMIN_PASSWORD']
-    .map((key) => [key, process.env[key]]));
+  const saved = Object.fromEntries(
+    ['NODE_ENV', 'JWT_SECRET', 'INITIAL_ADMIN_PASSWORD'].map((key) => [key, process.env[key]]),
+  );
   t.after(() => {
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];

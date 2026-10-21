@@ -16,14 +16,27 @@ export interface ScoringMutation {
 }
 
 export interface ScoringContext {
-  competition: { id: string; name: string; numberOfRounds: number; arrowsPerRound: number; status: string; scoringLocked: boolean };
+  competition: {
+    id: string;
+    name: string;
+    numberOfRounds: number;
+    arrowsPerRound: number;
+    status: string;
+    scoringLocked: boolean;
+  };
   lane: { id: string; number: number };
   version: number;
   currentRoundNumber: number;
   currentParticipantId: string | null;
   completed: boolean;
   participants: { id: string; name: string; targetLetter: string | null }[];
-  rounds: { participantId: string; roundNumber: number; status: 'draft' | 'submitted'; arrows: (string | null)[]; total: number }[];
+  rounds: {
+    participantId: string;
+    roundNumber: number;
+    status: 'draft' | 'submitted';
+    arrows: (string | null)[];
+    total: number;
+  }[];
 }
 
 export interface ScoringStanding {

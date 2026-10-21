@@ -32,10 +32,7 @@
       "indexes": {
         "lanes_range_number_unique": {
           "name": "lanes_range_number_unique",
-          "columns": [
-            "range_id",
-            "number"
-          ],
+          "columns": ["range_id", "number"],
           "isUnique": true
         }
       },
@@ -44,12 +41,8 @@
           "name": "lanes_range_id_ranges_id_fk",
           "tableFrom": "lanes",
           "tableTo": "ranges",
-          "columnsFrom": [
-            "range_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["range_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -87,22 +80,15 @@
           "name": "range_distances_range_id_ranges_id_fk",
           "tableFrom": "range_distances",
           "tableTo": "ranges",
-          "columnsFrom": [
-            "range_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["range_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "range_distances_range_id_distance_meters_pk": {
-          "columns": [
-            "range_id",
-            "distance_meters"
-          ],
+          "columns": ["range_id", "distance_meters"],
           "name": "range_distances_range_id_distance_meters_pk"
         }
       },

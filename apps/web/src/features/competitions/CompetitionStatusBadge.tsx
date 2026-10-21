@@ -9,5 +9,9 @@ const statusClasses: Record<CompetitionStatus, string> = {
 };
 
 export function CompetitionStatusBadge({ status }: { status: CompetitionStatus }) {
-  return <span className={`competition-status-badge competition-status-badge--${statusClasses[status]}`}>{t(`status.${status}`)}</span>;
+  return (
+    <span className={`competition-status-badge competition-status-badge--${statusClasses[status]}`}>
+      {t(`status.${status}`)}
+    </span>
+  );
 }

@@ -28,18 +28,29 @@ test('create ranges requires authentication and persists distances and lanes acr
     const emptyList = await app.inject({ url: '/api/v1/admin/ranges', headers });
     assert.equal(emptyList.statusCode, 200);
     assert.deepEqual(emptyList.json(), []);
-    const response = await app.inject({ method: 'POST', url: '/api/v1/admin/ranges', headers,
-      payload: { ...payload, name: ' Indoor ' } });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/ranges',
+      headers,
+      payload: { ...payload, name: ' Indoor ' },
+    });
     assert.equal(response.statusCode, 201);
     created = response.json();
     assert.equal(created.name, 'Indoor');
     assert.deepEqual(created.supportedDistancesMeters, [18, 25]);
-    assert.deepEqual(created.lanes.map((lane: { number: number }) => lane.number), [1, 2]);
+    assert.deepEqual(
+      created.lanes.map((lane: { number: number }) => lane.number),
+      [1, 2],
+    );
     assert.ok(created.id);
     assert.ok(created.lanes.every((lane: { id: string }) => lane.id));
     assert.equal(new Set(created.lanes.map((lane: { id: string }) => lane.id)).size, 2);
-    const second = await app.inject({ method: 'POST', url: '/api/v1/admin/ranges', headers,
-      payload: { ...payload, name: 'Outdoor' } });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/ranges',
+      headers,
+      payload: { ...payload, name: 'Outdoor' },
+    });
     assert.equal(second.statusCode, 201, 'different ranges can reuse lane numbers');
     assert.notEqual(second.json().id, created.id);
     const list = await app.inject({ url: '/api/v1/admin/ranges', headers });
@@ -52,10 +63,24 @@ test('create ranges requires authentication and persists distances and lanes acr
   const database = openDatabase(databasePath);
   try {
     assert.equal(database.db.select().from(ranges).all().length, 2);
-    assert.deepEqual(database.db.select().from(rangeDistances).all()
-      .filter((distance) => distance.rangeId === created.id).map((distance) => distance.distanceMeters), [18, 25]);
-    assert.deepEqual(database.db.select().from(lanes).all().filter((lane) => lane.rangeId === created.id)
-      .map(({ id, number }) => ({ id, number })), created.lanes);
+    assert.deepEqual(
+      database.db
+        .select()
+        .from(rangeDistances)
+        .all()
+        .filter((distance) => distance.rangeId === created.id)
+        .map((distance) => distance.distanceMeters),
+      [18, 25],
+    );
+    assert.deepEqual(
+      database.db
+        .select()
+        .from(lanes)
+        .all()
+        .filter((lane) => lane.rangeId === created.id)
+        .map(({ id, number }) => ({ id, number })),
+      created.lanes,
+    );
   } finally {
     database.close();
   }
@@ -72,13 +97,19 @@ test('invalid range requests write nothing and a failed child insert rolls back 
   const login = await loginAdmin(app);
   const headers = { authorization: `Bearer ${login.json().token}` };
   for (const invalid of [
-    {}, { ...payload, name: '   ' }, { ...payload, name: 5 },
-    { ...payload, supportedDistancesMeters: [] }, { ...payload, supportedDistancesMeters: [18, 18] },
-    { ...payload, supportedDistancesMeters: [0] }, { ...payload, supportedDistancesMeters: [-18] },
-    { ...payload, supportedDistancesMeters: ['18'] }, { ...payload, lanes: [] },
+    {},
+    { ...payload, name: '   ' },
+    { ...payload, name: 5 },
+    { ...payload, supportedDistancesMeters: [] },
+    { ...payload, supportedDistancesMeters: [18, 18] },
+    { ...payload, supportedDistancesMeters: [0] },
+    { ...payload, supportedDistancesMeters: [-18] },
+    { ...payload, supportedDistancesMeters: ['18'] },
+    { ...payload, lanes: [] },
     { ...payload, lanes: [{ number: 1 }, { number: 1 }] },
     ...[0, -1, 1.5, '1'].map((number) => ({ ...payload, lanes: [{ number }] })),
-    { ...payload, lanes: [{}] }, { ...payload, lanes: [{ number: 1, extra: true }] },
+    { ...payload, lanes: [{}] },
+    { ...payload, lanes: [{ number: 1, extra: true }] },
     { ...payload, extra: true },
   ]) {
     const response = await app.inject({ method: 'POST', url: '/api/v1/admin/ranges', headers, payload: invalid });

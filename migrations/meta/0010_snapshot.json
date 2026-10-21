@@ -18,9 +18,7 @@
       "indexes": {
         "bow_types_name_case_insensitive_unique": {
           "name": "bow_types_name_case_insensitive_unique",
-          "columns": [
-            "lower(\"name\")"
-          ],
+          "columns": ["lower(\"name\")"],
           "isUnique": true
         }
       },
@@ -120,14 +118,8 @@
           "name": "competition_lanes_competition_id_range_id_competitions_id_range_id_fk",
           "tableFrom": "competition_lanes",
           "tableTo": "competitions",
-          "columnsFrom": [
-            "competition_id",
-            "range_id"
-          ],
-          "columnsTo": [
-            "id",
-            "range_id"
-          ],
+          "columnsFrom": ["competition_id", "range_id"],
+          "columnsTo": ["id", "range_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -135,14 +127,8 @@
           "name": "competition_lanes_lane_id_range_id_lanes_id_range_id_fk",
           "tableFrom": "competition_lanes",
           "tableTo": "lanes",
-          "columnsFrom": [
-            "lane_id",
-            "range_id"
-          ],
-          "columnsTo": [
-            "id",
-            "range_id"
-          ],
+          "columnsFrom": ["lane_id", "range_id"],
+          "columnsTo": ["id", "range_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -150,24 +136,15 @@
           "name": "competition_lanes_range_id_distance_meters_range_distances_range_id_distance_meters_fk",
           "tableFrom": "competition_lanes",
           "tableTo": "range_distances",
-          "columnsFrom": [
-            "range_id",
-            "distance_meters"
-          ],
-          "columnsTo": [
-            "range_id",
-            "distance_meters"
-          ],
+          "columnsFrom": ["range_id", "distance_meters"],
+          "columnsTo": ["range_id", "distance_meters"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "competition_lanes_competition_id_lane_id_pk": {
-          "columns": [
-            "competition_id",
-            "lane_id"
-          ],
+          "columns": ["competition_id", "lane_id"],
           "name": "competition_lanes_competition_id_lane_id_pk"
         }
       },
@@ -214,12 +191,8 @@
           "name": "competition_participants_competition_id_competitions_id_fk",
           "tableFrom": "competition_participants",
           "tableTo": "competitions",
-          "columnsFrom": [
-            "competition_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["competition_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -227,12 +200,8 @@
           "name": "competition_participants_participant_id_participants_id_fk",
           "tableFrom": "competition_participants",
           "tableTo": "participants",
-          "columnsFrom": [
-            "participant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["participant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -240,22 +209,15 @@
           "name": "competition_participants_bow_type_bow_types_name_fk",
           "tableFrom": "competition_participants",
           "tableTo": "bow_types",
-          "columnsFrom": [
-            "bow_type"
-          ],
-          "columnsTo": [
-            "name"
-          ],
+          "columnsFrom": ["bow_type"],
+          "columnsTo": ["name"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "competition_participants_competition_id_participant_id_pk": {
-          "columns": [
-            "competition_id",
-            "participant_id"
-          ],
+          "columns": ["competition_id", "participant_id"],
           "name": "competition_participants_competition_id_participant_id_pk"
         }
       },
@@ -319,18 +281,12 @@
       "indexes": {
         "competitions_date_time_index": {
           "name": "competitions_date_time_index",
-          "columns": [
-            "date",
-            "starting_time"
-          ],
+          "columns": ["date", "starting_time"],
           "isUnique": false
         },
         "competitions_id_range_unique": {
           "name": "competitions_id_range_unique",
-          "columns": [
-            "id",
-            "range_id"
-          ],
+          "columns": ["id", "range_id"],
           "isUnique": true
         }
       },
@@ -339,12 +295,8 @@
           "name": "competitions_range_id_ranges_id_fk",
           "tableFrom": "competitions",
           "tableTo": "ranges",
-          "columnsFrom": [
-            "range_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["range_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -394,18 +346,12 @@
       "indexes": {
         "lanes_range_number_unique": {
           "name": "lanes_range_number_unique",
-          "columns": [
-            "range_id",
-            "number"
-          ],
+          "columns": ["range_id", "number"],
           "isUnique": true
         },
         "lanes_id_range_unique": {
           "name": "lanes_id_range_unique",
-          "columns": [
-            "id",
-            "range_id"
-          ],
+          "columns": ["id", "range_id"],
           "isUnique": true
         }
       },
@@ -414,12 +360,8 @@
           "name": "lanes_range_id_ranges_id_fk",
           "tableFrom": "lanes",
           "tableTo": "ranges",
-          "columnsFrom": [
-            "range_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["range_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -468,16 +410,12 @@
       "indexes": {
         "participants_federation_number_unique": {
           "name": "participants_federation_number_unique",
-          "columns": [
-            "federation_number"
-          ],
+          "columns": ["federation_number"],
           "isUnique": true
         },
         "participants_club_number_index": {
           "name": "participants_club_number_index",
-          "columns": [
-            "club_number"
-          ],
+          "columns": ["club_number"],
           "isUnique": false
         }
       },
@@ -486,12 +424,8 @@
           "name": "participants_club_number_clubs_club_number_fk",
           "tableFrom": "participants",
           "tableTo": "clubs",
-          "columnsFrom": [
-            "club_number"
-          ],
-          "columnsTo": [
-            "club_number"
-          ],
+          "columnsFrom": ["club_number"],
+          "columnsTo": ["club_number"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -533,22 +467,15 @@
           "name": "range_distances_range_id_ranges_id_fk",
           "tableFrom": "range_distances",
           "tableTo": "ranges",
-          "columnsFrom": [
-            "range_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["range_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "range_distances_range_id_distance_meters_pk": {
-          "columns": [
-            "range_id",
-            "distance_meters"
-          ],
+          "columns": ["range_id", "distance_meters"],
           "name": "range_distances_range_id_distance_meters_pk"
         }
       },
@@ -603,9 +530,7 @@
       "indexes": {
         "target_types_name_case_insensitive_unique": {
           "name": "target_types_name_case_insensitive_unique",
-          "columns": [
-            "lower(\"name\")"
-          ],
+          "columns": ["lower(\"name\")"],
           "isUnique": true
         }
       },

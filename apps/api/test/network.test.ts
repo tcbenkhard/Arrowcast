@@ -14,10 +14,26 @@ test('network management requires admin authentication and validates input', asy
   const status = await app.inject({ url: '/api/v1/admin/network', headers });
   assert.equal(status.statusCode, 200);
   assert.equal(status.json().mode, 'disabled');
-  for (const payload of [{ ssid: '', password: '' }, { ssid: 'LAN', password: 'secret', command: 'reboot' },
-    { ssid: 'LAN\ncommand', password: '' }, { ssid: 'LAN', password: 'bad\npassword' }]) {
-    assert.equal((await app.inject({ method: 'POST', url: '/api/v1/admin/network', headers, payload })).statusCode, 400);
+  for (const payload of [
+    { ssid: '', password: '' },
+    { ssid: 'LAN', password: 'secret', command: 'reboot' },
+    { ssid: 'LAN\ncommand', password: '' },
+    { ssid: 'LAN', password: 'bad\npassword' },
+  ]) {
+    assert.equal(
+      (await app.inject({ method: 'POST', url: '/api/v1/admin/network', headers, payload })).statusCode,
+      400,
+    );
   }
-  assert.equal((await app.inject({ method: 'POST', url: '/api/v1/admin/network', headers,
-    payload: { ssid: 'Club Wi-Fi', password: 'test-password' } })).statusCode, 503);
+  assert.equal(
+    (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/admin/network',
+        headers,
+        payload: { ssid: 'Club Wi-Fi', password: 'test-password' },
+      })
+    ).statusCode,
+    503,
+  );
 });

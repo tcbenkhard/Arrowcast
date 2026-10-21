@@ -15,7 +15,15 @@
     "db:migrate": "npm run db:migrate --workspace=@arrowcast/api",
     "db:import-participants": "npm run db:import-participants --workspace=@arrowcast/api --",
     "auth:setup": "npm run auth:setup --workspace=@arrowcast/api",
-    "test": "npm run test --workspace=@arrowcast/api",
+    "test": "npm run test --workspaces --if-present",
+    "test:api": "npm run test --workspace=@arrowcast/api",
+    "test:deployment": "bash scripts/check-deployment.sh",
+    "check:repository": "bash scripts/check-repository.sh",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint --error-on-warnings .",
+    "deadcode": "biome lint --error-on-warnings --only=correctness/noUnusedImports --only=correctness/noUnusedVariables .",
+    "audit:dependencies": "npm audit --audit-level=high",
     "test:e2e": "playwright test",
     "dev:web": "npm run dev --workspace=@arrowcast/web",
     "dev:api": "npm run dev --workspace=@arrowcast/api",
@@ -23,9 +31,11 @@
     "build:web": "npm run build --workspace=@arrowcast/web",
     "build:api": "npm run build --workspace=@arrowcast/api",
     "typecheck": "npm run typecheck --workspaces",
+    "check": "npm run format:check && npm run lint && npm run deadcode && npm run check:repository && npm run typecheck && npm run build && npm test && npm run test:deployment",
     "start:api": "npm run start --workspace=@arrowcast/api"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.2.7",
     "@playwright/test": "1.64.1",
     "@types/node": "24.19.2",
     "typescript": "7.0.2"

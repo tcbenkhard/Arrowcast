@@ -2,7 +2,9 @@ import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 import { request } from 'node:http';
 
-test('administrator adds and edits a user, who must change their password and cannot open settings', async ({ page }) => {
+test('administrator adds and edits a user, who must change their password and cannot open settings', async ({
+  page,
+}) => {
   await page.goto('/');
   await page.evaluate((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');
@@ -19,7 +21,10 @@ test('administrator adds and edits a user, who must change their password and ca
   await modal.getByLabel('Initial password', { exact: true }).fill('initial-password');
   await modal.getByLabel('Language', { exact: true }).selectOption('en');
   await expect(modal.getByLabel('Role', { exact: true })).toHaveValue('competition_manager');
-  await expect(modal.getByLabel('Role', { exact: true }).locator('option')).toHaveText(['Competition manager', 'Administrator']);
+  await expect(modal.getByLabel('Role', { exact: true }).locator('option')).toHaveText([
+    'Competition manager',
+    'Administrator',
+  ]);
   await modal.getByRole('button', { name: 'Add user', exact: true }).click();
   await expect(modal).toBeHidden();
   const row = users.getByRole('row', { name: /Browser User browser-user Competition manager/ });
@@ -40,17 +45,30 @@ test('administrator adds and edits a user, who must change their password and ca
 
   // Use a separate loopback source for this real login so auth.spec.ts keeps its own rate-limit budget.
   const login = await new Promise<{ status: number | undefined; token: string }>((resolve, reject) => {
-    const req = request({ hostname: '127.0.0.1', port: Number(process.env.ARROWCAST_E2E_API_PORT ?? 3000),
-      localAddress: '127.0.0.2', path: '/api/v1/auth/login', method: 'POST', headers: { 'Content-Type': 'application/json' },
-    }, (response) => {
-      let body = '';
-      response.on('data', (chunk) => { body += String(chunk); });
-      response.on('end', () => {
-        try { resolve({ status: response.statusCode, token: (JSON.parse(body) as { token: string }).token }); }
-        catch (error) { reject(error); }
-      });
-      response.on('error', reject);
-    });
+    const req = request(
+      {
+        hostname: '127.0.0.1',
+        port: Number(process.env.ARROWCAST_E2E_API_PORT ?? 3000),
+        localAddress: '127.0.0.2',
+        path: '/api/v1/auth/login',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      },
+      (response) => {
+        let body = '';
+        response.on('data', (chunk) => {
+          body += String(chunk);
+        });
+        response.on('end', () => {
+          try {
+            resolve({ status: response.statusCode, token: (JSON.parse(body) as { token: string }).token });
+          } catch (error) {
+            reject(error);
+          }
+        });
+        response.on('error', reject);
+      },
+    );
     req.on('error', reject);
     req.end(JSON.stringify({ username: 'edited-browser-user', password: 'initial-password' }));
   });
@@ -84,7 +102,9 @@ test('administrator adds and edits a user, who must change their password and ca
   await expect(modal.getByRole('button', { name: 'Remove user', exact: true })).toHaveCount(0);
   await expect(modal.getByLabel('Username', { exact: true })).toHaveAttribute('readonly', '');
   await expect(modal.getByLabel('Reset password', { exact: true })).toHaveCount(0);
-  await expect(modal.getByText('Log in as admin and use Change password in your profile to change this password.')).toBeVisible();
+  await expect(
+    modal.getByText('Log in as admin and use Change password in your profile to change this password.'),
+  ).toBeVisible();
   await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.reload();
   await page.getByRole('button', { name: 'Expand: Users', exact: true }).click();
