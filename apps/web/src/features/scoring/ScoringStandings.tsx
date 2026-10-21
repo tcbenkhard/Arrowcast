@@ -39,7 +39,14 @@ export function ScoringStandings({
         if (!response.ok) throw new Error(t('CompetitionDetailPage.loading_failed'));
         const result = (await response.json()) as ScoringStanding[];
         if (!controller.signal.aborted) {
-          setStandings(result);
+          setStandings(
+            result.map((person) => ({
+              ...person,
+              lastArrows: [...(person.lastArrows ?? [])].sort(
+                (a, b) => (b === 'M' ? 0 : Number(b)) - (a === 'M' ? 0 : Number(a)),
+              ),
+            })),
+          );
           setError('');
         }
       } catch {
@@ -86,6 +93,7 @@ export function ScoringStandings({
                   <th scope="col" aria-sort="descending">
                     {t('ScoringStandings.average_score')}
                   </th>
+                  <th scope="col">{t('ScoringStandings.last_arrows')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -104,6 +112,13 @@ export function ScoringStandings({
                     </td>
                     <td>{person.totalScore}</td>
                     <td>{person.averageScore.toFixed(2)}</td>
+                    <td>
+                      <span className="standings-last-arrows">
+                        {Array.from({ length: 3 }, (_, index) => (
+                          <span key={index}>{person.lastArrows?.[index] ?? '\u2014'}</span>
+                        ))}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

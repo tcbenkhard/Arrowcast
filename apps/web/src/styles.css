@@ -1081,6 +1081,19 @@ input.lane-select-checkbox {
 .scoring-subtotal strong {
   font-size: 1.5rem;
 }
+.standings-last-arrows {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 2.5em);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.standings-last-arrows > span {
+  padding: 0.125rem 0.5rem;
+  text-align: center;
+}
+.standings-last-arrows > span + span {
+  border-inline-start: 2px solid #cbd5e1;
+}
 .participant-scorecard {
   margin-top: 1.5rem;
 }

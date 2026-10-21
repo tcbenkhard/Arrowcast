@@ -85,6 +85,7 @@ test('live scores stay up to date in fullscreen and return to the competition sc
           totalRounds: 2,
           totalScore,
           averageScore: totalScore / 2,
+          lastArrows: totalScore === 10 ? ['10', 'M', '9'] : ['10', '10', 'M'],
         },
       ],
     }),
@@ -98,6 +99,7 @@ test('live scores stay up to date in fullscreen and return to the competition sc
     'Round',
     'Total score',
     'Average score',
+    'Last 3 arrows',
   ]);
   await expect(table.getByRole('cell', { name: '1 A', exact: true })).toBeVisible();
   await expect(table.getByRole('cell', { name: '10', exact: true })).toBeVisible();
@@ -107,8 +109,10 @@ test('live scores stay up to date in fullscreen and return to the competition sc
     .toBe(true);
   await expect(scores.getByRole('button', { name: 'Pause scoring', exact: true })).toBeHidden();
   await expect(table.getByRole('cell', { name: '1 A', exact: true })).toBeVisible();
+  await expect(table.locator('.standings-last-arrows > span')).toHaveText(['10', '9', 'M']);
   totalScore = 20;
   await expect(table.getByRole('cell', { name: '20', exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(table.locator('.standings-last-arrows > span')).toHaveText(['10', '10', 'M']);
   await scores.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
   await expect(scores.getByRole('button', { name: 'Pause scoring', exact: true })).toBeVisible();
@@ -124,7 +128,13 @@ test('live scores stay up to date in fullscreen and return to the competition sc
     (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Closed' } })).ok(),
   ).toBeTruthy();
   await page.reload();
-  await expect(table.getByRole('columnheader')).toHaveText(['Participant', 'Round', 'Total score', 'Average score']);
+  await expect(table.getByRole('columnheader')).toHaveText([
+    'Participant',
+    'Round',
+    'Total score',
+    'Average score',
+    'Last 3 arrows',
+  ]);
 });
 
 test('fullscreen scrolling continues when refreshed scores reorder the standings', async ({ page, request }) => {

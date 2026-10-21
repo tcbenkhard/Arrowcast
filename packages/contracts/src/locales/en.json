@@ -302,6 +302,7 @@
   "ScoringStandings.participant": "Participant",
   "ScoringStandings.total_score": "Total score",
   "ScoringStandings.average_score": "Average score",
+  "ScoringStandings.last_arrows": "Last 3 arrows",
   "ArrowcastHostname.enter_a_valid_http_or_https_website_address": "Enter a valid http or https website address.",
   "ArrowcastHostname.arrowcast_hostname_saved": "Arrowcast hostname saved.",
   "ArrowcastHostname.could_not_save_the_hostname_in_this_browser_please": "Could not save the hostname in this browser. Please try again.",

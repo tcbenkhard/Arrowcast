@@ -238,12 +238,17 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
           .innerJoin(roundScores, and(eq(roundScores.scorecardId, scorecards.id), eq(roundScores.status, 'submitted')))
           .leftJoin(arrowScores, eq(arrowScores.roundScoreId, roundScores.id))
           .where(eq(scorecards.competitionId, competition.id))
+          .orderBy(roundScores.roundNumber, arrowScores.arrowIndex)
           .all();
-        const totals = new Map<string, { rounds: Set<string>; total: number }>();
+        const totals = new Map<string, { rounds: Set<string>; total: number; lastArrows: string[] }>();
         for (const score of scores) {
-          const total = totals.get(score.participantId) ?? { rounds: new Set<string>(), total: 0 };
+          const total = totals.get(score.participantId) ?? { rounds: new Set<string>(), total: 0, lastArrows: [] };
           total.rounds.add(score.roundId);
           total.total += score.symbol && score.symbol !== 'M' ? Number(score.symbol) : 0;
+          if (score.symbol !== null) {
+            total.lastArrows.push(score.symbol);
+            if (total.lastArrows.length > 3) total.lastArrows.shift();
+          }
           totals.set(score.participantId, total);
         }
         return people
@@ -257,6 +262,7 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
               totalRounds: competition.numberOfRounds,
               totalScore,
               averageScore: calculateAverageScore(totalScore, enteredRounds, competition.arrowsPerRound),
+              lastArrows: total?.lastArrows ?? [],
             };
           })
           .sort((a, b) => b.averageScore - a.averageScore || a.name.localeCompare(b.name, 'nl'));

@@ -48,4 +48,5 @@ export interface ScoringStanding {
   totalRounds: number;
   totalScore: number;
   averageScore: number;
+  lastArrows: string[];
 }

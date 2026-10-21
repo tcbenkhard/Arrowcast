@@ -663,6 +663,7 @@ test('closing fills missing arrows and rounds with misses and corrects averages 
       totalRounds: 2,
       totalScore: 19,
       averageScore: 4.75,
+      lastArrows: ['9', 'M', 'M'],
     },
     {
       participantId: 'c',
@@ -673,6 +674,7 @@ test('closing fills missing arrows and rounds with misses and corrects averages 
       totalRounds: 2,
       totalScore: 8,
       averageScore: 2,
+      lastArrows: ['8', 'M', 'M'],
     },
     {
       participantId: 'other',
@@ -683,6 +685,7 @@ test('closing fills missing arrows and rounds with misses and corrects averages 
       totalRounds: 2,
       totalScore: 0,
       averageScore: 0,
+      lastArrows: ['M', 'M', 'M'],
     },
   ]);
   assert.equal(f.db.select().from(arrowScores).all().length, 12);
@@ -839,7 +842,10 @@ test('admins retrieve identical QR codes after restart and standings rank submit
   assert.equal((await f.save(codes[0]!, session.cookie, { submit: false, arrows: ['10', null] })).statusCode, 200);
   let standings = (await f.app.inject({ url: standingsUrl, headers: f.admin })).json();
   assert.ok(
-    standings.every((p: { enteredRounds: number; totalScore: number }) => p.enteredRounds === 0 && p.totalScore === 0),
+    standings.every(
+      (p: { enteredRounds: number; totalScore: number; lastArrows: string[] }) =>
+        p.enteredRounds === 0 && p.totalScore === 0 && p.lastArrows.length === 0,
+    ),
   );
   assert.equal((await f.save(codes[0]!, session.cookie, { expectedVersion: 1 })).statusCode, 200);
   assert.equal(
@@ -862,6 +868,7 @@ test('admins retrieve identical QR codes after restart and standings rank submit
       totalRounds: 2,
       totalScore: 16,
       averageScore: 8,
+      lastArrows: ['8', '8'],
     },
     {
       participantId: 'a',
@@ -872,6 +879,7 @@ test('admins retrieve identical QR codes after restart and standings rank submit
       totalRounds: 2,
       totalScore: 20,
       averageScore: 5,
+      lastArrows: ['9', 'M', '1'],
     },
     {
       participantId: 'other',
@@ -882,6 +890,7 @@ test('admins retrieve identical QR codes after restart and standings rank submit
       totalRounds: 2,
       totalScore: 0,
       averageScore: 0,
+      lastArrows: [],
     },
   ]);
   await f.app.inject({ method: 'POST', url, headers: f.admin });

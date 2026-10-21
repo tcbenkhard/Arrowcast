@@ -302,6 +302,7 @@
   "ScoringStandings.participant": "Deelnemer",
   "ScoringStandings.total_score": "Totaalscore",
   "ScoringStandings.average_score": "Gemiddelde score",
+  "ScoringStandings.last_arrows": "Laatste 3 pijlen",
   "ArrowcastHostname.enter_a_valid_http_or_https_website_address": "Vul een geldig websiteadres met http of https in.",
   "ArrowcastHostname.arrowcast_hostname_saved": "Arrowcast-hostnaam opgeslagen.",
   "ArrowcastHostname.could_not_save_the_hostname_in_this_browser_please": "De hostnaam kon niet worden opgeslagen in deze browser. Probeer het opnieuw.",
