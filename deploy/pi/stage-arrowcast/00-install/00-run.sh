@@ -2,12 +2,21 @@
 set -euo pipefail
 install -d "$ROOTFS_DIR/opt/arrowcast" "$ROOTFS_DIR/usr/local/lib/arrowcast"
 cp -a files/source/. "$ROOTFS_DIR/opt/arrowcast/"
+install -d "$ROOTFS_DIR/opt/arrowcast/system"
+for name in updater.py network.py public-access.py system-apply.py nginx.conf \
+  arrowcast.service arrowcast-update.service arrowcast-network.service \
+  arrowcast-public.service arrowcast-certificate.service arrowcast-certificate.timer; do
+  install -m 0644 "files/$name" "$ROOTFS_DIR/opt/arrowcast/system/$name"
+done
 install -m 0755 files/first-boot.sh "$ROOTFS_DIR/usr/local/lib/arrowcast/first-boot.sh"
 install -m 0755 files/console.sh "$ROOTFS_DIR/usr/local/lib/arrowcast/console.sh"
 install -m 0755 files/updater.py "$ROOTFS_DIR/usr/local/lib/arrowcast/updater.py"
 install -m 0755 files/network.py "$ROOTFS_DIR/usr/local/lib/arrowcast/network.py"
 install -m 0644 files/arrowcast-network.service "$ROOTFS_DIR/etc/systemd/system/arrowcast-network.service"
 install -m 0644 files/arrowcast-update.service "$ROOTFS_DIR/etc/systemd/system/arrowcast-update.service"
+for name in arrowcast-public.service arrowcast-certificate.service arrowcast-certificate.timer; do
+  install -m 0644 "files/$name" "$ROOTFS_DIR/etc/systemd/system/$name"
+done
 install -m 0644 files/arrowcast.service "$ROOTFS_DIR/etc/systemd/system/arrowcast.service"
 install -m 0644 files/arrowcast-first-boot.service "$ROOTFS_DIR/etc/systemd/system/arrowcast-first-boot.service"
 install -m 0644 files/arrowcast-console.service "$ROOTFS_DIR/etc/systemd/system/arrowcast-console.service"
@@ -26,4 +35,4 @@ on_chroot < files/install.sh
 # Package the exact native build included in the image, excluding device data.
 tar -cJf "$ROOTFS_DIR/../arrowcast-update.tar.xz" \
   -C "$ROOTFS_DIR/opt/arrowcast/releases/factory" \
-  apps packages migrations node_modules runtime package.json package-lock.json VERSION REVISION
+  apps packages migrations node_modules runtime system package.json package-lock.json VERSION REVISION

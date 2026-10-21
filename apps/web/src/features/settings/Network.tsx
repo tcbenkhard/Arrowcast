@@ -99,7 +99,7 @@ export function Network({ token, onUnauthorized }: { token: string; onUnauthoriz
   }
 
   return (
-    <SettingsCard id="network" title={t('Network.network')}>
+    <SettingsCard id="network" icon="network" title={t('Network.network')}>
       <p>{t('Network.ethernet_takes_priority_connecting_a_network_cable_disables_wifi')}</p>
       <div role="status" aria-live="polite">
         {!state && !statusError && <p>{t('Network.reading_network_status')}</p>}

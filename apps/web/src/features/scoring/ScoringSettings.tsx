@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ArrowCastLogo } from '../../components/ArrowCastLogo';
 import { message, t } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { ScoringStandings } from './ScoringStandings';
@@ -144,6 +145,9 @@ export function ScoringSettings({
   return (
     <section ref={panel} className="panel live-score-panel" aria-labelledby="scoring-settings-title">
       <div className="section-header live-score-header">
+        <div className="live-score-logo">
+          <ArrowCastLogo />
+        </div>
         <h3 id="scoring-settings-title">{t('ScoringSettings.scoring')}</h3>
       </div>
       <div className="section-header live-score-toolbar">

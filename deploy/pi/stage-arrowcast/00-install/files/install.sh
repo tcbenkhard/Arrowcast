@@ -77,6 +77,17 @@ mv /opt/arrowcast-factory /opt/arrowcast/releases/factory
 ln -s releases/factory /opt/arrowcast/current
 # First-boot tooling uses this stable runtime path.
 ln -s current/runtime /opt/arrowcast/runtime
+# Stable service entry points follow the selected release, including on rollback.
+for name in updater.py network.py public-access.py; do
+  ln -sf "/opt/arrowcast/current/system/$name" "/usr/local/lib/arrowcast/$name"
+done
+install -d -m 0755 /var/lib/arrowcast-public /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt
+# Public scoring remains disabled until configured through authenticated Settings.
+printf '# Public scoring disabled\n' > /etc/nginx/sites-available/arrowcast-public
+ln -sf /etc/nginx/sites-available/arrowcast-public /etc/nginx/sites-enabled/arrowcast-public
+# Our timer handles renewal and the required nginx reload.
+systemctl disable certbot.timer
+systemctl enable arrowcast-public.service arrowcast-certificate.timer
 install -d -m 0755 /var/lib/arrowcast-update
 systemctl enable arrowcast-update.service
 systemctl enable arrowcast-first-boot.service arrowcast.service arrowcast-console.service nginx avahi-daemon

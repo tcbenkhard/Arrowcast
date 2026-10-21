@@ -213,6 +213,113 @@ test('correcting the second arrow with backspace selects the next arrow in draft
   await expect(page.locator('.scoring-notice')).toHaveText('Correction saved.');
 });
 
+test('public score landing has no administration link', async ({ page }) => {
+  await page.goto('/scores');
+  await expect(page.getByRole('heading', { name: 'Score entry', exact: true })).toBeVisible();
+  await expect(page.getByText('Scan your lane QR code to enter scores.', { exact: true })).toBeVisible();
+  await expect(page.locator('a[href^="/admin"]')).toHaveCount(0);
+});
+
+test('old scoring QR links redirect to scores and retain their QR token for authentication', async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  const checkIn = await (
+    await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })
+  ).json();
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
+  const code = checkIn.qrCodes[0] as LaneQrCode;
+  await page.goto(code.path.replace('/scores/', '/scoring/'));
+  await expect(page.locator('#current-archer')).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe(code.path.split('#')[0]);
+  expect(new URL(page.url()).hash).toBe('');
+});
+
+test('lane QR codes use the device public hostname instead of a browser-local hostname', async ({ page, request }) => {
+  const f = await fixture(request);
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  await page.addInitScript((token) => {
+    sessionStorage.setItem('arrowcast.admin.jwt', token);
+    localStorage.setItem('arrowcast.hostname', 'http://arrowcast.local');
+  }, f.token);
+  await page.route('**/api/v1/admin/scoring-origin', (route) =>
+    route.fulfill({ json: { origin: 'https://scores.club.nl' } }),
+  );
+  // A running older API can retain the old URLs until its next restart.
+  await page.route(`**${f.base}/scoring-codes`, async (route) => {
+    const response = await route.fetch();
+    const codes = (await response.json()) as LaneQrCode[];
+    await route.fulfill({
+      response,
+      json: codes.map((code) => ({ ...code, path: code.path.replace('/scores/', '/scoring/') })),
+    });
+  });
+  await page.goto(`/admin/competitions/${f.competition.id}`);
+  const qr = page.getByRole('region', { name: 'Lane scoring QR codes' });
+  await qr.getByRole('button', { name: 'Expand lane scoring QR codes' }).click();
+  await expect(qr.getByRole('img')).toHaveCount(2);
+  const urls = await qr
+    .getByRole('link')
+    .evaluateAll((elements) => elements.map((link) => (link as HTMLAnchorElement).href));
+  expect(urls.every((url) => url.startsWith('https://scores.club.nl/scores/') && url.includes('#token='))).toBeTruthy();
+});
+
+test('QR links follow tournament and club networks while preserving settings and lane tokens', async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  await page.addInitScript((token) => {
+    sessionStorage.setItem('arrowcast.admin.jwt', token);
+    localStorage.setItem('arrowcast.hostname', 'http://arrowcast.local');
+  }, f.token);
+  let state: { origin: string | null; hotspot?: boolean } = { origin: 'https://scores.club.nl' };
+  let unavailable = false;
+  await page.route('**/api/v1/admin/scoring-origin', (route) =>
+    route.fulfill({
+      status: unavailable ? 503 : 200,
+      json: unavailable ? { message: 'Network starting' } : state,
+    }),
+  );
+  await page.goto(`/admin/competitions/${f.competition.id}`);
+  const qr = page.getByRole('region', { name: 'Lane scoring QR codes' });
+  await qr.getByRole('button', { name: 'Expand lane scoring QR codes' }).click();
+  const links = qr.getByRole('link');
+  await expect(links).toHaveCount(2);
+  const original = await links.evaluateAll((elements) =>
+    elements.map((element) => (element as HTMLAnchorElement).href),
+  );
+  expect(original.every((url) => new URL(url).origin === 'https://scores.club.nl')).toBeTruthy();
+  state = { origin: 'http://10.42.0.1', hotspot: true };
+  await expect(links.first()).toHaveAttribute('href', /^http:\/\/10\.42\.0\.1\/scores\//, { timeout: 10000 });
+  await expect(
+    qr.getByText('Join ArrowCast Wi-Fi (no password, no internet needed), then scan this code.'),
+  ).toHaveCount(2);
+  const hotspot = await links.evaluateAll((elements) => elements.map((element) => (element as HTMLAnchorElement).href));
+  expect(hotspot.map((url) => new URL(url).hash)).toEqual(original.map((url) => new URL(url).hash));
+  await page.emulateMedia({ media: 'print' });
+  await expect(
+    qr.getByText('Join ArrowCast Wi-Fi (no password, no internet needed), then scan this code.').first(),
+  ).toBeVisible();
+  await page.emulateMedia({ media: 'screen' });
+  unavailable = true;
+  await expect(qr.getByRole('button', { name: 'Print lane QR codes' })).toBeDisabled({ timeout: 10000 });
+  await expect(qr.getByRole('img')).toHaveCount(0);
+  unavailable = false;
+  state = { origin: 'https://scores.club.nl' };
+  await expect(links.first()).toHaveAttribute('href', original[0]!, { timeout: 10000 });
+  await expect(qr.getByRole('button', { name: 'Print lane QR codes' })).toBeEnabled();
+  state = { origin: null };
+  await expect(links.first()).toHaveAttribute('href', /^http:\/\/arrowcast\.local\/scores\//, { timeout: 10000 });
+  expect(await page.evaluate(() => localStorage.getItem('arrowcast.hostname'))).toBe('http://arrowcast.local');
+  const codes = (await (await request.get(`${f.base}/scoring-codes`, { headers: f.headers })).json()) as LaneQrCode[];
+  expect(codes.map((code) => new URL(code.path, 'http://arrowcast.local').hash)).toEqual(
+    original.map((url) => new URL(url).hash),
+  );
+});
+
 test('print lane QRs during check-in, start, enter on a phone, resume on another device and wrap through all rounds', async ({
   page,
   request,

@@ -1,3 +1,5 @@
+import { Icon } from '../../components/Icon';
+import type { IconName } from '../../components/Icon';
 import { t } from '../../i18n';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -5,12 +7,14 @@ import type { ReactNode } from 'react';
 export function SettingsCard({
   id,
   title,
+  icon,
   defaultExpanded = false,
   forceExpanded = false,
   children,
 }: {
   id: string;
   title: string;
+  icon: IconName;
   defaultExpanded?: boolean;
   forceExpanded?: boolean;
   children: ReactNode;
@@ -21,7 +25,10 @@ export function SettingsCard({
   return (
     <section className="panel collapsible-panel" aria-labelledby={`${id}-heading`}>
       <div className="section-header collapsible-panel-header">
-        <h3 id={`${id}-heading`}>{title}</h3>
+        <h3 id={`${id}-heading`} className="with-icon">
+          <Icon name={icon} />
+          {title}
+        </h3>
         <button
           type="button"
           className="panel-toggle"

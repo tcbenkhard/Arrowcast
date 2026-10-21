@@ -1,8 +1,9 @@
 import { t, useLanguage } from './i18n';
-import { BrowserRouter, Link, Route, Routes } from 'react-router';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router';
 import { AdminPage } from './features/auth/AdminPage';
 import { ScoringPage } from './features/scoring/ScoringPage';
 import { LanguageSelect } from './components/LanguageSelect';
+import { ArrowCastLogo } from './components/ArrowCastLogo';
 
 export function App() {
   useLanguage();
@@ -14,14 +15,27 @@ export function App() {
           element={
             <main>
               <LanguageSelect />
-              <h1>{t('App.arrowcast')}</h1>
+              <h1>
+                <ArrowCastLogo />
+              </h1>
               <p>{t('App.welkom_bij_arrowcast')}</p>
               <Link to="/admin">{t('App.naar_het_beheerportal')}</Link>
             </main>
           }
         />
         <Route path="/admin/*" element={<AdminPage />} />
-        <Route path="/scoring/:competitionId/:laneId/:grantId" element={<ScoringPage />} />
+        <Route
+          path="/scores"
+          element={
+            <main>
+              <LanguageSelect />
+              <h1>{t('PublicScores.title')}</h1>
+              <p>{t('PublicScores.scan')}</p>
+            </main>
+          }
+        />
+        <Route path="/scores/:competitionId/:laneId/:grantId" element={<ScoringPage />} />
+        <Route path="/scoring/:competitionId/:laneId/:grantId" element={<LegacyScoringRedirect />} />
         <Route
           path="*"
           element={
@@ -34,5 +48,16 @@ export function App() {
         />
       </Routes>
     </BrowserRouter>
+  );
+}
+
+function LegacyScoringRedirect() {
+  const { competitionId, laneId, grantId } = useParams();
+  const location = useLocation();
+  return (
+    <Navigate
+      replace
+      to={{ pathname: `/scores/${competitionId}/${laneId}/${grantId}`, search: location.search, hash: location.hash }}
+    />
   );
 }

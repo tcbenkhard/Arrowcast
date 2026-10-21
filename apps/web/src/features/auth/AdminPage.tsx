@@ -1,3 +1,5 @@
+import { Icon } from '../../components/Icon';
+import { ArrowCastLogo } from '../../components/ArrowCastLogo';
 import { t, message, setLanguage, useLanguage } from '../../i18n';
 import type { Language } from '../../i18n';
 import { useCallback, useEffect, useState } from 'react';
@@ -86,7 +88,9 @@ export function AdminPage() {
   if (!session) {
     return (
       <main className="auth-card">
-        <h1>{t('AdminPage.arrowcast')}</h1>
+        <h1>
+          <ArrowCastLogo />
+        </h1>
         {checkError ? (
           <>
             <p role="alert">{message(checkError)}</p>
@@ -121,7 +125,9 @@ export function AdminPage() {
   return (
     <main>
       <header className="admin-header">
-        <h1>{t('AdminPage.arrowcast')}</h1>
+        <h1>
+          <ArrowCastLogo />
+        </h1>
         <ProfileMenu
           username={session.username}
           onLogout={() => logout()}
@@ -130,9 +136,13 @@ export function AdminPage() {
         />
       </header>
       <nav className="admin-nav" aria-label={t('AdminPage.admin_navigation')}>
-        <NavLink to="/admin/competitions">{t('AdminPage.competitions')}</NavLink>
+        <NavLink className="with-icon" to="/admin/competitions">
+          <Icon name="trophy" />
+          {t('AdminPage.competitions')}
+        </NavLink>
         {session.role === 'admin' && (
-          <NavLink className="settings-tab" to="/admin/settings">
+          <NavLink className="settings-tab with-icon" to="/admin/settings">
+            <Icon name="settings" />
             {t('AdminPage.settings')}
           </NavLink>
         )}

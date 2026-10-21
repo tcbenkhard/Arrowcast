@@ -137,6 +137,33 @@ class NetworkTests(unittest.TestCase):
         self.assertEqual(self.radio, 'disabled')
         self.assertEqual(self.broker.snapshot()['mode'], 'ethernet')
 
+    def test_tournament_boot_preserves_club_credentials_and_return_boot_rejoins(self):
+        network.save_profile('Club', 'club-password')
+        original = network.PROFILE.read_bytes()
+        self.active = ''
+        self.fail_wifi = True
+        self.broker.reconcile()
+        self.assertEqual(self.broker.snapshot()['mode'], 'hotspot')
+        self.assertEqual(self.broker.snapshot()['address'], '10.42.0.1')
+        self.assertEqual(network.PROFILE.read_bytes(), original)
+        # Powering up back at the club creates a fresh broker and retries saved Wi-Fi.
+        self.broker = network.Network()
+        self.active = ''
+        self.fail_wifi = False
+        self.broker.reconcile()
+        self.assertEqual(self.broker.snapshot()['mode'], 'wifi')
+        self.assertEqual(self.broker.snapshot()['ssid'], 'Club')
+        self.assertEqual(network.PROFILE.read_bytes(), original)
+
+    def test_club_wifi_without_internet_does_not_trigger_hotspot(self):
+        network.save_profile('Club', 'club-password')
+        self.broker.reconcile()
+        with patch.object(network, 'internet_available', return_value=False):
+            self.broker.check_connectivity()
+        self.broker.reconcile()
+        self.assertEqual(self.broker.snapshot()['mode'], 'wifi')
+        self.assertFalse(self.broker.snapshot()['internetAvailable'])
+
     def test_credentials_stay_in_profile_and_are_not_returned(self):
         network.save_profile('Club; [wifi]', r'pass\word with spaces')
         self.assertEqual(network.saved_ssid(), 'Club; [wifi]')

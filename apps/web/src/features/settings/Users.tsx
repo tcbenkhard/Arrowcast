@@ -1,3 +1,4 @@
+import { TrashIcon } from '../../components/TrashIcon';
 import { t, message } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { useEffect, useRef, useState } from 'react';
@@ -71,7 +72,7 @@ export function Users({ token, onUnauthorized }: AuthProps) {
   }, [token, onUnauthorized, retry]);
 
   return (
-    <SettingsCard id="users" title={t('Users.users')}>
+    <SettingsCard id="users" icon="users" title={t('Users.users')}>
       <div className="section-header">
         <p className="muted">{t('Users.manage_users_and_their_access_to_arrowcast')}</p>
         <button ref={addButton} onClick={(event) => open('new', event.currentTarget)}>
@@ -319,12 +320,14 @@ function UserModal({
             <button
               type="button"
               className="danger"
+              aria-label={t('Users.remove_user')}
+              title={t('Users.remove_user')}
               onClick={() => {
                 void remove();
               }}
               disabled={pending}
             >
-              {t('Users.remove_user')}
+              <TrashIcon />
             </button>
           )}
           <button type="button" className="secondary" onClick={onClose} disabled={pending}>

@@ -88,3 +88,48 @@ test('overview offers retry on failure and returns to login on an expired sessio
   await expect(page.getByRole('heading', { name: 'Log in', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('expired');
 });
+
+test('click a range to edit its fields, persist changes, and remove it from the modal', async ({ page, request }) => {
+  const created = await request.post('/api/v1/admin/ranges', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { name: 'Editable browser range', supportedDistancesMeters: [18, 25], lanes: [{ number: 1 }, { number: 2 }] },
+  });
+  expect(created.status()).toBe(201);
+  await page.reload();
+  await page.getByRole('button', { name: 'Expand: Ranges', exact: true }).click();
+  const row = page.getByRole('row', { name: /Editable browser range/ });
+  await row.getByText('25 m', { exact: true }).click();
+  const modal = page.getByRole('dialog', { name: 'Edit range', exact: true });
+  await expect(modal.getByLabel('Name', { exact: true })).toHaveValue('Editable browser range');
+  await expect(modal.getByLabel('Supported distances (meters)')).toHaveValue('18, 25');
+  await expect(modal.getByLabel('Lane numbers')).toHaveValue('1, 2');
+  await page.keyboard.press('Escape');
+  const edit = page.getByRole('button', { name: 'Editable browser range', exact: true });
+  await expect(edit).toBeFocused();
+  await edit.press('Enter');
+  await modal.getByLabel('Name', { exact: true }).fill('Updated browser range');
+  await modal.getByLabel('Supported distances (meters)').fill('18, 30');
+  await modal.getByLabel('Lane numbers').fill('1-3');
+  await modal.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(modal).not.toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Expand: Ranges', exact: true }).click();
+  const updated = page.getByRole('row', { name: /Updated browser range/ });
+  await expect(updated).toContainText('30 m');
+  await expect(updated).toContainText('3 lanes');
+  await updated.click();
+  const remove = modal.getByRole('button', { name: 'Remove range', exact: true });
+  await expect(remove).toHaveCSS('background-color', 'rgb(185, 28, 28)');
+  await page.route('**/api/v1/admin/ranges/*', (route) => route.fulfill({ status: 409, json: {} }));
+  await remove.click();
+  await expect(modal.getByRole('alert')).toContainText('used by a competition');
+  await expect(modal.getByLabel('Name', { exact: true })).toHaveValue('Updated browser range');
+  await page.unroute('**/api/v1/admin/ranges/*');
+  await remove.click();
+  await expect(modal).not.toBeVisible();
+  await expect(updated).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused();
+  await page.reload();
+  await page.getByRole('button', { name: 'Expand: Ranges', exact: true }).click();
+  await expect(updated).toHaveCount(0);
+});

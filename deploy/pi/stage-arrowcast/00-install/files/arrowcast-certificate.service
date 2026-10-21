@@ -1,0 +1,14 @@
+[Unit]
+Description=Renew Arrowcast public scoring certificate
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/arrowcast/public-access.py --renew
+TimeoutStartSec=600
+UMask=0077
+ProtectHome=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/arrowcast-public /etc/nginx /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt /run/nginx.pid /var/log/nginx /var/lib/nginx

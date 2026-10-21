@@ -1,6 +1,6 @@
 [Unit]
 Description=Arrowcast signed application update broker
-After=network.target
+After=network.target nginx.service
 Before=arrowcast.service
 
 [Service]
@@ -18,7 +18,7 @@ TimeoutStopSec=120
 ProtectHome=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ReadWritePaths=/opt/arrowcast /var/lib/arrowcast /var/lib/arrowcast-update
+ReadWritePaths=/opt/arrowcast /var/lib/arrowcast /var/lib/arrowcast-update /etc/systemd/system /etc/nginx /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt /var/lib/arrowcast-public /run/nginx.pid /var/log/nginx /var/lib/nginx
 
 [Install]
 WantedBy=multi-user.target

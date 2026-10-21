@@ -1,4 +1,5 @@
 nginx-light
+certbot
 network-manager
 dnsmasq-base
 rfkill

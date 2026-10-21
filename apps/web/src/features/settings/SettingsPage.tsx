@@ -1,12 +1,12 @@
-import { t, message } from '../../i18n';
-import { managementRequest } from '../../lib/http';
 import { useEffect, useRef, useState } from 'react';
-import { TargetTypesPage } from '../target-types/TargetTypesPage';
+import { message, t } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { RangesPage } from '../ranges/RangesPage';
-import { SettingsCard } from './SettingsCard';
-import { ArrowcastHostname } from './ArrowcastHostname';
-import { Updates } from './Updates';
+import { TargetTypesPage } from '../target-types/TargetTypesPage';
 import { Network } from './Network';
+import { PublicAccess } from './PublicAccess';
+import { SettingsCard } from './SettingsCard';
+import { Updates } from './Updates';
 import { Users } from './Users';
 
 interface ImportState {
@@ -105,8 +105,8 @@ export function SettingsPage({ token, onUnauthorized }: { token: string; onUnaut
         <Users token={token} onUnauthorized={onUnauthorized} />
         <Updates token={token} onUnauthorized={onUnauthorized} />
         <Network token={token} onUnauthorized={onUnauthorized} />
-        <ArrowcastHostname />
-        <SettingsCard id="participant-import" title={t('SettingsPage.deelnemers_importeren')}>
+        <PublicAccess token={token} onUnauthorized={onUnauthorized} />
+        <SettingsCard id="participant-import" icon="import" title={t('SettingsPage.deelnemers_importeren')}>
           <p>{t('SettingsPage.importeer_deelnemers_en_verenigingen_uit_de_nieuwste_regiocompetities_van')}</p>
           <button
             disabled={!state || state.available === false || pending || running || !!error}

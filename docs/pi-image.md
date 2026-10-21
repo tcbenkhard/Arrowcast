@@ -67,9 +67,28 @@ validation are still required before claiming these as supported minimums.
 6. Alternatively, connect via the same Ethernet/router network and open
    `http://arrowcast.local/admin`, or use the Ethernet address shown on HDMI.
    The fixed `10.42.0.1` address is for devices joined to **ArrowCast**.
-7. Before printing lane QR codes, set the scoring website address to the address
-   reachable by phones on this network: `http://10.42.0.1` for hotspot scoring.
-   Never use `localhost`. All scorers should join the same chosen network.
+7. On the ArrowCast hotspot, lane QR codes automatically use `http://10.42.0.1`,
+   overriding the saved club scoring address for this session. All scorers should
+   join **ArrowCast** before scanning. On club Wi-Fi or Ethernet, the saved public
+   HTTPS address or internal scoring website address applies. Never use `localhost`.
+
+## Taking the Pi to a tournament
+
+Save the club Wi-Fi credentials once in Settings. Away from the club, plug the Pi
+into power without Ethernet. When the saved Wi-Fi cannot be reached, it starts
+**ArrowCast** automatically. Join that network, keep the connection when your phone
+reports no internet, and open `http://10.42.0.1/admin`. Scoring runs locally and QR
+codes use the hotspot address, including a reminder to join ArrowCast.
+
+Club Wi-Fi credentials, the internal scoring address, and public HTTPS settings
+are retained. Back at the club, power up again: the Pi retries the saved Wi-Fi
+automatically and QR codes use the club settings again. Internet availability
+alone does not decide the network mode: club Wi-Fi still works during an internet
+outage. A failed Wi-Fi attempt is not repeatedly retried during tournament scoring.
+
+Reopen the competition and reprint QR sheets for the network in use. An already
+printed QR cannot change its address; switching networks changes the address in
+new printouts without replacing lane access tokens or invalidating scoring grants.
 
 ## ArrowCast Wi-Fi
 
@@ -90,7 +109,7 @@ validation are still required before claiming these as supported minimums.
   root-only NetworkManager profile and are never returned to the browser.
 - Joining Wi-Fi replaces the hotspot. Connect your phone/computer to the same
   network and reopen `http://arrowcast.local/admin`, or use the Pi address shown
-  on HDMI. Update the scoring website address before printing new QR codes.
+  on HDMI. The saved club scoring address applies again automatically.
   On failure, reconnect to **ArrowCast** at `http://10.42.0.1/admin` and correct
   the settings. Failed connections are retried after saving settings, rebooting,
   or connecting and unplugging Ethernet, avoiding repeated scoring interruptions.
@@ -268,18 +287,100 @@ replace the credentials. Recovery artifacts live under `/var/lib/arrowcast-updat
 with the database backup readable only by root. Prior application directories
 are retained; monitor available storage over repeated upgrades.
 
-Wi-Fi configuration and Ethernet priority require an image containing the network
-broker. Application updates alone cannot install that service on older images.
+Images built with public scoring support include release-managed system files.
+Signed updates contain `system/` alongside the application: the updater, network
+and public HTTPS brokers, their systemd units, renewal timer and nginx configuration.
+Stable broker entry points follow `/opt/arrowcast/current`. Activation applies the
+fixed set of configuration files, checks nginx, reloads systemd, regenerates public
+scoring configuration from device settings and restarts affected services. After
+the application health check succeeds, the updater restarts itself from the new
+release. Rollback reapplies the previous release's system configuration as well
+as restoring the database. Interrupted rollback retains the recovery journal.
 
-Updates cover application code and its bundled Node runtime. The systemd units,
-updater, nginx configuration, kernel, firmware and OS packages belong to the base
-image and require a separate maintenance procedure. This is not a full OS A/B
-update system. Simulated recovery tests do not replace physical power-loss,
-boot and SD-card testing before production use.
+Reflash older images once to acquire this update infrastructure. Keep the
+`system/system-apply.py` reconciliation contract compatible with the preceding
+release, including power-loss recovery. Updates preserve `/var/lib/arrowcast-public`
+and `/etc/letsencrypt`, including device settings, ACME account and private keys.
+Future system helpers execute only from signature-verified, root-owned packages;
+the browser cannot supply scripts, paths, nginx snippets or download URLs.
+
+Kernel, firmware and OS package upgrades still require separate maintenance.
+This is not a full OS A/B update system. Simulated recovery tests do not replace
+physical power-loss, boot and SD-card testing before production use.
 
 For local builds, pass `ARROWCAST_UPDATE_REPOSITORY=owner/repository` and the
 public PEM in `ARROWCAST_UPDATE_PUBLIC_KEY` through sudo alongside
 `ARROWCAST_IMAGE_VERSION`. Private signing keys are used only in the release job.
+
+## Public scoring with HTTPS
+
+Public scoring is disabled by default. Local administration continues at
+`http://arrowcast.local` (port 80). In **Settings > Public score entry**, an
+administrator can enter a public DNS hostname and contact email, then activate
+HTTPS. Activation accepts the [Let's Encrypt subscriber agreement](https://letsencrypt.org/repository/).
+
+The management listener rejects public and unknown hostnames with HTTP 404. It
+accepts `arrowcast.local`, `arrowcast`, `localhost`, private IPv4 addresses,
+loopback, IPv6 ULA and link-local addresses. An additional source-address rule
+allows administration only from private, loopback and link-local networks. LAN
+clients using global IPv6 source addresses should use the Pi's private IPv4
+address for management. The dedicated public ports remain the recommended router
+targets, since router source NAT or another proxy can hide an external source.
+
+The activation button enables public scoring directly; an active configuration
+has a separate Disable button. Failed requests retain the submitted hostname and
+email and show a warning identifying DNS, forwarding, connection, rate-limit or
+service configuration problems, with the CA's technical diagnostic available.
+
+Before activating:
+
+1. Reserve the Pi's local IP using DHCP on your router.
+2. Point the public hostname's DNS A record to your public IPv4 address. If using
+   an AAAA record, IPv6 must also reach the appropriate public listeners; remove
+   a stale or unreachable AAAA record. Use dynamic DNS for a changing public IP.
+3. Prefer forwarding external TCP **80 to Pi port 8080**, and external TCP **443 to
+   Pi port 8443**. The configured public hostname is also served on standard ports
+   80 and 443, with the same public path restrictions. This allows ACME validation
+   when the router forwards port 80 directly; it does not expose management for
+   the public hostname. Keep the hostname intact when using another reverse proxy.
+4. Ensure inbound connections are supported by your ISP (ordinary IPv4 forwarding
+   does not work behind CGNAT), and the Pi has working internet access and time.
+
+The public HTTP listeners serve `/.well-known/acme-challenge/` and redirect score
+URLs to the fixed public HTTPS hostname on external port 443. Other HTTP paths,
+including `/admin` and the login API, return 404. On port 80 the public virtual
+host matches only the configured public hostname, keeping local administration
+separate. HTTPS on 443 and 8443 serves `/scores`, `/scores/`, `/assets/` and
+`/api/v1/scoring/`; all other paths return 404. `/scoring/` only redirects existing
+printed QR links to `/scores/`, preserving the QR fragment and query parameters.
+The scoring API keeps its existing cookie path and QR authentication. The `/scores`
+landing page asks the visitor to scan a lane QR and contains no administration link.
+
+The root-owned `arrowcast-public.service` accepts validated settings through a
+group-restricted Unix socket. Certbot uses HTTP-01 webroot validation. Settings
+show activation progress, certificate expiry, last check and configuration or
+renewal failures. Failed setup restores the previous nginx configuration and
+settings. Certificates and account credentials are never returned to the browser.
+
+`arrowcast-certificate.timer` checks renewal twice daily with a randomized delay
+and reloads nginx after renewal. External port 80 and DNS must remain usable for
+renewal; the Pi needs regular internet access even between competitions. Failed
+renewal preserves a still-valid certificate. After expiry, retry HTTPS activation.
+Disabling public scoring removes both public listeners but retains certificates.
+
+Outside hotspot mode, QR codes automatically use the configured public HTTPS hostname across admin
+browsers, including competition managers. Reprint existing QR codes after changing
+the hostname. The browser's existing **Arrowcast hostname** preference is used only
+when public scoring is disabled. Hotspot mode temporarily overrides both with
+`http://10.42.0.1` without changing either setting. Phones on the LAN need router hairpin NAT or local
+DNS resolving the public hostname to a suitable HTTPS endpoint to use the same
+public URL; ordinary mobile-data access does not require this.
+
+For troubleshooting, inspect `journalctl -u arrowcast-public.service`,
+`journalctl -u arrowcast-certificate.service` and `/var/log/letsencrypt/letsencrypt.log`.
+Do not share private keys or ACME account credentials. Test access from mobile data:
+score entry should work with a valid QR, while `/admin` and `/api/v1/admin/me`
+must return 404. Verify `http://arrowcast.local/admin` still works locally.
 
 ## Local builder and troubleshooting
 

@@ -146,3 +146,79 @@ test('database enforces lane numbers per range, distance uniqueness and foreign 
     database.close();
   }
 });
+
+test('range edits retain lane identities, reject referenced removals atomically, and delete unused ranges', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'arrowcast-range-edit-'));
+  const databasePath = join(directory, 'test.sqlite');
+  const app = buildApp({ jwtSecret, databasePath });
+  let client: SQLite.Database | undefined;
+  t.after(async () => {
+    client?.close();
+    await app.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const login = await loginAdmin(app);
+  const headers = { authorization: `Bearer ${login.json().token}` };
+  const created = (await app.inject({ method: 'POST', url: '/api/v1/admin/ranges', headers, payload })).json();
+  const url = `/api/v1/admin/ranges/${created.id}`;
+  for (const method of ['PUT', 'DELETE'] as const) {
+    assert.equal((await app.inject({ method, url, ...(method === 'PUT' ? { payload } : {}) })).statusCode, 401);
+    assert.equal(
+      (
+        await app.inject({
+          method,
+          url: '/api/v1/admin/ranges/missing',
+          headers,
+          ...(method === 'PUT' ? { payload } : {}),
+        })
+      ).statusCode,
+      404,
+    );
+  }
+  assert.equal(
+    (await app.inject({ method: 'PUT', url, headers, payload: { ...payload, lanes: [{ number: 1 }, { number: 1 }] } }))
+      .statusCode,
+    400,
+  );
+  client = new SQLite(databasePath);
+  client.pragma('foreign_keys = ON');
+  client
+    .prepare(`INSERT INTO competitions (id, name, date, starting_time, ending_time, range_id)
+    VALUES ('competition', 'Test', '2026-10-21', '09:00', '10:00', ?)`)
+    .run(created.id);
+  client
+    .prepare(`INSERT INTO competition_lanes (competition_id, range_id, lane_id, distance_meters)
+    VALUES ('competition', ?, ?, 18)`)
+    .run(created.id, created.lanes[0].id);
+  for (const edit of [
+    { ...payload, name: 'Should roll back', lanes: [{ number: 2 }] },
+    { ...payload, name: 'Should roll back', supportedDistancesMeters: [25] },
+  ]) {
+    assert.equal((await app.inject({ method: 'PUT', url, headers, payload: edit })).statusCode, 409);
+    assert.deepEqual((await app.inject({ url: '/api/v1/admin/ranges', headers })).json(), [created]);
+  }
+  assert.equal((await app.inject({ method: 'DELETE', url, headers })).statusCode, 409);
+  const updated = await app.inject({
+    method: 'PUT',
+    url,
+    headers,
+    payload: {
+      name: ' Updated ',
+      supportedDistancesMeters: [18, 30],
+      lanes: [{ number: 1 }, { number: 3 }],
+    },
+  });
+  assert.equal(updated.statusCode, 200);
+  assert.equal(updated.json().name, 'Updated');
+  assert.equal(updated.json().lanes[0].id, created.lanes[0].id);
+  assert.deepEqual(updated.json().supportedDistancesMeters, [18, 30]);
+  assert.deepEqual(
+    updated.json().lanes.map((lane: { number: number }) => lane.number),
+    [1, 3],
+  );
+  client.prepare("DELETE FROM competitions WHERE id = 'competition'").run();
+  assert.equal((await app.inject({ method: 'DELETE', url, headers })).statusCode, 204);
+  for (const table of ['ranges', 'lanes', 'range_distances']) {
+    assert.deepEqual(client.prepare(`SELECT count(*) AS count FROM ${table}`).get(), { count: 0 });
+  }
+});

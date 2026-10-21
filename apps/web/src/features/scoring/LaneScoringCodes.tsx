@@ -1,8 +1,8 @@
-import { t, message, getLanguage } from '../../i18n';
-import { managementRequest } from '../../lib/http';
-import { useEffect, useState } from 'react';
-import QRCode from 'qrcode';
 import type { LaneQrCode } from '@arrowcast/contracts';
+import QRCode from 'qrcode';
+import { useEffect, useState } from 'react';
+import { getLanguage, message, t } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { getArrowcastHostname } from '../settings/hostnameStorage';
 
 export function LaneScoringCodes({
@@ -27,10 +27,43 @@ export function LaneScoringCodes({
   const [loaded, setLoaded] = useState(codes.length > 0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const siteUrl = getArrowcastHostname();
+  const [siteUrl, setSiteUrl] = useState<string | null>(null);
+  const [hotspot, setHotspot] = useState(false);
   const [images, setImages] = useState<{ code: LaneQrCode; url: string; image: string }[]>([]);
   const [qrError, setQrError] = useState('');
   const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    setSiteUrl(null);
+    async function refresh() {
+      try {
+        const response = await managementRequest('/api/v1/admin/scoring-origin', token, {
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error();
+        const value = (await response.json()) as { origin: string | null; hotspot?: boolean };
+        if (!controller.signal.aborted) {
+          setSiteUrl(value.origin || getArrowcastHostname());
+          setHotspot(value.hotspot === true);
+          setQrError('');
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setSiteUrl(null);
+          setQrError(t('PublicAccess.unavailable'));
+        }
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(() => void refresh(), 4000);
+      }
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [token, retry]);
   useEffect(() => {
     if (codes.length) {
       setHasCodes(true);
@@ -98,6 +131,7 @@ export function LaneScoringCodes({
   useEffect(() => {
     let cancelled = false;
     setImages([]);
+    if (!siteUrl) return;
     setQrError('');
     void (async () => {
       try {
@@ -106,7 +140,7 @@ export function LaneScoringCodes({
           throw new Error(t('LaneScoringCodes.enter_an_http_or_https_website_address'));
         const results = await Promise.all(
           codes.map(async (code) => {
-            const url = new URL(code.path, base.origin).href;
+            const url = new URL(code.path.replace(/^\/scoring\//, '/scores/'), base.origin).href;
             return {
               code,
               url,
@@ -192,9 +226,7 @@ export function LaneScoringCodes({
         {codes.length > 0 && (
           <>
             <div className="qr-controls">
-              <p className="muted">
-                {t('LaneScoringCodes.set_the_scoring_website_address_in_settings_under_arrowcast')}
-              </p>
+              <p className="muted">{t('PublicAccess.qrHelp')}</p>
               <button
                 className="secondary"
                 disabled={images.length !== codes.length || !!qrError}
@@ -203,9 +235,12 @@ export function LaneScoringCodes({
                 {t('LaneScoringCodes.print_lane_qr_codes')}
               </button>
               {qrError && (
-                <p className="error" role="alert">
-                  {message(qrError)}
-                </p>
+                <>
+                  <p className="error" role="alert">
+                    {message(qrError)}
+                  </p>
+                  <button onClick={() => setRetry((value) => value + 1)}>{t('CompetitionDetailPage.try_again')}</button>
+                </>
               )}
             </div>
             <div className="lane-qr-grid">
@@ -222,6 +257,7 @@ export function LaneScoringCodes({
                     height={240}
                   />
                   <p>{t('LaneScoringCodes.scan_to_enter_scores')}</p>
+                  {hotspot && <p>{t('PublicAccess.hotspotJoin')}</p>}
                   <a className="qr-controls" href={url} target="_blank" rel="noreferrer">
                     {t('scoring.openLane', { number: code.laneNumber })}
                   </a>

@@ -1,0 +1,21 @@
+[Unit]
+Description=Arrowcast public scoring HTTPS settings broker
+After=network.target nginx.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/arrowcast/public-access.py
+RuntimeDirectory=arrowcast-public
+RuntimeDirectoryMode=0755
+StateDirectory=arrowcast-public
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=240
+ProtectHome=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/arrowcast-public /etc/nginx /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt /run/nginx.pid /var/log/nginx /var/lib/nginx
+
+[Install]
+WantedBy=multi-user.target

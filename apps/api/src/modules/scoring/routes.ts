@@ -192,7 +192,7 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
         .map(({ token, id, ...grant }) => ({
           ...grant,
           grantId: id,
-          ...(token ? { path: `/scoring/${request.params.competitionId}/${grant.laneId}/${id}#token=${token}` } : {}),
+          ...(token ? { path: `/scores/${request.params.competitionId}/${grant.laneId}/${id}#token=${token}` } : {}),
         }));
     },
   );

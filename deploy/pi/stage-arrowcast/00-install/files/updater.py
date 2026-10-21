@@ -185,12 +185,21 @@ def switch_release(target):
     sync_dir(APP)
 
 
+def apply_system():
+    script = APP / 'current/system/system-apply.py'
+    if script.exists():
+        subprocess.run(['python3', str(script)], check=True, timeout=600)
+        os.sync()  # Persist system files before committing or clearing the recovery journal.
+
+
 def recover():
     journal_path = STATE / 'transaction.json'
     if journal_path.exists():
         journal = json.loads(journal_path.read_text())
         if journal['phase'] != 'committed':
             switch_release(journal['previous'])
+            if journal.get('system'):
+                apply_system()
             if journal['phase'] == 'backed-up':
                 # Service is stopped, so no SQLite connection retains the old WAL.
                 for suffix in ('-wal', '-shm'):
@@ -282,7 +291,10 @@ def install():
                 os.fsync(stream.fileno())
             journal['phase'] = 'backed-up'
             atomic_json(STATE / 'transaction.json', journal)
+            journal['system'] = (destination / 'system/system-apply.py').exists()
+            atomic_json(STATE / 'transaction.json', journal)
             switch_release(destination)
+            apply_system()
             subprocess.run(['systemctl', 'reset-failed', 'arrowcast.service'], check=False)
             subprocess.run(['systemctl', 'start', 'arrowcast.service'], check=True, timeout=90)
             for _ in range(60):
@@ -301,6 +313,9 @@ def install():
             transaction = False
             candidate = None
             set_status('idle', 'Update installed successfully.')
+            if journal.get('system'):
+                # Load the updater from the newly committed release. Never interrupt rollback.
+                subprocess.run(['systemctl', '--no-block', 'restart', 'arrowcast-update.service'], check=True)
     except Exception as error:
         try:
             if transaction:

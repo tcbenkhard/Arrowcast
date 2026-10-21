@@ -1,9 +1,10 @@
-import { t, message } from '../../i18n';
+import type { ScoringContext, ScoringMutation } from '@arrowcast/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import type { ScoringContext, ScoringMutation } from '@arrowcast/contracts';
 import { LanguageSelect } from '../../components/LanguageSelect';
+import { message, t } from '../../i18n';
 import { HttpError, requireJson, scoringRequest } from '../../lib/http';
+
 const headers = { 'Content-Type': 'application/json', 'X-Arrowcast-Scoring': '1' };
 const buttons = ['10', '9', '8', '7', '6', '5', '4', '3', '2', '1', 'M'];
 const arrowValue = (symbol: string | null) => (symbol === 'M' || symbol === null ? 0 : Number(symbol));
@@ -303,7 +304,6 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
   const entryDisabled = disabled || roundBlocked;
   return (
     <main className="scoring-page">
-      <LanguageSelect />
       {!context && !error && (
         <div className="panel">
           <p role="status">{t('ScoringPage.opening_lane_scores')}</p>
@@ -503,6 +503,9 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
           )}
         </>
       )}
+      <footer className="scoring-footer">
+        <LanguageSelect flags />
+      </footer>
     </main>
   );
 }
@@ -528,16 +531,22 @@ function ParticipantScores({
     <div className="table-scroll participant-scorecard">
       <h3>{t('ScoringPage.scoresheet')}</h3>
       <table aria-label={t('ScoringPage.participant_scores')}>
-        <thead className="visually-hidden">
+        <thead>
           <tr>
-            <th scope="col">{t('ScoringPage.round')}</th>
+            <th scope="col">
+              <span className="visually-hidden">{t('ScoringPage.round')}</span>
+            </th>
             {Array.from({ length: context.competition.arrowsPerRound }, (_, index) => (
               <th scope="col" key={index}>
-                {t('scoring.arrowHeading', { number: index + 1 })}
+                <span className="visually-hidden">{t('scoring.arrowHeading', { number: index + 1 })}</span>
               </th>
             ))}
-            <th scope="col">{t('ScoringPage.round_total_295')}</th>
-            <th scope="col">{t('ScoringPage.cumulative_total')}</th>
+            <th scope="col" aria-label={t('ScoringPage.round_total_295')}>
+              {t('scoring.subtotalHeading')}
+            </th>
+            <th scope="col" aria-label={t('ScoringPage.cumulative_total')}>
+              {t('scoring.totalHeading')}
+            </th>
           </tr>
         </thead>
         <tbody>

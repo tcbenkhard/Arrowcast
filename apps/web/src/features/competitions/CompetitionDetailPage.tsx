@@ -1,3 +1,5 @@
+import { Icon } from '../../components/Icon';
+import { TrashIcon } from '../../components/TrashIcon';
 import { t, message } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { competitionStatuses } from './status';
@@ -283,27 +285,31 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
                     <button
                       ref={editButton}
                       type="button"
-                      className="secondary"
+                      className="secondary icon-only-button"
+                      aria-label={t('CompetitionDetailPage.edit')}
+                      title={t('CompetitionDetailPage.edit')}
                       disabled={changingStatus}
                       onClick={() => {
                         setDetailsNotice('');
                         setDetailsAction('edit');
                       }}
                     >
-                      {t('CompetitionDetailPage.edit')}
+                      <Icon name="pencil" />
                     </button>
                   )}
                   <button
                     ref={removeButton}
                     type="button"
-                    className="danger"
+                    className="danger icon-only-button"
+                    aria-label={t('CompetitionDetailPage.remove')}
+                    title={t('CompetitionDetailPage.remove')}
                     disabled={changingStatus}
                     onClick={() => {
                       setDetailsNotice('');
                       setDetailsAction('remove');
                     }}
                   >
-                    {t('CompetitionDetailPage.remove')}
+                    <TrashIcon />
                   </button>
                 </div>
               )}
@@ -364,11 +370,13 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
               <div className="competition-details-actions">
                 <button
                   type="button"
+                  className="with-icon"
                   disabled={changingStatus || !validationReady}
                   onClick={() => {
                     void changeStatus(nextStatus);
                   }}
                 >
+                  <Icon name={nextStatus === 'Check-in' ? 'checklist' : nextStatus === 'Active' ? 'play' : 'finish'} />
                   {t(transitionLabels[nextStatus])}
                 </button>
               </div>

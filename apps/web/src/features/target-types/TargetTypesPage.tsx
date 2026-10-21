@@ -150,7 +150,7 @@ export function TargetTypesPage({ token, onUnauthorized }: AuthProps) {
   }
 
   return (
-    <SettingsCard id="target-types" title={t('TargetTypesPage.target_types')}>
+    <SettingsCard id="target-types" icon="target" title={t('TargetTypesPage.target_types')}>
       <p className="muted">{t('TargetTypesPage.manage_the_target_names_available_for_competition_lanes')}</p>
       <form
         className="target-type-create"

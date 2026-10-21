@@ -1,3 +1,4 @@
+import { TrashIcon } from '../../components/TrashIcon';
 import { t, message } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { useModal } from '../../hooks/useModal';
@@ -25,16 +26,18 @@ export function RangesPage({ token, onUnauthorized }: AuthProps) {
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Range | null>(null);
+  const editButton = useRef<HTMLButtonElement | null>(null);
   const [notice, setNotice] = useState('');
   const addButton = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
 
   useEffect(() => {
-    if (!adding && restoreFocus.current) {
-      addButton.current?.focus();
+    if (!adding && !editing && restoreFocus.current) {
+      (editButton.current?.isConnected ? editButton.current : addButton.current)?.focus();
       restoreFocus.current = false;
     }
-  }, [adding]);
+  }, [adding, editing]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,16 +70,18 @@ export function RangesPage({ token, onUnauthorized }: AuthProps) {
   function closeModal() {
     restoreFocus.current = true;
     setAdding(false);
+    setEditing(null);
   }
 
   return (
-    <SettingsCard id="ranges" title={t('RangesPage.ranges')}>
+    <SettingsCard id="ranges" icon="range" title={t('RangesPage.ranges')}>
       <div className="section-header">
         <p className="muted">{t('RangesPage.manage_your_shooting_ranges_distances_and_lanes')}</p>
         <button
           ref={addButton}
           onClick={() => {
             setNotice('');
+            editButton.current = null;
             setAdding(true);
           }}
           disabled={loading || !!error}
@@ -117,8 +122,20 @@ export function RangesPage({ token, onUnauthorized }: AuthProps) {
             </thead>
             <tbody>
               {ranges.map((range) => (
-                <tr key={range.id}>
-                  <th scope="row">{range.name}</th>
+                <tr
+                  key={range.id}
+                  onClick={(event) => {
+                    setNotice('');
+                    editButton.current = event.currentTarget.querySelector('button');
+                    setEditing(range);
+                  }}
+                  className="range-edit-row"
+                >
+                  <th scope="row">
+                    <button type="button" className="range-edit-button">
+                      {range.name}
+                    </button>
+                  </th>
                   <td>
                     <div className="distance-list">
                       {range.supportedDistancesMeters.map((distance) => (
@@ -140,14 +157,22 @@ export function RangesPage({ token, onUnauthorized }: AuthProps) {
           </table>
         </div>
       )}
-      {adding && (
-        <AddRangeModal
+      {(adding || editing) && (
+        <RangeModal
+          range={editing}
+          onRemoved={() => {
+            setRanges((current) => current.filter((range) => range.id !== editing!.id));
+            setNotice(t('RangesPage.range_removed', { p0: editing!.name }));
+            closeModal();
+          }}
           token={token}
           onUnauthorized={onUnauthorized}
           onClose={closeModal}
           onCreated={(range) => {
-            setRanges((current) => [...current, range].sort((a, b) => a.name.localeCompare(b.name)));
-            setNotice(t('RangesPage.range_added', { p0: range.name }));
+            setRanges((current) =>
+              [...current.filter((value) => value.id !== range.id), range].sort((a, b) => a.name.localeCompare(b.name)),
+            );
+            setNotice(t(editing ? 'RangesPage.range_updated' : 'RangesPage.range_added', { p0: range.name }));
             closeModal();
           }}
         />
@@ -173,18 +198,22 @@ function parseLaneNumbers(value: string): number[] {
   return numbers;
 }
 
-function AddRangeModal({
+function RangeModal({
+  range,
+  onRemoved,
   token,
   onUnauthorized,
   onClose,
   onCreated,
 }: AuthProps & {
+  range: Range | null;
+  onRemoved: () => void;
   onClose: () => void;
   onCreated: (range: Range) => void;
 }) {
-  const [name, setName] = useState('');
-  const [distances, setDistances] = useState('');
-  const [laneNumbers, setLaneNumbers] = useState('');
+  const [name, setName] = useState(range?.name ?? '');
+  const [distances, setDistances] = useState(range?.supportedDistancesMeters.join(', ') ?? '');
+  const [laneNumbers, setLaneNumbers] = useState(range?.lanes.map((lane) => lane.number).join(', ') ?? '');
   const [pending, setPending] = useState(false);
   const dialog = useModal(onClose, pending);
   const [error, setError] = useState('');
@@ -211,24 +240,32 @@ function AddRangeModal({
     }
     setPending(true);
     try {
-      const response = await managementRequest('/api/v1/admin/ranges', token, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          supportedDistancesMeters,
-          lanes: numbers.map((number) => ({ number })),
-        }),
-      });
+      const response = await managementRequest(
+        range ? `/api/v1/admin/ranges/${range.id}` : '/api/v1/admin/ranges',
+        token,
+        {
+          method: range ? 'PUT' : 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name.trim(),
+            supportedDistancesMeters,
+            lanes: numbers.map((number) => ({ number })),
+          }),
+        },
+      );
       if (response.status === 401) {
         onUnauthorized(t(expiredMessage));
         return;
       }
       if (!response.ok) {
         setError(
-          response.status === 400
-            ? t('RangesPage.check_the_name_distances_and_lane_numbers_and_try')
-            : t('RangesPage.could_not_save_the_range_please_try_again'),
+          response.status === 409
+            ? t('RangesPage.edit_conflict')
+            : response.status === 404
+              ? t('RangesPage.not_found')
+              : response.status === 400
+                ? t('RangesPage.check_the_name_distances_and_lane_numbers_and_try')
+                : t('RangesPage.could_not_save_the_range_please_try_again'),
         );
         return;
       }
@@ -240,9 +277,41 @@ function AddRangeModal({
     }
   }
 
+  async function remove() {
+    if (!range || pending) return;
+    setPending(true);
+    setError('');
+    try {
+      const response = await managementRequest(`/api/v1/admin/ranges/${range.id}`, token, {
+        method: 'DELETE',
+      });
+      if (response.status === 401) {
+        onUnauthorized(t(expiredMessage));
+        return;
+      }
+      if (!response.ok) {
+        setError(
+          t(
+            response.status === 409
+              ? 'RangesPage.remove_conflict'
+              : response.status === 404
+                ? 'RangesPage.not_found'
+                : 'RangesPage.remove_failed',
+          ),
+        );
+        return;
+      }
+      onRemoved();
+    } catch {
+      setError(t('RangesPage.remove_failed'));
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <dialog ref={dialog} className="range-modal" aria-labelledby="add-range-title">
-      <h2 id="add-range-title">{t('RangesPage.add_range')}</h2>
+      <h2 id="add-range-title">{t(range ? 'RangesPage.edit_range' : 'RangesPage.add_range')}</h2>
       <p className="muted">{t('RangesPage.set_up_a_shooting_range_and_its_physical_lanes')}</p>
       <form
         onSubmit={(event) => {
@@ -292,11 +361,25 @@ function AddRangeModal({
           </p>
         )}
         <div className="modal-actions">
+          {range && (
+            <button
+              type="button"
+              className="danger"
+              disabled={pending}
+              onClick={() => void remove()}
+              aria-label={t('RangesPage.remove_range')}
+              title={t('RangesPage.remove_range')}
+            >
+              <TrashIcon />
+            </button>
+          )}
           <button type="button" className="secondary" onClick={onClose} disabled={pending}>
             {t('PasswordChangeForm.cancel')}
           </button>
           <button type="submit" disabled={pending}>
-            {pending ? t('CompetitionsPage.saving') : t('RangesPage.add_range')}
+            {pending
+              ? t('CompetitionsPage.saving')
+              : t(range ? 'CompetitionDetailsModal.save_changes' : 'RangesPage.add_range')}
           </button>
         </div>
       </form>

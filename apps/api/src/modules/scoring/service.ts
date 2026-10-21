@@ -186,7 +186,7 @@ export function issueLaneCodes(db: Database, competitionId: string): LaneQrCode[
         ...lane,
         grantId,
         expiresAt,
-        path: `/scoring/${competitionId}/${lane.laneId}/${grantId}#token=${token}`,
+        path: `/scores/${competitionId}/${lane.laneId}/${grantId}#token=${token}`,
       };
     });
 }

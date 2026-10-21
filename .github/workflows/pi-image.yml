@@ -52,7 +52,7 @@ jobs:
       - name: Check image scripts
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck
+          sudo apt-get install -y shellcheck nginx-light
           find deploy/pi -name '*.sh' -print0 | xargs -0 -n1 bash -n
           shellcheck -x deploy/pi/build-image.sh deploy/pi/stage-arrowcast/prerun.sh \
             deploy/pi/stage-arrowcast/00-install/00-run.sh \

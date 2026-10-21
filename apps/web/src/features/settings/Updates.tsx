@@ -75,7 +75,7 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
   const updateActive =
     state?.status === 'installing' || (!!state?.availableVersion && ['available', 'failed'].includes(state.status));
   return (
-    <SettingsCard id="updates" title="Updates" forceExpanded={updateActive}>
+    <SettingsCard id="updates" icon="download" title="Updates" forceExpanded={updateActive}>
       {state && <p>{t('updates.version', { version: state.currentVersion })}</p>}
       <div aria-live="polite">
         {!state && !error && <p>{t('Updates.reading_update_status')}</p>}

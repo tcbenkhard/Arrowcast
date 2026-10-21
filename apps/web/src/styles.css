@@ -113,6 +113,17 @@ button.danger:hover:not(:disabled) {
   justify-content: space-between;
   gap: 1rem;
 }
+.admin-header h1 {
+  margin: 0;
+  line-height: 1;
+}
+.arrowcast-logo {
+  display: inline-block;
+  width: clamp(12rem, 28vw, 17rem);
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
 .profile-avatar {
   display: grid;
   place-items: center;
@@ -177,6 +188,33 @@ button.danger:hover:not(:disabled) {
 .language-select select {
   width: auto;
 }
+.scoring-footer {
+  margin-top: 2rem;
+}
+.language-flags {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+.language-flags button {
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  min-height: 44px;
+  padding: 0.5rem;
+  border-color: transparent;
+  background: transparent;
+}
+.language-flags button[aria-pressed="true"] {
+  border-color: #1e40af;
+  background: #eff6ff;
+}
+.language-flags button:hover {
+  background: #e2e8f0;
+}
+.language-flags svg {
+  box-shadow: 0 0 0 1px #0f172a26;
+}
 .panel {
   margin-top: 1.5rem;
   padding: 1rem 1.5rem 1.5rem;
@@ -193,7 +231,7 @@ button.danger:hover:not(:disabled) {
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
-  margin-top: 1.5rem;
+  margin-top: 0.25rem;
   border-bottom: 1px solid #d1d5db;
 }
 .admin-nav a {
@@ -280,10 +318,18 @@ button.danger:hover:not(:disabled) {
   margin-bottom: 0;
 }
 .collapsible-panel {
-  padding-block: 1rem;
+  position: relative;
+  padding-block: 0.5rem;
 }
 .collapsible-panel-header {
   margin-bottom: 0;
+}
+.collapsible-panel-header:has(.panel-toggle[aria-expanded="true"]) {
+  position: relative;
+}
+.collapsible-panel-header :is(a, button, input, select, textarea):not(.panel-toggle) {
+  position: relative;
+  z-index: 1;
 }
 .collapsible-panel-header h3 {
   margin: 0;
@@ -305,6 +351,15 @@ button.danger:hover:not(:disabled) {
 }
 .panel-toggle:hover {
   background: #f1f5f9;
+}
+.panel-toggle:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 0.75rem;
+}
+.panel-toggle[aria-expanded="true"]::after {
+  inset: -0.5rem -1.5rem 0;
 }
 .panel-caret {
   width: 1.25rem;
@@ -727,6 +782,40 @@ input.lane-select-checkbox {
   padding-left: 1.25rem;
 }
 
+.settings-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #f59e0b;
+  border-left-width: 4px;
+  border-radius: 0.5rem;
+  background: #fffbeb;
+  color: #92400e;
+}
+.settings-warning-icon {
+  flex: 0 0 1.5rem;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.settings-warning p {
+  margin: 0.4rem 0;
+}
+.settings-warning pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+.settings-warning > div {
+  min-width: 0;
+}
+.public-access-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .competition-flow li {
   position: relative;
 }
@@ -763,6 +852,9 @@ input.lane-select-checkbox {
 }
 .live-score-header h3 {
   margin: 0;
+}
+.live-score-logo {
+  display: none;
 }
 .live-score-toolbar {
   flex-wrap: wrap;
@@ -804,6 +896,17 @@ input.lane-select-checkbox {
 }
 .live-score-panel:fullscreen .live-score-controls {
   display: none;
+}
+.live-score-panel:fullscreen .live-score-logo {
+  display: block;
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 2;
+  max-width: calc(100vw - 2rem);
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  background: white;
 }
 .live-score-panel:fullscreen .live-score-fullscreen-button {
   position: fixed;
@@ -861,6 +964,10 @@ input.lane-select-checkbox {
 }
 .scoring-page {
   max-width: 48rem;
+  padding-top: 0.75rem;
+}
+.scoring-page > :first-child {
+  margin-top: 0;
 }
 .scoring-participants {
   display: grid;
@@ -986,6 +1093,24 @@ input.lane-select-checkbox {
   vertical-align: middle;
   white-space: nowrap;
 }
+.participant-scorecard tr > :nth-child(2),
+.participant-scorecard tr > :nth-last-child(2) {
+  border-inline-start: 2px solid #cbd5e1;
+  padding-inline-start: 0.75rem;
+}
+.participant-scorecard thead th {
+  padding-block: 0.375rem;
+  font-size: 0.8rem;
+}
+.participant-scorecard tr > :last-child {
+  background: #dbeafe;
+  color: #1e3a8a;
+  font-weight: 700;
+}
+.participant-scorecard tbody tr[aria-disabled="false"]:hover > :last-child,
+.participant-scorecard .selected-round > :last-child {
+  background: #bfdbfe;
+}
 .participant-scorecard tbody tr[aria-disabled="false"] {
   cursor: pointer;
 }
@@ -1059,4 +1184,52 @@ input.lane-select-checkbox {
     width: 65mm;
     max-width: 100%;
   }
+}
+
+.score-entry-access-mode,
+.score-entry-access-fields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.score-entry-access-fields {
+  min-width: 0;
+  margin: 1rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.range-edit-row {
+  cursor: pointer;
+}
+.range-edit-row:hover {
+  background: #f3f4f6;
+}
+.range-edit-button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+}
+.range-edit-button:hover:not(:disabled) {
+  background: transparent;
+}
+
+.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.ui-icon {
+  display: block;
+  flex-shrink: 0;
+}
+.icon-only-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
 }

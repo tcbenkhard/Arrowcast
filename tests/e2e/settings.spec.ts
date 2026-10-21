@@ -1,5 +1,46 @@
-import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
+import { expect, test } from './fixtures';
+
+for (const width of [1280, 375]) {
+  test(`cards toggle from the title, padding and caret at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
+    await page.goto('/admin/settings');
+    const card = page.getByRole('region', { name: 'Import participants', exact: true });
+    const toggle = card.getByRole('button', { name: /^(Expand|Collapse): Import participants$/ });
+    const content = card.locator('.collapsible-panel-content');
+
+    async function clickTarget(target: string) {
+      if (target === 'title') {
+        const heading = card.getByRole('heading', { name: 'Import participants', exact: true });
+        const bounds = await heading.boundingBox();
+        if (!bounds) throw new Error('Card title is not visible');
+        await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      } else if (target === 'padding') {
+        await card.click({ position: { x: 4, y: 4 } });
+      } else {
+        await toggle.locator('svg').click();
+      }
+    }
+
+    for (const target of ['title', 'padding', 'caret']) {
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await clickTarget(target);
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await expect(content).toBeVisible();
+      await content.click({ position: { x: 4, y: 4 } });
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await clickTarget(target);
+      await expect(content).toBeHidden();
+    }
+
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(content).toBeVisible();
+    await page.keyboard.press('Space');
+    await expect(content).toBeHidden();
+  });
+}
 
 test('participant import is disabled without internet and becomes available after reconnection', async ({ page }) => {
   let online = false;

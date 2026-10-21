@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 
 export function buildApp(config: AuthConfig = readAuthConfig()) {
   const app = Fastify({
+    // Both nginx listeners overwrite forwarded headers. Trust only the local proxy,
+    // so scoring limits apply per visitor rather than to every phone collectively.
+    trustProxy: ['127.0.0.1', '::1'],
     logger: { redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'] },
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   });

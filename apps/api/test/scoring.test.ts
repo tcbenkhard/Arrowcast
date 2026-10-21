@@ -323,7 +323,7 @@ test('QR access is separate from admin authentication and restricted to the comp
   assert.equal(codes.length, 2);
   const code = codes[0]!;
   const otherCode = codes[1]!;
-  assert.ok(code.path.startsWith('/scoring/competition/lane-1/'));
+  assert.ok(code.path.startsWith('/scores/competition/lane-1/'));
   const token = new URLSearchParams(code.path.split('#')[1]).get('token')!;
   const stored = f.db.select().from(laneScoringGrants).where(eq(laneScoringGrants.id, code.grantId)).get()!;
   assert.notEqual(stored.tokenHash, token);

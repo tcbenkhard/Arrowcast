@@ -306,7 +306,7 @@ class UpdaterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             check_manifest({**manifest, 'platform': 'unsupported'})
 
-    def exercise_install(self, healthy):
+    def exercise_install(self, healthy, system=False):
         self.require_symlinks()
         archive = updater.STATE / 'package.tar.xz'
         with tarfile.open(archive, 'w:xz') as bundle:
@@ -314,11 +314,22 @@ class UpdaterTests(unittest.TestCase):
             contents = b'v1.1.0\n'
             member.size = len(contents)
             bundle.addfile(member, io.BytesIO(contents))
+            if system:
+                member = tarfile.TarInfo('system/system-apply.py')
+                member.size = 4
+                bundle.addfile(member, io.BytesIO(b'pass'))
+                previous_system = updater.APP / 'current/system'
+                previous_system.mkdir()
+                (previous_system / 'system-apply.py').write_text('pass')
         contents = archive.read_bytes()
         manifest = {'version': 'v1.1.0', 'size': len(contents),
                     'sha256': hashlib.sha256(contents).hexdigest(), 'url': 'https://example.test/package'}
 
+        applied_versions = []
+
         def systemctl(command, **_kwargs):
+            if command[0] == 'python3':
+                applied_versions.append(updater.current_version())
             if command[1] == 'start' and updater.current_version() == 'v1.1.0':
                 # Simulate a startup migration, which must be undone if health fails.
                 with updater.database_connection(updater.DATABASE) as db:
@@ -340,6 +351,8 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(updater.status['status'], 'idle' if healthy else 'failed')
         self.assertFalse((updater.STATE / 'maintenance').exists())
         self.assertFalse((updater.STATE / 'transaction.json').exists())
+        if system:
+            self.assertEqual(applied_versions, ['v1.1.0'] if healthy else ['v1.1.0', 'v1.0.0'])
         with updater.database_connection(updater.DATABASE) as db:
             migration = db.execute("SELECT name FROM sqlite_master WHERE name = 'new_schema'").fetchone()
             self.assertEqual(migration is not None, healthy)
@@ -349,6 +362,12 @@ class UpdaterTests(unittest.TestCase):
 
     def test_unhealthy_install_restores_old_code_and_database(self):
         self.exercise_install(healthy=False)
+
+    def test_successful_system_update_applies_release_configuration(self):
+        self.exercise_install(healthy=True, system=True)
+
+    def test_unhealthy_system_update_restores_previous_system_configuration(self):
+        self.exercise_install(healthy=False, system=True)
 
     def test_duplicate_install_requests_are_rejected(self):
         self.require_symlinks()

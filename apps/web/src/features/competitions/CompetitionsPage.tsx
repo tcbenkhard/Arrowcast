@@ -1,11 +1,11 @@
-import { t, message } from '../../i18n';
-import { managementRequest } from '../../lib/http';
-import type { CompetitionStatus } from './status';
-import { CompetitionStatusBadge } from './CompetitionStatusBadge';
-import { useModal } from '../../hooks/useModal';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
 import { Link } from 'react-router';
+import { useModal } from '../../hooks/useModal';
+import { message, t } from '../../i18n';
+import { managementRequest } from '../../lib/http';
+import { CompetitionStatusBadge } from './CompetitionStatusBadge';
+import type { CompetitionStatus } from './status';
 
 interface Competition {
   id: string;
@@ -39,6 +39,16 @@ function compareCompetitions(a: Competition, b: Competition) {
     a.startingTime.localeCompare(b.startingTime) ||
     a.id.localeCompare(b.id)
   );
+}
+
+function tabToField(event: KeyboardEvent<HTMLInputElement>, previousId: string, nextId: string) {
+  if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
+  const field = event.currentTarget.form?.elements.namedItem(event.shiftKey ? previousId : nextId);
+  if (field instanceof HTMLElement) {
+    // Native date/time inputs otherwise tab through their segments and picker button.
+    event.preventDefault();
+    field.focus();
+  }
 }
 
 export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
@@ -323,6 +333,7 @@ function AddCompetitionModal({
           <input
             id="competition-date"
             type="date"
+            onKeyDown={(event) => tabToField(event, 'competition-name', 'competition-start')}
             required
             min="0001-01-01"
             max="9999-12-31"
@@ -335,6 +346,7 @@ function AddCompetitionModal({
               <input
                 id="competition-start"
                 type="time"
+                onKeyDown={(event) => tabToField(event, 'competition-date', 'competition-end')}
                 required
                 value={startingTime}
                 onChange={(event) => setStartingTime(event.target.value)}
@@ -345,6 +357,7 @@ function AddCompetitionModal({
               <input
                 id="competition-end"
                 type="time"
+                onKeyDown={(event) => tabToField(event, 'competition-start', 'competition-rounds')}
                 required
                 value={endingTime}
                 onChange={(event) => setEndingTime(event.target.value)}

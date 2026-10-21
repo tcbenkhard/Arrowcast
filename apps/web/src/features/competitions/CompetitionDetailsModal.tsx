@@ -1,3 +1,4 @@
+import { TrashIcon } from '../../components/TrashIcon';
 import { t, message } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
@@ -386,15 +387,21 @@ export function CompetitionDetailsModal({
           <button
             type="submit"
             className={removing ? 'danger' : undefined}
+            aria-label={
+              removing
+                ? t(pending ? 'CompetitionDetailsModal.removing' : 'CompetitionDetailsModal.remove_competition')
+                : undefined
+            }
+            title={removing ? t('CompetitionDetailsModal.remove_competition') : undefined}
             disabled={pending || loading || !!loadError}
           >
-            {pending
-              ? removing
-                ? t('CompetitionDetailsModal.removing')
-                : t('CompetitionDetailsModal.saving')
-              : removing
-                ? t('CompetitionDetailsModal.remove_competition')
-                : t('CompetitionDetailsModal.save_changes')}
+            {removing ? (
+              <TrashIcon />
+            ) : pending ? (
+              t('CompetitionDetailsModal.saving')
+            ) : (
+              t('CompetitionDetailsModal.save_changes')
+            )}
           </button>
         </div>
       </form>

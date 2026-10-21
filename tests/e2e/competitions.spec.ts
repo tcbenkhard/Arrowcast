@@ -21,6 +21,21 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Competitions', exact: true })).toBeVisible();
 });
 
+test('new competition tabs between fields without stopping on date and time pickers', async ({ page }) => {
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  const modal = page.getByRole('dialog', { name: 'Add competition' });
+  const fields = ['Name', 'Date', 'Starting time', 'Ending time', 'Number of rounds', 'Arrows per round'];
+  await expect(modal.getByLabel(fields[0]!, { exact: true })).toBeFocused();
+  for (const label of fields.slice(1)) {
+    await page.keyboard.press('Tab');
+    await expect(modal.getByLabel(label, { exact: true })).toBeFocused();
+  }
+  for (const label of fields.slice(0, -1).reverse()) {
+    await page.keyboard.press('Shift+Tab');
+    await expect(modal.getByLabel(label, { exact: true })).toBeFocused();
+  }
+});
+
 test('edit competition details, keep input on failure and confirm removal', async ({ page, request }) => {
   const headers = { Authorization: `Bearer ${token}` };
   const ranges = await request.get('/api/v1/admin/ranges', { headers });

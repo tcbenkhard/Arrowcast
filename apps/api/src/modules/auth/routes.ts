@@ -1,22 +1,23 @@
 import { t } from '@arrowcast/contracts/i18n';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
-import type { FastifyInstance } from 'fastify';
-import type { AuthConfig } from './config.js';
-import { hashPassword, verifyPassword } from './password.js';
 import { and, eq } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
 import { users } from '../../db/schema.js';
-import { rangeRoutes } from '../ranges/routes.js';
 import { competitionRoutes } from '../competitions/routes.js';
-import { targetTypeRoutes } from '../target-types/routes.js';
-import { participantRoutes } from '../participants/routes.js';
-import { participantManagementRoutes } from '../participants/management.js';
-import { adminScoringRoutes, scoringRoutes } from '../scoring/routes.js';
-import { updateRoutes } from '../updates/routes.js';
 import { networkRoutes } from '../network/routes.js';
-import { userRoutes } from './users.js';
+import { participantManagementRoutes } from '../participants/management.js';
+import { participantRoutes } from '../participants/routes.js';
+import { publicAccessRoutes, scoringOriginRoutes } from '../public-access/routes.js';
+import { rangeRoutes } from '../ranges/routes.js';
+import { adminScoringRoutes, scoringRoutes } from '../scoring/routes.js';
+import { targetTypeRoutes } from '../target-types/routes.js';
+import { updateRoutes } from '../updates/routes.js';
+import type { AuthConfig } from './config.js';
+import { hashPassword, verifyPassword } from './password.js';
 import { administratorOnly, authenticatedManagement, passwordChanged } from './policies.js';
+import { userRoutes } from './users.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -168,9 +169,11 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
           await settings.register(userRoutes, { db: config.db });
           await settings.register(updateRoutes);
           await settings.register(networkRoutes);
+          await settings.register(publicAccessRoutes);
           await settings.register(participantRoutes, { db: config.db });
         });
         await features.register(rangeRoutes, { db: config.db });
+        await features.register(scoringOriginRoutes);
         await features.register(competitionRoutes, { db: config.db });
         await features.register(targetTypeRoutes, { db: config.db });
         await features.register(participantManagementRoutes, { db: config.db });
