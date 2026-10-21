@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test } from './fixtures';
 import type { APIRequestContext, Page } from '@playwright/test';
 import type { LaneQrCode, ScoringContext } from '../../packages/contracts/src/index';
 import { testAdminToken } from './admin';
+import { expect, test } from './fixtures';
 
 async function fixture(request: APIRequestContext, arrowsPerRound = 2) {
   const token = testAdminToken();
@@ -125,6 +125,53 @@ test('live scores stay up to date in fullscreen and return to the competition sc
   ).toBeTruthy();
   await page.reload();
   await expect(table.getByRole('columnheader')).toHaveText(['Participant', 'Round', 'Total score', 'Average score']);
+});
+
+test('fullscreen scrolling continues when refreshed scores reorder the standings', async ({ page, request }) => {
+  const f = await fixture(request);
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
+  await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
+  const standings = Array.from({ length: 60 }, (_, index) => ({
+    participantId: `archer-${index}`,
+    name: `Archer ${index}`,
+    laneNumber: index + 1,
+    targetLetter: 'A',
+    enteredRounds: 1,
+    totalRounds: 2,
+    totalScore: 10,
+    averageScore: 5,
+  }));
+  let updated = false;
+  await page.route(`**${f.base}/scoring-standings`, (route) =>
+    route.fulfill({
+      json: updated
+        ? [...standings.slice(30), ...standings.slice(0, 30)].map((person) => ({ ...person, totalScore: 20 }))
+        : standings,
+    }),
+  );
+  await page.goto(`/admin/competitions/${f.competition.id}`);
+  const scores = page.getByRole('region', { name: 'Live scoring', exact: true });
+  await expect(scores.locator('tbody tr')).toHaveCount(60);
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  await scores.getByRole('button', { name: 'Show live scores in fullscreen' }).click();
+  await expect(scores.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
+  await page.clock.runFor(7000);
+  const before = await scores.evaluate((element) => element.scrollTop);
+  expect(before).toBeGreaterThan(80);
+  updated = true;
+  const refreshed = page.waitForResponse(`**${f.base}/scoring-standings`);
+  await page.clock.runFor(5000);
+  await refreshed;
+  await expect(scores.locator('tbody tr').first()).toContainText('Archer 30');
+  const after = await scores.evaluate((element) => element.scrollTop);
+  expect(after - before).toBeGreaterThan(100);
+  expect(after - before).toBeLessThan(160);
+  await page.clock.runFor(1000);
+  const continued = await scores.evaluate((element) => element.scrollTop);
+  expect(continued - after).toBeGreaterThan(20);
+  expect(continued - after).toBeLessThan(35);
 });
 
 test('correcting the second arrow with backspace selects the next arrow in drafts and submitted rounds', async ({

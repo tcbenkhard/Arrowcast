@@ -792,18 +792,37 @@ input.lane-select-checkbox {
   stroke-linejoin: round;
 }
 .live-score-panel:fullscreen {
+  --live-score-padding: clamp(1rem, 3vw, 3rem);
   margin: 0;
   border: 0;
   border-radius: 0;
-  padding: clamp(1rem, 3vw, 3rem);
+  padding: var(--live-score-padding);
   overflow: auto;
+  /* Reordered scores must not move the viewport or pause automatic scrolling. */
+  overflow-anchor: none;
   background: white;
 }
 .live-score-panel:fullscreen .live-score-controls {
   display: none;
 }
+.live-score-panel:fullscreen .live-score-fullscreen-button {
+  position: fixed;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 2;
+  background: white;
+}
 .live-score-panel:fullscreen table {
   font-size: clamp(1rem, 1.5vw, 1.75rem);
+}
+.live-score-panel:fullscreen .table-scroll {
+  overflow: visible;
+}
+.live-score-panel:fullscreen thead {
+  position: sticky;
+  /* Offset the panel padding so rows cannot appear above the sticky header. */
+  top: calc(0px - var(--live-score-padding));
+  z-index: 1;
 }
 .lane-qr-grid {
   display: grid;
