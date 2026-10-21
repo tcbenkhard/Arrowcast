@@ -136,6 +136,7 @@ def set_status(kind, message, available=None):
     with lock:
         status = {'status': kind, 'message': message, 'availableVersion': available}
         atomic_json(STATE / 'status.json', status)
+        print(f'Update status: {kind}; version: {available or "-"}; {message}', flush=True)
 
 
 def updates_connected():
@@ -356,7 +357,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         global busy
-        if self.path != '/install':
+        if self.path not in ('/install', '/check'):
             self.send_error(404)
             return
         if not updates_connected():
@@ -364,7 +365,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                'availableVersion': None, 'currentVersion': current_version()})
             return
         with lock:
-            if busy or status['status'] not in ('available', 'failed') or candidate is None:
+            if self.path == '/check':
+                if not busy:
+                    busy = True
+                    status.update(status='checking', message='Checking for updates…', availableVersion=None)
+                    threading.Thread(target=check, daemon=True).start()
+                result = {**status, 'currentVersion': current_version()}
+                code = 202
+            elif busy or status['status'] not in ('available', 'failed') or candidate is None:
                 result = {'message': 'No update is available, or another operation is in progress.'}
                 code = 409
             else:

@@ -107,7 +107,7 @@ def nginx(value, https):
     ssl_protocols TLSv1.2 TLSv1.3;
     root /opt/arrowcast/current/apps/web/dist;
     access_log off;
-    error_log stderr warn;
+    error_log syslog:server=unix:/dev/log,tag=arrowcast_web warn;
     client_max_body_size 16k;
     add_header Referrer-Policy no-referrer always;
     if (-f /var/lib/arrowcast-update/maintenance) {{ return 503; }}

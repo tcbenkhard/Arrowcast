@@ -384,6 +384,23 @@ must return 404. Verify `http://arrowcast.local/admin` still works locally.
 
 ## Local builder and troubleshooting
 
+Administrators can open **Settings → Advanced → View log files**. This opens
+`/admin/logs` without adding a main navigation tab. Its three tabs show web server
+warnings/errors (front-end), `arrowcast.service` (backend), and
+`arrowcast-update.service` (update service). These are device logs; browser console
+messages are not collected. Each tab shows the latest 300 journal lines and
+refreshes every two seconds, with pause/resume and optional automatic scrolling.
+The page retries failed reads automatically. Log requests themselves are excluded
+from backend request logging.
+
+The API service uses the supplementary `systemd-journal` group to read the journal.
+Nginx sends local and public web server warnings/errors to syslog with the
+`arrowcast_web` tag, and the updater logs status transitions immediately.
+These settings are included in new images and applied by application updates.
+The live device logs require the Pi services and systemd journal; they are not
+available from the Windows development server. Physical Pi validation remains
+necessary for journal permissions and nginx syslog delivery.
+
 Use a disposable ARM64 Debian/Ubuntu host with root access, internet connectivity,
 a Linux filesystem, at least 20 GB free disk recommended, and a checkout path
 without spaces. Install the dependency list from `.github/workflows/pi-image.yml`,

@@ -1,7 +1,8 @@
-import { t, message } from '../../i18n';
-import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
+import { message, t } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { SettingsCard } from './SettingsCard';
+import { Icon } from '../../components/Icon';
 
 interface UpdateState {
   status: 'checking' | 'idle' | 'available' | 'installing' | 'failed' | 'disabled' | 'offline';
@@ -52,22 +53,32 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
     };
   }, [token, onUnauthorized]);
 
-  async function install() {
+  async function runUpdateAction(action: 'install' | 'check') {
     if (pending) return;
-    if (!window.confirm(t('Updates.install_this_update_arrowcast_will_briefly_stop_do_not'))) return;
+    if (action === 'install' && !window.confirm(t('Updates.install_this_update_arrowcast_will_briefly_stop_do_not')))
+      return;
     setPending(true);
     setError('');
     try {
-      const response = await managementRequest('/api/v1/admin/updates', token, { method: 'POST' });
+      const response = await managementRequest(`/api/v1/admin/updates${action === 'check' ? '/check' : ''}`, token, {
+        method: 'POST',
+      });
       if (response.status === 401) {
         onUnauthorized(t('PasswordChangeForm.log_opnieuw_in_om_verder_te_gaan'));
         return;
       }
       const result = (await response.json()) as UpdateState & { message: string };
-      if (!response.ok) throw new Error(result.message || t('Updates.could_not_start_update'));
+      if (!response.ok)
+        throw new Error(
+          result.message || t(action === 'check' ? 'updates.statusUnavailable' : 'Updates.could_not_start_update'),
+        );
       setState(result);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t('Updates.could_not_start_update'));
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : t(action === 'check' ? 'updates.statusUnavailable' : 'Updates.could_not_start_update'),
+      );
     } finally {
       setPending(false);
     }
@@ -76,7 +87,19 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
     state?.status === 'installing' || (!!state?.availableVersion && ['available', 'failed'].includes(state.status));
   return (
     <SettingsCard id="updates" icon="download" title="Updates" forceExpanded={updateActive}>
-      {state && <p>{t('updates.version', { version: state.currentVersion })}</p>}
+      <div className="update-card-header">
+        {state && <p>{t('updates.version', { version: state.currentVersion })}</p>}
+        <button
+          type="button"
+          className="icon-only-button"
+          aria-label={t('updates.check')}
+          title={t('updates.check')}
+          disabled={pending || !state || ['checking', 'installing', 'disabled'].includes(state.status)}
+          onClick={() => void runUpdateAction('check')}
+        >
+          <Icon name="refresh" />
+        </button>
+      </div>
       <div aria-live="polite">
         {!state && !error && <p>{t('Updates.reading_update_status')}</p>}
         {state?.status === 'idle' && <p>{t('Updates.no_updates_available')}</p>}
@@ -86,7 +109,7 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
             <button
               disabled={pending || !!error}
               onClick={() => {
-                void install();
+                void runUpdateAction('install');
               }}
             >
               {t('Updates.update')}
@@ -95,6 +118,11 @@ export function Updates({ token, onUnauthorized }: { token: string; onUnauthoriz
         )}
         {state && !['idle', 'available'].includes(state.status) && (
           <p>{t(`updates.${state.status as 'checking' | 'installing' | 'failed' | 'disabled' | 'offline'}`)}</p>
+        )}
+        {state?.status === 'failed' && state.message && (
+          <p className="error" role="alert">
+            {state.message}
+          </p>
         )}
       </div>
       {error && (

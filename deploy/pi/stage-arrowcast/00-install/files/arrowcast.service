@@ -10,6 +10,7 @@ StartLimitBurst=5
 Type=exec
 User=arrowcast
 Group=arrowcast
+SupplementaryGroups=systemd-journal
 WorkingDirectory=/opt/arrowcast/current
 EnvironmentFile=/etc/arrowcast/arrowcast.env
 ExecStart=/opt/arrowcast/current/runtime/bin/node apps/api/dist/server.js

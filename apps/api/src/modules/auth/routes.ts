@@ -7,6 +7,7 @@ import type { AppDatabase } from '../../db/index.js';
 import { users } from '../../db/schema.js';
 import { competitionRoutes } from '../competitions/routes.js';
 import { networkRoutes } from '../network/routes.js';
+import { logRoutes } from '../logs/routes.js';
 import { participantManagementRoutes } from '../participants/management.js';
 import { participantRoutes } from '../participants/routes.js';
 import { publicAccessRoutes, scoringOriginRoutes } from '../public-access/routes.js';
@@ -168,6 +169,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
           settings.addHook('onRequest', administratorOnly);
           await settings.register(userRoutes, { db: config.db });
           await settings.register(updateRoutes);
+          await settings.register(logRoutes);
           await settings.register(networkRoutes);
           await settings.register(publicAccessRoutes);
           await settings.register(participantRoutes, { db: config.db });

@@ -101,8 +101,10 @@ class UpdaterTests(unittest.TestCase):
             handler.do_GET()
             handler.path = '/install'
             handler.do_POST()
+            handler.path = '/check'
+            handler.do_POST()
             start.assert_not_called()
-        self.assertEqual([code for code, _ in responses], [200, 503])
+        self.assertEqual([code for code, _ in responses], [200, 503, 503])
         for _, result in responses:
             self.assertEqual(result['currentVersion'], 'v1.0.0')
             self.assertEqual(result['status'], 'offline')
@@ -120,6 +122,32 @@ class UpdaterTests(unittest.TestCase):
             handler.do_GET()
             start.assert_called_once()
         self.assertEqual(responses[0]['status'], 'checking')
+
+    def test_manual_check_bypasses_cache_and_ignores_duplicate_requests(self):
+        updater.status = {'status': 'idle', 'message': '', 'availableVersion': None}
+        updater.last_check = updater.time.monotonic()
+        handler = object.__new__(updater.Handler)
+        handler.path = '/check'
+        responses = []
+        handler.respond = lambda code, value: responses.append((code, value))
+        with patch.object(updater, 'current_version', return_value='v1.0.0'), \
+                patch.object(updater.threading.Thread, 'start') as start:
+            handler.do_POST()
+            handler.do_POST()
+            start.assert_called_once()
+        self.assertEqual([code for code, _ in responses], [202, 202])
+        self.assertTrue(all(value['status'] == 'checking' for _, value in responses))
+
+    def test_manual_check_does_not_interrupt_installation(self):
+        updater.busy = True
+        updater.status = {'status': 'installing', 'message': '', 'availableVersion': 'v1.1.0'}
+        handler = object.__new__(updater.Handler)
+        handler.path = '/check'
+        handler.respond = lambda code, value: self.assertEqual(value['status'], 'installing')
+        with patch.object(updater, 'current_version', return_value='v1.0.0'), \
+                patch.object(updater.threading.Thread, 'start') as start:
+            handler.do_POST()
+            start.assert_not_called()
 
     def require_symlinks(self):
         if not self.symlinks:

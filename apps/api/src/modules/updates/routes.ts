@@ -3,13 +3,13 @@ import { request } from 'node:http';
 import { existsSync } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
 
-export function updaterCommand(command: 'status' | 'install'): Promise<unknown> {
+export function updaterCommand(command: 'status' | 'install' | 'check'): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const req = request(
       {
         socketPath: '/run/arrowcast-update/control.sock',
         path: `/${command}`,
-        method: command === 'install' ? 'POST' : 'GET',
+        method: command === 'status' ? 'GET' : 'POST',
         timeout: 5000,
       },
       (res) => {
@@ -36,7 +36,7 @@ export function updaterCommand(command: 'status' | 'install'): Promise<unknown> 
 }
 
 export async function updateRoutes(app: FastifyInstance) {
-  async function send(command: 'status' | 'install', reply: import('fastify').FastifyReply) {
+  async function send(command: 'status' | 'install' | 'check', reply: import('fastify').FastifyReply) {
     try {
       const result = (await updaterCommand(command)) as { code: number; body: unknown };
       return reply.code(result.code).send(result.body);
@@ -54,4 +54,5 @@ export async function updateRoutes(app: FastifyInstance) {
   }
   app.get('/updates', async (_request, reply) => send('status', reply));
   app.post('/updates', async (_request, reply) => send('install', reply));
+  app.post('/updates/check', async (_request, reply) => send('check', reply));
 }

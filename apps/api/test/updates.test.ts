@@ -10,6 +10,7 @@ test('update status and installation require an administrator', async (t) => {
     const response = await app.inject({ method, url: '/api/v1/admin/updates' });
     assert.equal(response.statusCode, 401);
   }
+  assert.equal((await app.inject({ method: 'POST', url: '/api/v1/admin/updates/check' })).statusCode, 401);
   const login = await loginAdmin(app);
   const headers = { authorization: `Bearer ${login.json().token}` };
   const response = await app.inject({ url: '/api/v1/admin/updates', headers });
@@ -17,4 +18,6 @@ test('update status and installation require an administrator', async (t) => {
   assert.equal(response.json().status, 'disabled');
   const install = await app.inject({ method: 'POST', url: '/api/v1/admin/updates', headers });
   assert.equal(install.statusCode, 503);
+  const check = await app.inject({ method: 'POST', url: '/api/v1/admin/updates/check', headers });
+  assert.equal(check.statusCode, 503);
 });

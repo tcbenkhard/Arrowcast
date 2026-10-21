@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { message, t } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { RangesPage } from '../ranges/RangesPage';
@@ -19,6 +20,7 @@ interface ImportState {
 }
 
 export function SettingsPage({ token, onUnauthorized }: { token: string; onUnauthorized: (message: string) => void }) {
+  const navigate = useNavigate();
   const [state, setState] = useState<ImportState | null>(null);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
@@ -153,6 +155,9 @@ export function SettingsPage({ token, onUnauthorized }: { token: string; onUnaut
               </button>
             </div>
           )}
+        </SettingsCard>
+        <SettingsCard id="advanced" icon="settings" title={t('Logs.advanced')}>
+          <button onClick={() => navigate('/admin/logs')}>{t('Logs.view')}</button>
         </SettingsCard>
       </div>
     </section>

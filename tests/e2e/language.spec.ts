@@ -36,6 +36,6 @@ test('visitors can change language on the home page and login page', async ({ pa
   await expect(page.getByText('Welcome to Arrowcast.', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Open the admin portal' }).click();
   await expect(page.getByRole('heading', { name: 'Log in', exact: true })).toBeVisible();
-  await page.getByLabel('Language', { exact: true }).selectOption('nl');
+  await page.getByRole('button', { name: 'Dutch', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Inloggen', exact: true })).toBeVisible();
 });

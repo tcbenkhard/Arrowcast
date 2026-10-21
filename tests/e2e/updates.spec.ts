@@ -1,5 +1,59 @@
-import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
+import { expect, test } from './fixtures';
+
+test('refresh starts a fresh update check and shows the discovered version', async ({ page }) => {
+  let status = 'idle';
+  let checks = 0;
+  await page.route('**/api/v1/admin/updates', (route) =>
+    route.fulfill({
+      json: {
+        status,
+        currentVersion: 'v1.0.0',
+        availableVersion: status === 'available' ? 'v1.1.0' : null,
+        message: '',
+      },
+    }),
+  );
+  await page.route('**/api/v1/admin/updates/check', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    checks++;
+    status = 'checking';
+    await route.fulfill({
+      status: 202,
+      json: { status, currentVersion: 'v1.0.0', availableVersion: null, message: '' },
+    });
+  });
+  await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
+  await page.goto('/admin/settings');
+  const updates = page.getByRole('region', { name: 'Updates', exact: true });
+  await updates.getByRole('button', { name: 'Expand: Updates', exact: true }).click();
+  const refresh = updates.getByRole('button', { name: 'Check for updates', exact: true });
+  await refresh.click();
+  await expect(refresh).toBeDisabled();
+  await expect(updates.getByText('Checking for updates…', { exact: true })).toBeVisible();
+  expect(checks).toBe(1);
+  status = 'available';
+  await expect(updates.getByText('Update available (v1.1.0)', { exact: false })).toBeVisible();
+  await expect(refresh).toBeEnabled();
+});
+
+test('failed updates show the reason returned by the updater', async ({ page }) => {
+  await page.route('**/api/v1/admin/updates', (route) =>
+    route.fulfill({
+      json: {
+        status: 'failed',
+        currentVersion: 'v1.0.0',
+        availableVersion: 'v1.1.0',
+        message: 'Update failed: Close active competitions before updating.',
+      },
+    }),
+  );
+  await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
+  await page.goto('/admin/settings');
+  const updates = page.getByRole('region', { name: 'Updates', exact: true });
+  await expect(updates.getByRole('alert')).toHaveText('Update failed: Close active competitions before updating.');
+  await expect(updates.getByRole('button', { name: 'Update', exact: true })).toBeVisible();
+});
 
 test('no internet shows installed version and guidance, then resumes checks after reconnecting', async ({ page }) => {
   let online = false;

@@ -1,0 +1,19 @@
+services:
+  pi:
+    build:
+      context: .
+      dockerfile: deploy/sim/Dockerfile
+    ports:
+      - "127.0.0.1:${ARROWCAST_SIM_PORT:-8080}:80"
+    volumes:
+      - pi-data:/var/lib/arrowcast
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python3", "/opt/sim/healthcheck.py"]
+      interval: 5s
+      timeout: 3s
+      start_period: 20s
+      retries: 6
+
+volumes:
+  pi-data:

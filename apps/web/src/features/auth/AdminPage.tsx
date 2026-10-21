@@ -1,5 +1,6 @@
 import { Icon } from '../../components/Icon';
 import { ArrowCastLogo } from '../../components/ArrowCastLogo';
+import { LanguageSelect } from '../../components/LanguageSelect';
 import { t, message, setLanguage, useLanguage } from '../../i18n';
 import type { Language } from '../../i18n';
 import { useCallback, useEffect, useState } from 'react';
@@ -8,6 +9,7 @@ import { Link, Navigate, NavLink, Route, Routes } from 'react-router';
 import { CompetitionDetailPage } from '../competitions/CompetitionDetailPage';
 import { CompetitionsPage } from '../competitions/CompetitionsPage';
 import { SettingsPage } from '../settings/SettingsPage';
+import { LogsPage } from '../settings/LogsPage';
 import { PasswordChangeForm } from './PasswordChangeForm';
 import { decodeJson, managementRequest } from '../../lib/http';
 import { readAdminToken, writeAdminToken } from './session';
@@ -149,6 +151,16 @@ export function AdminPage() {
       </nav>
       <Routes>
         <Route
+          path="logs"
+          element={
+            session.role === 'admin' ? (
+              <LogsPage token={token} onUnauthorized={logout} />
+            ) : (
+              <Navigate to="/admin/competitions" replace />
+            )
+          }
+        />
+        <Route
           path="settings"
           element={
             session.role === 'admin' ? (
@@ -247,7 +259,6 @@ function ProfileMenu({
 }
 
 function LoginForm({ error, onLogin }: { error: string; onLogin: (token: string) => void }) {
-  const language = useLanguage();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [requestError, setRequestError] = useState('');
@@ -288,11 +299,6 @@ function LoginForm({ error, onLogin }: { error: string; onLogin: (token: string)
     <main className="auth-card">
       <p className="eyebrow">{t('AdminPage.arrowcast_beheer')}</p>
       <h1>{t('AdminPage.inloggen')}</h1>
-      <label htmlFor="login-language">{t('language.label')}</label>
-      <select id="login-language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
-        <option value="nl">{t('language.nl')}</option>
-        <option value="en">{t('language.en')}</option>
-      </select>
       <p>{t('AdminPage.log_in_om_het_beheerportal_te_openen')}</p>
       <form
         onSubmit={(event) => {
@@ -332,6 +338,9 @@ function LoginForm({ error, onLogin }: { error: string; onLogin: (token: string)
           {pending ? t('AdminPage.bezig_met_inloggen') : t('AdminPage.inloggen')}
         </button>
       </form>
+      <footer className="auth-footer">
+        <LanguageSelect flags />
+      </footer>
     </main>
   );
 }

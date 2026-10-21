@@ -10,6 +10,10 @@ score-invoer gebruikt afzonderlijke QR-toegang per wedstrijdbaan.
 
 ## Vereisten
 
+Wil je de Raspberry Pi-installatie lokaal testen? Start `docker compose up` en
+open <http://localhost:8080/admin>. Zie [Pi-simulatie met wifi en logs](docs/pi-simulation.md)
+voor netwerkfouten, Ethernet-voorrang en het uitlezen van proceslogs.
+
 - Node.js 24 LTS (minimaal 24.13.0 binnen de 24-reeks; `.nvmrc` bevat de geteste versie).
 - npm 11.
 
