@@ -530,18 +530,15 @@ test('choose lane participants, retain drafts and correct recorded scores includ
   await pressScore(page, 8);
   await save(page);
   await expect(first).toHaveAttribute('aria-expanded', 'true');
-  await expect
-    .poll(async () => Math.abs((await page.locator('#current-archer').boundingBox())!.y - 16))
-    .toBeLessThan(2);
+  const currentArcher = page.locator('#current-archer');
+  await expect(currentArcher).toBeInViewport({ ratio: 1 });
+  // Scrolling clamps at the document top when the heading starts above its 16px scroll margin.
+  await expect.poll(async () => (await currentArcher.boundingBox())!.y).toBeLessThan(18);
   await second.click();
   const scorecard = page.getByRole('table', { name: 'Participant scores', exact: true });
-  await expect(scorecard.getByRole('columnheader')).toHaveText([
-    'Round',
-    'Arrow 1',
-    'Arrow 2',
-    'Round Total',
-    'Cumulative Total',
-  ]);
+  await expect(scorecard.getByRole('columnheader')).toHaveText(['Round', 'Arrow 1', 'Arrow 2', 'Sub', 'Total']);
+  await expect(scorecard.getByRole('columnheader').nth(3)).toHaveAccessibleName('Round Total');
+  await expect(scorecard.getByRole('columnheader').nth(4)).toHaveAccessibleName('Cumulative Total');
   await expect(scorecard.getByRole('row').nth(1).locator('th, td')).toHaveText(['1', 'M', '8', '8', '8']);
   await expect(scorecard.getByRole('row').nth(2).locator('th, td')).toHaveText(['2', '—', '—', '—', '—']);
   await page.getByRole('button', { name: 'Arrow 1: M', exact: true }).click();

@@ -102,7 +102,7 @@ test('connection failures keep admin content hidden and allow retry', async ({ p
 
 test('the public home stays public and scoring requires a lane link', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Arrowcast', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'ArrowCast', exact: true })).toBeVisible();
   await page.goto('/scoring');
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
 });

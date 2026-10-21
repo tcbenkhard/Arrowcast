@@ -550,7 +550,8 @@ test('competition flow starts in Scheduled, handles a failed update and advances
     await expect(details.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
     await expect(details.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(status === 'Closed' ? 1 : 0);
   }
-  await expect(details.getByRole('button')).toHaveText(['Remove']);
+  await expect(details.getByRole('button')).toHaveCount(1);
+  await expect(details.getByRole('button')).toHaveAccessibleName('Remove');
   await page.goto('/admin/competitions');
   await expect(page.getByRole('row', { name: /Flow browser competition/ })).toContainText('Closed');
   await page.goto(`/admin/competitions/${competition.id}`);
