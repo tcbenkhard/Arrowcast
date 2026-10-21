@@ -7,7 +7,11 @@ export interface ManagementRequestOptions extends RequestOptions {
 }
 
 export class HttpError extends Error {
-  constructor(public readonly status: number, message: string, public readonly body?: unknown) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly body?: unknown,
+  ) {
     super(message);
     this.name = 'HttpError';
   }
@@ -21,7 +25,11 @@ function withJson(init: RequestOptions): RequestInit {
 }
 
 /** Management requests always use the short-lived bearer token and bypass caches. */
-export async function managementRequest(url: string, token: string, init: ManagementRequestOptions = {}): Promise<Response> {
+export async function managementRequest(
+  url: string,
+  token: string,
+  init: ManagementRequestOptions = {},
+): Promise<Response> {
   const { onUnauthorized, ...requestInit } = init;
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
@@ -37,7 +45,7 @@ export function scoringRequest(url: string, init: RequestOptions = {}): Promise<
 
 export async function decodeJson<T>(response: Response): Promise<T> {
   try {
-    return await response.json() as T;
+    return (await response.json()) as T;
   } catch {
     throw new HttpError(response.status, `Expected a JSON response (HTTP ${response.status})`);
   }
@@ -47,14 +55,16 @@ export async function decodeJson<T>(response: Response): Promise<T> {
 export async function requireJson<T>(response: Response): Promise<T> {
   let body: unknown;
   try {
-    body = await response.json() as unknown;
+    body = (await response.json()) as unknown;
   } catch {
     if (!response.ok) throw new HttpError(response.status, `Request failed (HTTP ${response.status})`);
     throw new HttpError(response.status, `Expected a JSON response (HTTP ${response.status})`);
   }
   if (!response.ok) {
-    const message = typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string'
-      ? body.message : `Request failed (HTTP ${response.status})`;
+    const message =
+      typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string'
+        ? body.message
+        : `Request failed (HTTP ${response.status})`;
     throw new HttpError(response.status, message, body);
   }
   return body as T;

@@ -24,10 +24,26 @@ await app.ready();
 // an explicitly flagged fresh account through the real first-login screen.
 const accounts = openDatabase(databasePath);
 accounts.db.update(users).set({ forceChangePassword: false, language: 'en' }).where(eq(users.username, 'admin')).run();
-accounts.db.insert(users).values({ username: 'first-login', passwordHash: await hashPassword('admin'),
-  role: 'admin', language: 'en', forceChangePassword: true }).run();
-accounts.db.insert(users).values({ username: 'profile-user', passwordHash: await hashPassword('admin'),
-  role: 'admin', language: 'en', forceChangePassword: false }).run();
+accounts.db
+  .insert(users)
+  .values({
+    username: 'first-login',
+    passwordHash: await hashPassword('admin'),
+    role: 'admin',
+    language: 'en',
+    forceChangePassword: true,
+  })
+  .run();
+accounts.db
+  .insert(users)
+  .values({
+    username: 'profile-user',
+    passwordHash: await hashPassword('admin'),
+    role: 'admin',
+    language: 'en',
+    forceChangePassword: false,
+  })
+  .run();
 accounts.close();
 await app.listen({ host: '127.0.0.1', port: Number(process.env.ARROWCAST_E2E_API_PORT ?? 3000) });
 async function shutdown() {
@@ -35,5 +51,9 @@ async function shutdown() {
   rmSync(directory, { recursive: true, force: true });
   process.exit(0);
 }
-process.once('SIGINT', () => { void shutdown(); });
-process.once('SIGTERM', () => { void shutdown(); });
+process.once('SIGINT', () => {
+  void shutdown();
+});
+process.once('SIGTERM', () => {
+  void shutdown();
+});

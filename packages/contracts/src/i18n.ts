@@ -8,7 +8,8 @@ const dictionaries = { en, nl };
 
 export function t(key: TranslationKey, params: TranslationParams = {}, language: Language = 'en'): string {
   return dictionaries[language][key].replace(/\{(\w+)\}/g, (placeholder, name: string) =>
-    params[name] === undefined ? placeholder : String(params[name] ?? ''));
+    params[name] === undefined ? placeholder : String(params[name] ?? ''),
+  );
 }
 
 // API messages and notices can outlive the language in which they were created.
@@ -16,15 +17,25 @@ export function t(key: TranslationKey, params: TranslationParams = {}, language:
 const entries = Object.values(dictionaries).flatMap((dictionary) =>
   Object.entries(dictionary).map(([key, value]) => {
     const names: string[] = [];
-    const pattern = value.split(/(\{\w+\})/g).map((part) => {
-      if (/^\{\w+\}$/.test(part)) { names.push(part.slice(1, -1)); return '([\\s\\S]*?)'; }
-      return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }).join('');
+    const pattern = value
+      .split(/(\{\w+\})/g)
+      .map((part) => {
+        if (/^\{\w+\}$/.test(part)) {
+          names.push(part.slice(1, -1));
+          return '([\\s\\S]*?)';
+        }
+        return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      })
+      .join('');
     const literal = value.replace(/\{\w+\}/g, '');
     return { key: key as TranslationKey, value, literal, names, pattern: new RegExp(`^${pattern}$`) };
-  }));
-const exactMessages = new Map(entries.filter((entry) => entry.names.length === 0).map((entry) => [entry.value, entry.key]));
-const templates = entries.filter((entry) => entry.names.length > 0 && /\p{L}/u.test(entry.literal))
+  }),
+);
+const exactMessages = new Map(
+  entries.filter((entry) => entry.names.length === 0).map((entry) => [entry.value, entry.key]),
+);
+const templates = entries
+  .filter((entry) => entry.names.length > 0 && /\p{L}/u.test(entry.literal))
   .sort((a, b) => b.literal.length - a.literal.length);
 
 export function translateMessage(message: string, language: Language): string | undefined {

@@ -3,23 +3,32 @@ import { testAdminToken } from './admin';
 
 test('no internet shows installed version and guidance, then resumes checks after reconnecting', async ({ page }) => {
   let online = false;
-  await page.route('**/api/v1/admin/updates', (route) => route.fulfill({ json: {
-    status: online ? 'available' : 'offline', currentVersion: 'v1.0.0',
-    availableVersion: online ? 'v1.1.0' : null,
-    message: online ? '' : 'Arrowcast must be connected to the internet to check for updates.',
-  } }));
+  await page.route('**/api/v1/admin/updates', (route) =>
+    route.fulfill({
+      json: {
+        status: online ? 'available' : 'offline',
+        currentVersion: 'v1.0.0',
+        availableVersion: online ? 'v1.1.0' : null,
+        message: online ? '' : 'Arrowcast must be connected to the internet to check for updates.',
+      },
+    }),
+  );
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');
   const updates = page.getByRole('region', { name: 'Updates', exact: true });
   await updates.getByRole('button', { name: 'Expand: Updates', exact: true }).click();
   await expect(updates.getByText('Installed version: v1.0.0', { exact: true })).toBeVisible();
-  await expect(updates.getByText('No internet connection. Connect to check for updates.', { exact: true })).toBeVisible();
+  await expect(
+    updates.getByText('No internet connection. Connect to check for updates.', { exact: true }),
+  ).toBeVisible();
   await expect(updates.getByRole('button', { name: 'Update', exact: true })).toHaveCount(0);
   await expect(updates.getByText('No updates available', { exact: true })).toHaveCount(0);
   await expect(updates.getByRole('alert')).toHaveCount(0);
   online = true;
   await expect(updates.getByRole('button', { name: 'Update', exact: true })).toBeVisible();
-  await expect(updates.getByText('No internet connection. Connect to check for updates.', { exact: true })).toHaveCount(0);
+  await expect(updates.getByText('No internet connection. Connect to check for updates.', { exact: true })).toHaveCount(
+    0,
+  );
 });
 
 test('settings checks updates and installs only after confirmation', async ({ page }) => {
@@ -27,12 +36,19 @@ test('settings checks updates and installs only after confirmation', async ({ pa
   let installing = false;
   let posts = 0;
   await page.route('**/api/v1/admin/updates', async (route) => {
-    if (route.request().method() === 'POST') { posts++; installing = true; }
-    await route.fulfill({ status: route.request().method() === 'POST' ? 202 : 200, json: {
-      status: installing ? 'installing' : available ? 'available' : 'idle',
-      currentVersion: 'v1.0.0', availableVersion: available ? 'v1.1.0' : null,
-      message: installing ? 'Downloading and verifying update…' : '',
-    } });
+    if (route.request().method() === 'POST') {
+      posts++;
+      installing = true;
+    }
+    await route.fulfill({
+      status: route.request().method() === 'POST' ? 202 : 200,
+      json: {
+        status: installing ? 'installing' : available ? 'available' : 'idle',
+        currentVersion: 'v1.0.0',
+        availableVersion: available ? 'v1.1.0' : null,
+        message: installing ? 'Downloading and verifying update…' : '',
+      },
+    });
   });
   await page.addInitScript((token) => {
     sessionStorage.setItem('arrowcast.admin.jwt', token);

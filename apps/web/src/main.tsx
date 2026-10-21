@@ -7,7 +7,7 @@ import './styles.css';
 const root = document.getElementById('root');
 
 if (!root) {
-  throw new Error(t("main.reactroot_ontbreekt"));
+  throw new Error(t('main.reactroot_ontbreekt'));
 }
 
 createRoot(root).render(

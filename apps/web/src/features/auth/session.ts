@@ -12,11 +12,17 @@ export interface AdminSession {
 }
 
 export function readAdminToken(storage: Pick<Storage, 'getItem'> = sessionStorage): string | null {
-  try { return storage.getItem(storageKey); }
-  catch { return null; }
+  try {
+    return storage.getItem(storageKey);
+  } catch {
+    return null;
+  }
 }
 
-export function writeAdminToken(token: string | null, storage: Pick<Storage, 'setItem' | 'removeItem'> = sessionStorage): void {
+export function writeAdminToken(
+  token: string | null,
+  storage: Pick<Storage, 'setItem' | 'removeItem'> = sessionStorage,
+): void {
   try {
     if (token) storage.setItem(storageKey, token);
     else storage.removeItem(storageKey);

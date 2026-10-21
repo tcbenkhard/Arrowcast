@@ -5,11 +5,20 @@ test('settings saves Wi-Fi credentials and explains Ethernet priority and reconn
   let posted: unknown;
   let busy = false;
   await page.route('**/api/v1/admin/network', async (route) => {
-    if (route.request().method() === 'POST') { posted = route.request().postDataJSON(); busy = true; }
-    await route.fulfill({ status: route.request().method() === 'POST' ? 202 : 200, json: {
-      mode: 'ethernet', busy, ssid: busy ? 'Club Wi-Fi' : null, address: null,
-      message: busy ? 'Wi-Fi settings saved.' : '',
-    } });
+    if (route.request().method() === 'POST') {
+      posted = route.request().postDataJSON();
+      busy = true;
+    }
+    await route.fulfill({
+      status: route.request().method() === 'POST' ? 202 : 200,
+      json: {
+        mode: 'ethernet',
+        busy,
+        ssid: busy ? 'Club Wi-Fi' : null,
+        address: null,
+        message: busy ? 'Wi-Fi settings saved.' : '',
+      },
+    });
   });
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');
@@ -29,9 +38,17 @@ test('settings saves Wi-Fi credentials and explains Ethernet priority and reconn
 
 test('settings reports invalid Wi-Fi credentials and permits correction', async ({ page }) => {
   await page.route('**/api/v1/admin/network', async (route) => {
-    await route.fulfill(route.request().method() === 'POST'
-      ? { status: 400, json: { message: 'Use an 8–63 character Wi-Fi password, 64 hexadecimal digits, or leave it empty for an open network.' } }
-      : { json: { mode: 'hotspot', busy: false, ssid: null, address: '10.42.0.1', message: '' } });
+    await route.fulfill(
+      route.request().method() === 'POST'
+        ? {
+            status: 400,
+            json: {
+              message:
+                'Use an 8–63 character Wi-Fi password, 64 hexadecimal digits, or leave it empty for an open network.',
+            },
+          }
+        : { json: { mode: 'hotspot', busy: false, ssid: null, address: '10.42.0.1', message: '' } },
+    );
   });
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
   await page.goto('/admin/settings');

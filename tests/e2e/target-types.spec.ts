@@ -29,12 +29,22 @@ test('list seeded names, create a type, prevent duplicates and autosave it on a 
   await form.getByRole('button', { name: 'Add target type', exact: true }).click();
   await expect(form.getByRole('alert')).toContainText('already exists');
   const headers = { Authorization: `Bearer ${token}` };
-  const rangeResponse = await request.post('/api/v1/admin/ranges', { headers,
-    data: { name: 'Target type browser range', supportedDistancesMeters: [18], lanes: [{ number: 1 }] } });
+  const rangeResponse = await request.post('/api/v1/admin/ranges', {
+    headers,
+    data: { name: 'Target type browser range', supportedDistancesMeters: [18], lanes: [{ number: 1 }] },
+  });
   const range = await rangeResponse.json();
-  const competitionResponse = await request.post('/api/v1/admin/competitions', { headers,
-    data: { name: 'Target type browser competition', date: '2026-12-02', startingTime: '09:00', endingTime: '12:00',
-      rangeId: range.id, lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }] } });
+  const competitionResponse = await request.post('/api/v1/admin/competitions', {
+    headers,
+    data: {
+      name: 'Target type browser competition',
+      date: '2026-12-02',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      rangeId: range.id,
+      lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
+    },
+  });
   const competition = await competitionResponse.json();
   await page.goto(`/admin/competitions/${competition.id}`);
   const lane = page.getByRole('row', { name: 'Lane 1 configuration', exact: true });
@@ -64,7 +74,6 @@ test('failed loads and creates can be retried without losing input', async ({ pa
   await form.getByRole('button', { name: 'Add target type', exact: true }).click();
   await expect(form.getByRole('status')).toContainText('Retry browser target');
 });
-
 
 test('bulk deletion requires confirmation and preserves selection when deletion fails', async ({ page }) => {
   const table = page.getByRole('table', { name: 'Target types', exact: true });

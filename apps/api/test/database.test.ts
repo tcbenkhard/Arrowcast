@@ -38,24 +38,34 @@ test('migrations run once and the admin seed never resets an existing account', 
   const app = buildApp({ jwtSecret, databasePath: path });
   try {
     await app.ready();
-    const oldPassword = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
+    const oldPassword = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
       payload: { username: 'admin', password: 'admin' },
     });
     assert.equal(oldPassword.statusCode, 401);
-    const changedPassword = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
+    const changedPassword = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
       payload: { username: 'admin', password: 'changed-admin-password' },
     });
     assert.equal(changedPassword.statusCode, 200);
-    const otherUser = await app.inject({ method: 'POST', url: '/api/v1/auth/login',
+    const otherUser = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
       payload: { username: 'another-admin', password: 'changed-admin-password' },
     });
     assert.equal(otherUser.statusCode, 200);
     const client = new SQLite(path);
     try {
-      assert.equal((client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count, 21);
+      assert.equal(
+        (client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count,
+        21,
+      );
       assert.equal((client.prepare('SELECT count(*) AS count FROM users').get() as { count: number }).count, 2);
       client.prepare('DELETE FROM users WHERE username = ?').run('another-admin');
-      const removedUser = await app.inject({ url: '/api/v1/admin/me',
+      const removedUser = await app.inject({
+        url: '/api/v1/admin/me',
         headers: { authorization: `Bearer ${otherUser.json().token}` },
       });
       assert.equal(removedUser.statusCode, 401);
@@ -71,7 +81,8 @@ test('seed preserves an existing admin account with a different role', async () 
   const database = openDatabase(':memory:');
   try {
     const passwordHash = await hashPassword('existing-password');
-    database.db.$client.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
+    database.db.$client
+      .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
       .run('admin', passwordHash, 'desk');
     await seedAdmin(database.db);
     const admin = database.db.select().from(users).get()!;
@@ -86,12 +97,18 @@ test('renaming the initial administrator does not recreate default credentials o
   const database = openDatabase(':memory:');
   try {
     await seedAdmin(database.db);
-    database.db.update(users).set({ username: 'renamed-admin', name: 'Renamed Administrator' }).where(eq(users.username, 'admin')).run();
+    database.db
+      .update(users)
+      .set({ username: 'renamed-admin', name: 'Renamed Administrator' })
+      .where(eq(users.username, 'admin'))
+      .run();
     await seedAdmin(database.db);
     const accounts = database.db.select().from(users).all();
     assert.equal(accounts.length, 1);
     assert.equal(accounts[0]!.username, 'renamed-admin');
-  } finally { database.close(); }
+  } finally {
+    database.close();
+  }
 });
 
 test('participants preserve membership numbers and reference an existing club', () => {
@@ -101,10 +118,27 @@ test('participants preserve membership numbers and reference an existing club', 
     const participant = { id: 'participant-1', federationNumber: '000123', name: 'Alex', clubNumber: '0012' };
     database.db.insert(participants).values(participant).run();
     assert.deepEqual(database.db.select().from(participants).get(), participant);
-    assert.throws(() => database.db.insert(participants).values({ ...participant, id: 'participant-2' }).run(), /UNIQUE constraint failed/);
-    assert.throws(() => database.db.insert(participants).values({
-      ...participant, id: 'participant-3', federationNumber: '000124', clubNumber: 'unknown',
-    }).run(), /FOREIGN KEY constraint failed/);
+    assert.throws(
+      () =>
+        database.db
+          .insert(participants)
+          .values({ ...participant, id: 'participant-2' })
+          .run(),
+      /UNIQUE constraint failed/,
+    );
+    assert.throws(
+      () =>
+        database.db
+          .insert(participants)
+          .values({
+            ...participant,
+            id: 'participant-3',
+            federationNumber: '000124',
+            clubNumber: 'unknown',
+          })
+          .run(),
+      /FOREIGN KEY constraint failed/,
+    );
     assert.throws(() => database.db.delete(clubs).run(), /FOREIGN KEY constraint failed/);
   } finally {
     database.close();
@@ -121,7 +155,8 @@ test('existing default passwords require changing while custom passwords remain 
       const user = database.db.select().from(users).get()!;
       assert.equal(user.passwordHash, passwordHash);
       assert.equal(user.forceChangePassword, password === 'admin');
-    } finally { database.close(); }
+    } finally {
+      database.close();
+    }
   }
 });
-

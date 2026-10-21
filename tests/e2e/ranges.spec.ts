@@ -63,8 +63,11 @@ test('modal cancels with Escape and Cancel, and a failed save keeps the entered 
   await modal.getByLabel('Name', { exact: true }).fill('Outdoor');
   await modal.getByLabel('Supported distances (meters)').fill('30, 50, 70');
   await modal.getByLabel('Lane numbers').fill('1-5, 7');
-  await page.route('**/api/v1/admin/ranges', (route) => route.request().method() === 'POST'
-    ? route.fulfill({ status: 500, json: { message: 'Failed' } }) : route.continue());
+  await page.route('**/api/v1/admin/ranges', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 500, json: { message: 'Failed' } })
+      : route.continue(),
+  );
   await modal.getByRole('button', { name: 'Add range', exact: true }).click();
   await expect(modal.getByRole('alert')).toContainText('Could not save');
   await expect(modal.getByLabel('Name', { exact: true })).toHaveValue('Outdoor');

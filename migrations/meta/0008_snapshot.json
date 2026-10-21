@@ -89,55 +89,34 @@
         "competition_lanes_competition_id_range_id_competitions_id_range_id_fk": {
           "name": "competition_lanes_competition_id_range_id_competitions_id_range_id_fk",
           "tableFrom": "competition_lanes",
-          "columnsFrom": [
-            "competition_id",
-            "range_id"
-          ],
+          "columnsFrom": ["competition_id", "range_id"],
           "tableTo": "competitions",
-          "columnsTo": [
-            "id",
-            "range_id"
-          ],
+          "columnsTo": ["id", "range_id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "competition_lanes_lane_id_range_id_lanes_id_range_id_fk": {
           "name": "competition_lanes_lane_id_range_id_lanes_id_range_id_fk",
           "tableFrom": "competition_lanes",
-          "columnsFrom": [
-            "lane_id",
-            "range_id"
-          ],
+          "columnsFrom": ["lane_id", "range_id"],
           "tableTo": "lanes",
-          "columnsTo": [
-            "id",
-            "range_id"
-          ],
+          "columnsTo": ["id", "range_id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "competition_lanes_range_id_distance_meters_range_distances_range_id_distance_meters_fk": {
           "name": "competition_lanes_range_id_distance_meters_range_distances_range_id_distance_meters_fk",
           "tableFrom": "competition_lanes",
-          "columnsFrom": [
-            "range_id",
-            "distance_meters"
-          ],
+          "columnsFrom": ["range_id", "distance_meters"],
           "tableTo": "range_distances",
-          "columnsTo": [
-            "range_id",
-            "distance_meters"
-          ],
+          "columnsTo": ["range_id", "distance_meters"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
         "competition_lanes_competition_id_lane_id_pk": {
-          "columns": [
-            "competition_id",
-            "lane_id"
-          ],
+          "columns": ["competition_id", "lane_id"],
           "name": "competition_lanes_competition_id_lane_id_pk"
         }
       },
@@ -176,36 +155,25 @@
         "competition_participants_competition_id_competitions_id_fk": {
           "name": "competition_participants_competition_id_competitions_id_fk",
           "tableFrom": "competition_participants",
-          "columnsFrom": [
-            "competition_id"
-          ],
+          "columnsFrom": ["competition_id"],
           "tableTo": "competitions",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "competition_participants_participant_id_participants_id_fk": {
           "name": "competition_participants_participant_id_participants_id_fk",
           "tableFrom": "competition_participants",
-          "columnsFrom": [
-            "participant_id"
-          ],
+          "columnsFrom": ["participant_id"],
           "tableTo": "participants",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {
         "competition_participants_competition_id_participant_id_pk": {
-          "columns": [
-            "competition_id",
-            "participant_id"
-          ],
+          "columns": ["competition_id", "participant_id"],
           "name": "competition_participants_competition_id_participant_id_pk"
         }
       },
@@ -269,18 +237,12 @@
       "indexes": {
         "competitions_date_time_index": {
           "name": "competitions_date_time_index",
-          "columns": [
-            "date",
-            "starting_time"
-          ],
+          "columns": ["date", "starting_time"],
           "isUnique": false
         },
         "competitions_id_range_unique": {
           "name": "competitions_id_range_unique",
-          "columns": [
-            "id",
-            "range_id"
-          ],
+          "columns": ["id", "range_id"],
           "isUnique": true
         }
       },
@@ -288,13 +250,9 @@
         "competitions_range_id_ranges_id_fk": {
           "name": "competitions_range_id_ranges_id_fk",
           "tableFrom": "competitions",
-          "columnsFrom": [
-            "range_id"
-          ],
+          "columnsFrom": ["range_id"],
           "tableTo": "ranges",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -344,18 +302,12 @@
       "indexes": {
         "lanes_range_number_unique": {
           "name": "lanes_range_number_unique",
-          "columns": [
-            "range_id",
-            "number"
-          ],
+          "columns": ["range_id", "number"],
           "isUnique": true
         },
         "lanes_id_range_unique": {
           "name": "lanes_id_range_unique",
-          "columns": [
-            "id",
-            "range_id"
-          ],
+          "columns": ["id", "range_id"],
           "isUnique": true
         }
       },
@@ -363,13 +315,9 @@
         "lanes_range_id_ranges_id_fk": {
           "name": "lanes_range_id_ranges_id_fk",
           "tableFrom": "lanes",
-          "columnsFrom": [
-            "range_id"
-          ],
+          "columnsFrom": ["range_id"],
           "tableTo": "ranges",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -418,16 +366,12 @@
       "indexes": {
         "participants_federation_number_unique": {
           "name": "participants_federation_number_unique",
-          "columns": [
-            "federation_number"
-          ],
+          "columns": ["federation_number"],
           "isUnique": true
         },
         "participants_club_number_index": {
           "name": "participants_club_number_index",
-          "columns": [
-            "club_number"
-          ],
+          "columns": ["club_number"],
           "isUnique": false
         }
       },
@@ -435,13 +379,9 @@
         "participants_club_number_clubs_club_number_fk": {
           "name": "participants_club_number_clubs_club_number_fk",
           "tableFrom": "participants",
-          "columnsFrom": [
-            "club_number"
-          ],
+          "columnsFrom": ["club_number"],
           "tableTo": "clubs",
-          "columnsTo": [
-            "club_number"
-          ],
+          "columnsTo": ["club_number"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -482,23 +422,16 @@
         "range_distances_range_id_ranges_id_fk": {
           "name": "range_distances_range_id_ranges_id_fk",
           "tableFrom": "range_distances",
-          "columnsFrom": [
-            "range_id"
-          ],
+          "columnsFrom": ["range_id"],
           "tableTo": "ranges",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {
         "range_distances_range_id_distance_meters_pk": {
-          "columns": [
-            "range_id",
-            "distance_meters"
-          ],
+          "columns": ["range_id", "distance_meters"],
           "name": "range_distances_range_id_distance_meters_pk"
         }
       },
@@ -553,9 +486,7 @@
       "indexes": {
         "target_types_name_case_insensitive_unique": {
           "name": "target_types_name_case_insensitive_unique",
-          "columns": [
-            "lower(\"name\")"
-          ],
+          "columns": ["lower(\"name\")"],
           "isUnique": true
         }
       },

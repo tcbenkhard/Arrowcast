@@ -13,10 +13,16 @@ export function isValidArrowScore(score: string | null): boolean {
   return score === null || score === 'M' || /^(?:[1-9]|10)$/.test(score);
 }
 
-export function isValidRound(scores: readonly (string | null)[], arrowsPerRound: number, requireComplete: boolean): boolean {
-  return scores.length === arrowsPerRound
-    && scores.every(isValidArrowScore)
-    && (!requireComplete || scores.every((score) => score !== null));
+export function isValidRound(
+  scores: readonly (string | null)[],
+  arrowsPerRound: number,
+  requireComplete: boolean,
+): boolean {
+  return (
+    scores.length === arrowsPerRound &&
+    scores.every(isValidArrowScore) &&
+    (!requireComplete || scores.every((score) => score !== null))
+  );
 }
 
 export function calculateAverageScore(totalScore: number, enteredRounds: number, arrowsPerRound: number): number {

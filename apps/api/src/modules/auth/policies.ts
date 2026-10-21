@@ -16,9 +16,13 @@ export function authenticatedManagement(db: AppDatabase): ManagementPolicy {
     try {
       await request.jwtVerify();
       const user = db.select().from(users).where(eq(users.username, request.user.sub)).get();
-      if (!user || !['admin', 'competition_manager'].includes(user.role)
-        || request.user.role !== user.role || !Number.isFinite(request.user.exp)
-        || (request.user.sessionVersion ?? 0) !== user.sessionVersion) {
+      if (
+        !user ||
+        !['admin', 'competition_manager'].includes(user.role) ||
+        request.user.role !== user.role ||
+        !Number.isFinite(request.user.exp) ||
+        (request.user.sessionVersion ?? 0) !== user.sessionVersion
+      ) {
         await unauthorized(reply);
       }
     } catch {
@@ -30,8 +34,11 @@ export function authenticatedManagement(db: AppDatabase): ManagementPolicy {
 /** Denies all feature operations until the bootstrap password has been replaced. */
 export function passwordChanged(db: AppDatabase): ManagementPolicy {
   return async (request, reply) => {
-    const user = db.select({ forceChangePassword: users.forceChangePassword }).from(users)
-      .where(eq(users.username, request.user.sub)).get();
+    const user = db
+      .select({ forceChangePassword: users.forceChangePassword })
+      .from(users)
+      .where(eq(users.username, request.user.sub))
+      .get();
     if (!user || user.forceChangePassword) {
       await reply.code(403).send({
         code: 'PASSWORD_CHANGE_REQUIRED',

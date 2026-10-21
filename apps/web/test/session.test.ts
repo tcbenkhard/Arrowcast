@@ -6,8 +6,12 @@ test('admin token storage preserves the existing per-tab key', () => {
   const values = new Map<string, string>();
   const storage = {
     getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => { values.set(key, value); },
-    removeItem: (key: string) => { values.delete(key); },
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    removeItem: (key: string) => {
+      values.delete(key);
+    },
   };
   writeAdminToken('token', storage);
   assert.equal(readAdminToken(storage), 'token');
@@ -16,6 +20,10 @@ test('admin token storage preserves the existing per-tab key', () => {
 });
 
 test('admin token storage degrades safely when storage is unavailable', () => {
-  const unavailable = { getItem: () => { throw new Error('blocked'); } };
+  const unavailable = {
+    getItem: () => {
+      throw new Error('blocked');
+    },
+  };
   assert.equal(readAdminToken(unavailable), null);
 });
