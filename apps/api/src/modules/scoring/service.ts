@@ -27,6 +27,7 @@ export class ScoringError extends Error {
   constructor(
     public statusCode: number,
     message: string,
+    public code?: 'SCORING_NOT_STARTED',
   ) {
     super(message);
   }
@@ -263,6 +264,7 @@ export function validGrant(db: Database, grantId: string) {
             ? 'service.this_competition_is_closed_scoring_access_has_ended'
             : 'routes.scoring_has_not_started',
         ),
+        status === 'Closed' ? undefined : 'SCORING_NOT_STARTED',
       );
     }
   }

@@ -39,7 +39,8 @@ const cookiePath = (id: string) => `/api/v1/scoring/${id}`;
 export async function scoringRoutes(app: FastifyInstance, { db }: { db: AppDatabase }) {
   await app.register(cookie);
   app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof ScoringError) return reply.code(error.statusCode).send({ message: error.message });
+    if (error instanceof ScoringError)
+      return reply.code(error.statusCode).send({ message: error.message, ...(error.code ? { code: error.code } : {}) });
     throw error;
   });
   app.addHook('onRequest', async (request, reply) => {

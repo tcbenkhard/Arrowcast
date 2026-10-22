@@ -41,6 +41,7 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
   const correctionDirty = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [waitingForStart, setWaitingForStart] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [retryable, setRetryable] = useState(false);
   const [notice, setNotice] = useState('');
@@ -119,6 +120,8 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
   }
   useEffect(() => {
     let cancelled = false;
+    let timer: number | undefined;
+    let waiting = false;
     const fragment = new URLSearchParams(window.location.hash.slice(1));
     if (fragment.has('token')) {
       rawToken.current = fragment.get('token');
@@ -126,22 +129,44 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
     }
     setError('');
     setRetryable(false);
-    // Reuse the exchange promise during React StrictMode's effect replay.
-    opening.current ??= requestContext(rawToken.current !== null);
-    void opening.current
-      .then((result) => {
-        if (!cancelled) adoptContext(result);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
+    function open() {
+      // Reuse the exchange promise during React StrictMode's effect replay.
+      opening.current ??= requestContext(rawToken.current !== null);
+      void opening.current
+        .then((result) => {
+          if (cancelled) return;
+          setWaitingForStart(false);
+          setError('');
+          setRetryable(false);
+          adoptContext(result);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          const notStarted =
+            err instanceof HttpError &&
+            typeof err.body === 'object' &&
+            err.body !== null &&
+            'code' in err.body &&
+            err.body.code === 'SCORING_NOT_STARTED';
+          const transient = !(err instanceof HttpError) || err.status >= 500;
+          waiting = notStarted || (waiting && transient);
+          setWaitingForStart(waiting);
           setError(
             err instanceof Error ? err.message : t('ScoringPage.could_not_connect_check_your_connection_and_try_again'),
           );
-          setRetryable(!(err instanceof HttpError) || err.status >= 500);
-        }
-      });
+          setRetryable(!waiting && transient);
+          if (waiting) {
+            timer = window.setTimeout(() => {
+              opening.current = null;
+              open();
+            }, 5000);
+          }
+        });
+    }
+    open();
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [base, retry]);
 
@@ -311,7 +336,7 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
       )}
       {error && (
         <div className="panel scoring-message">
-          <p className="error" role="alert">
+          <p className={waitingForStart ? undefined : 'error'} role={waitingForStart ? 'status' : 'alert'}>
             {message(error)}
           </p>
           {retryable && (

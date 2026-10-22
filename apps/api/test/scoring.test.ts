@@ -381,7 +381,9 @@ test('check-in issues printable codes, keeps scoring closed, and preserves codes
       headers: csrf,
       payload: { token },
     });
-  assert.equal((await exchange()).statusCode, 403);
+  const waiting = await exchange();
+  assert.equal(waiting.statusCode, 403);
+  assert.equal(waiting.json().code, 'SCORING_NOT_STARTED');
   assert.equal((await f.save(code, '')).statusCode, 403);
   assert.deepEqual(f.db.select().from(laneScoringState).all(), []);
   assert.equal(

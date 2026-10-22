@@ -80,6 +80,30 @@ async function pressScore(page: Page, value: number) {
   await expect(page.locator('.scoring-notice')).toContainText('Draft saved.');
   await expect(page.getByRole('button', { name: 'Score 10', exact: true })).toBeEnabled();
 }
+
+test('a QR scanned during check-in automatically opens scoring when the competition starts', async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  const checkIn = await f.checkIn();
+  const code = (await checkIn.json()).qrCodes[0] as LaneQrCode;
+  let exchanges = 0;
+  page.on('request', (request) => {
+    if (request.url().endsWith(`/scoring/${code.grantId}/exchange`)) exchanges++;
+  });
+  await page.goto(code.path);
+  await expect(page.getByRole('status')).toHaveText('Scoring has not started.');
+  await expect(page).not.toHaveURL(/#token=/);
+  await expect.poll(() => exchanges, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole('button', { name: 'Score 10', exact: true })).toHaveCount(0);
+  expect(
+    (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } })).ok(),
+  ).toBeTruthy();
+  await expect(page.getByRole('button', { name: 'Score 10', exact: true })).toBeEnabled({ timeout: 10000 });
+  await expect(page.getByText('Scoring has not started.', { exact: true })).toHaveCount(0);
+  await pressScore(page, 10);
+});
 async function save(page: Page) {
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.scoring-notice')).toContainText(/Scores saved|All rounds saved/);
