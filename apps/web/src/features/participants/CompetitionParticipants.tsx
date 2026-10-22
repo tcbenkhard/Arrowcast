@@ -5,6 +5,7 @@ import { useModal } from '../../hooks/useModal';
 import { message, t } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { BowTypeField } from './BowTypeField';
+import { ClubField } from './ClubField';
 
 export interface Participant {
   id: string;
@@ -860,6 +861,10 @@ function ParticipantModal({
   }
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (!clubNumber.trim()) {
+      setError(t('participants.selectClub'));
+      return;
+    }
     void save({
       name: name.trim(),
       federationNumber: federationNumber.trim(),
@@ -923,84 +928,88 @@ function ParticipantModal({
               <label htmlFor="participant-search">
                 {t('CompetitionParticipants.search_by_name_or_federation_number')}
               </label>
-              <input
-                ref={searchInput}
-                id="participant-search"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded={hasQuery && !selected}
-                aria-controls={hasQuery && !selected ? 'participant-suggestions' : undefined}
-                aria-activedescendant={hasQuery && !selected ? `participant-option-${active}` : undefined}
-                autoComplete="off"
-                autoFocus
-                maxLength={200}
-                value={query}
-                disabled={pending}
-                onKeyDown={navigate}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setSelected(null);
-                  setResults([]);
-                  setActive(0);
-                  setError('');
-                }}
-              />
-              {hasQuery && !selected ? (
-                <ul
-                  ref={suggestions}
-                  id="participant-suggestions"
-                  role="listbox"
-                  aria-label={t('CompetitionParticipants.participant_suggestions')}
-                  className="participant-suggestions"
-                  aria-busy={searching}
-                >
-                  <li role="presentation">
-                    <button
-                      type="button"
-                      id="participant-option-0"
-                      role="option"
-                      aria-selected={active === 0}
-                      tabIndex={-1}
-                      disabled={pending}
-                      onClick={() => choose(0)}
-                    >
-                      {t('CompetitionParticipants.new_participant')}
-                    </button>
-                  </li>
-                  {results.map((person, index) => (
-                    <li role="presentation" key={person.id}>
+              <div className="participant-combobox">
+                <input
+                  ref={searchInput}
+                  id="participant-search"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={hasQuery && !selected}
+                  aria-controls={hasQuery && !selected ? 'participant-suggestions' : undefined}
+                  aria-activedescendant={hasQuery && !selected ? `participant-option-${active}` : undefined}
+                  autoComplete="off"
+                  autoFocus
+                  maxLength={200}
+                  value={query}
+                  disabled={pending}
+                  onKeyDown={navigate}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setSelected(null);
+                    setResults([]);
+                    setActive(0);
+                    setError('');
+                  }}
+                />
+                {hasQuery && !selected ? (
+                  <ul
+                    ref={suggestions}
+                    id="participant-suggestions"
+                    role="listbox"
+                    aria-label={t('CompetitionParticipants.participant_suggestions')}
+                    className="participant-suggestions"
+                    aria-busy={searching}
+                  >
+                    <li role="presentation">
                       <button
                         type="button"
-                        id={`participant-option-${index + 1}`}
+                        id="participant-option-0"
                         role="option"
-                        aria-selected={active === index + 1}
+                        aria-selected={active === 0}
                         tabIndex={-1}
                         disabled={pending}
-                        onClick={() => choose(index + 1)}
+                        onClick={() => choose(0)}
                       >
-                        {person.name} · {person.federationNumber}
-                        <small>
-                          {person.clubName} ({person.clubNumber})
-                        </small>
+                        {t('CompetitionParticipants.new_participant')}
                       </button>
                     </li>
-                  ))}
-                </ul>
-              ) : (
-                !selected && (
-                  <p className="muted participant-search-hint">
-                    {t('CompetitionParticipants.type_a_name_or_federation_number_to_find_or')}
-                  </p>
-                )
-              )}
+                    {results.map((person, index) => (
+                      <li role="presentation" key={person.id}>
+                        <button
+                          type="button"
+                          id={`participant-option-${index + 1}`}
+                          role="option"
+                          aria-selected={active === index + 1}
+                          tabIndex={-1}
+                          disabled={pending}
+                          onClick={() => choose(index + 1)}
+                        >
+                          {person.name} · {person.federationNumber}
+                          <small>
+                            {person.clubName} ({person.clubNumber})
+                          </small>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              <p
+                className="muted participant-search-hint"
+                style={{ visibility: !hasQuery && !selected ? 'visible' : 'hidden' }}
+              >
+                {t('CompetitionParticipants.type_a_name_or_federation_number_to_find_or')}
+              </p>
             </div>
             {bowField}
             {targetField}
           </div>
-          {searching && <p role="status">{t('CompetitionParticipants.searching')}</p>}
-          {!searching && query.trim() && !selected && !results.length && !searchError && (
-            <p>{t('CompetitionParticipants.no_matching_participants')}</p>
-          )}
+          <div className="participant-search-feedback">
+            {searching && <p role="status">{t('CompetitionParticipants.searching')}</p>}
+            {!searching && query.trim() && !selected && !results.length && !searchError && (
+              <p>{t('CompetitionParticipants.no_matching_participants')}</p>
+            )}
+          </div>
           {searchError && (
             <>
               <p className="error" role="alert">
@@ -1057,22 +1066,15 @@ function ParticipantModal({
               value={federationNumber}
               onChange={(event) => setFederationNumber(event.target.value)}
             />
-            <label htmlFor="participant-club-number">{t('participants.clubNumber')}</label>
-            <input
-              id="participant-club-number"
-              required
-              maxLength={200}
-              value={clubNumber}
-              onChange={(event) => setClubNumber(event.target.value)}
-            />
-            <label htmlFor="participant-club-name">{t('participants.clubName')}</label>
-            <input
-              id="participant-club-name"
-              required
-              maxLength={200}
-              value={knownClub?.name ?? clubName}
-              readOnly={!!knownClub}
-              onChange={(event) => setClubName(event.target.value)}
+            <ClubField
+              clubs={clubs}
+              clubNumber={clubNumber}
+              clubName={clubName}
+              onChange={(number, name) => {
+                setClubNumber(number);
+                setClubName(name);
+                setError('');
+              }}
             />
             {bowField}
             {targetField}
