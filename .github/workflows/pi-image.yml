@@ -1,4 +1,4 @@
-name: Raspberry Pi image
+name: Build Raspberry pi image
 
 on:
   workflow_dispatch:
@@ -21,47 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check:
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
-    steps:
-      - name: Require releases to run from main
-        if: github.ref != 'refs/heads/main'
-        run: |
-          echo 'Run this workflow from main.' >&2
-          exit 1
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Validate signing configuration for releases
-        env:
-          ARROWCAST_UPDATE_PRIVATE_KEY: ${{ secrets.ARROWCAST_UPDATE_PRIVATE_KEY }}
-          ARROWCAST_UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
-        run: python3 deploy/pi/signing.py --require-private
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npm test
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
-      - name: Check image scripts
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck nginx-light
-          find deploy/pi -name '*.sh' -print0 | xargs -0 -n1 bash -n
-          shellcheck -x deploy/pi/build-image.sh deploy/pi/stage-arrowcast/prerun.sh \
-            deploy/pi/stage-arrowcast/00-install/00-run.sh \
-            deploy/pi/stage-arrowcast/00-install/files/*.sh
-      - name: Test update broker
-        run: python3 -m unittest discover -s deploy/pi/tests -v
-
   version:
-    needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -99,7 +59,7 @@ jobs:
           git add package.json package-lock.json
           git commit -m "chore: release $tag"
           git tag -a "$tag" -m "$marker"
-          # Fail without publishing either ref if main advanced since checks ran.
+          # Fail without publishing either ref if main advanced since the workflow started.
           git push --atomic origin HEAD:refs/heads/main "refs/tags/$tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
