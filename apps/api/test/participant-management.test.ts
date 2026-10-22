@@ -207,6 +207,53 @@ test('adds existing and new participants to specific competitions and rejects du
   }
 });
 
+test('creates clubs without an import, keeps existing names and lets imports replace manual names', async () => {
+  const { app, database, close } = await fixture();
+  const url = '/competitions/one/participants';
+  const person = {
+    name: 'Manual Archer',
+    federationNumber: '000123',
+    clubNumber: ' 0015 ',
+    clubName: ' Manual Club ',
+    bowType: 'Recurve',
+    targetType: 'Initial face',
+  };
+  try {
+    database.db.delete(clubs).run();
+    for (const clubName of [undefined, '', '   ', 123, 'a'.repeat(201)]) {
+      const invalid = await app.inject({ method: 'POST', url, payload: { ...person, clubName } });
+      assert.equal(invalid.statusCode, 400);
+      assert.deepEqual(database.db.select().from(clubs).all(), []);
+      assert.deepEqual(database.db.select().from(participants).all(), []);
+    }
+    const created = await app.inject({ method: 'POST', url, payload: person });
+    assert.equal(created.statusCode, 201);
+    assert.equal(created.json().clubNumber, '0015');
+    assert.equal(created.json().clubName, 'Manual Club');
+    assert.deepEqual(database.db.select().from(clubs).all(), [{ clubNumber: '0015', name: 'Manual Club' }]);
+
+    const duplicate = await app.inject({ method: 'POST', url, payload: { ...person, clubNumber: '0016' } });
+    assert.equal(duplicate.statusCode, 409);
+    assert.equal(database.db.select().from(clubs).all().length, 1);
+
+    const second = await app.inject({
+      method: 'POST',
+      url,
+      payload: { ...person, federationNumber: '000124', clubName: 'Different name' },
+    });
+    assert.equal(second.statusCode, 201);
+    assert.equal(second.json().clubName, 'Manual Club');
+
+    saveParticipants(database.db, { clubs: [{ clubNumber: '0015', name: 'Imported Club' }], participants: [] });
+    const registered = (await app.inject({ url })).json();
+    assert.equal(registered.length, 2);
+    assert.ok(registered.every((entry: { clubName: string }) => entry.clubName === 'Imported Club'));
+    assert.equal(registered.find((entry: { id: string }) => entry.id === created.json().id).clubName, 'Imported Club');
+  } finally {
+    await close();
+  }
+});
+
 test('bulk unregister removes only selected entries from the chosen competition and preserves participants', async () => {
   const { app, database, close } = await fixture();
   const url = '/competitions/one/participants';

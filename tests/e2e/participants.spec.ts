@@ -1,6 +1,56 @@
 import { expect, test } from './fixtures';
 import { testAdminToken } from './admin';
 
+test('creates a participant and a new club when no clubs are available in the form', async ({ page, request }) => {
+  const token = testAdminToken();
+  const headers = { Authorization: `Bearer ${token}` };
+  const rangeResponse = await request.post('/api/v1/admin/ranges', {
+    headers,
+    data: { name: 'Manual club range', supportedDistancesMeters: [18], lanes: [{ number: 1 }] },
+  });
+  expect(rangeResponse.ok()).toBeTruthy();
+  const range = await rangeResponse.json();
+  const response = await request.post('/api/v1/admin/competitions', {
+    headers,
+    data: {
+      name: 'Manual club competition',
+      date: '2026-12-01',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      rangeId: range.id,
+      lanes: [{ laneId: range.lanes[0].id, distanceMeters: 18 }],
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const competition = await response.json();
+  const targetResponse = await request.get('/api/v1/admin/target-types', { headers });
+  const targets: string[] = await targetResponse.json();
+  await page.route('**/api/v1/admin/clubs', (route) => route.fulfill({ json: [] }));
+  await page.addInitScript((value) => sessionStorage.setItem('arrowcast.admin.jwt', value), token);
+  await page.goto(`/admin/competitions/${competition.id}`);
+  await page.getByRole('button', { name: 'Add participant', exact: true }).click();
+  const modal = page.getByRole('dialog', { name: 'Add participant', exact: true });
+  await modal.getByRole('combobox', { name: 'Search by name or federation number' }).fill('Manual Club Archer');
+  await modal.getByRole('option', { name: 'New participant', exact: true }).click();
+  await modal.getByLabel('Federation number', { exact: true }).fill('009876');
+  await modal.getByLabel('Club number', { exact: true }).fill('0099');
+  const clubName = modal.getByLabel('Club name', { exact: true });
+  await expect(clubName).toBeEditable();
+  await modal.getByRole('combobox', { name: 'Bow type', exact: true }).selectOption('Recurve');
+  await modal.getByLabel('Target', { exact: true }).selectOption(targets[0]!);
+  await modal.getByRole('button', { name: 'Add participant', exact: true }).click();
+  await expect(clubName).toBeFocused();
+  await clubName.fill('Manual Browser Club');
+  await modal.getByRole('button', { name: 'Add participant', exact: true }).click();
+  await expect(modal.getByRole('status')).toContainText('added.');
+  await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.reload();
+  const row = page.getByRole('row', { name: /Manual Club Archer/ });
+  await expect(row).toContainText('Manual Browser Club');
+  const clubsResponse = await request.get('/api/v1/admin/clubs', { headers });
+  expect(await clubsResponse.json()).toContainEqual({ clubNumber: '0099', name: 'Manual Browser Club' });
+});
+
 test('participant modal searches, adds existing people with the keyboard and creates new participants', async ({
   page,
   request,
@@ -182,7 +232,9 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await modal.getByRole('option', { name: 'New participant', exact: true }).click();
   await expect(modal.getByLabel('Full name', { exact: true })).toHaveValue('New Archer');
   await modal.getByLabel('Federation number', { exact: true }).fill('000124');
-  await modal.getByLabel('Club', { exact: true }).selectOption('0012');
+  await modal.getByLabel('Club number', { exact: true }).fill('0012');
+  await expect(modal.getByLabel('Club name', { exact: true })).toHaveValue('Testclub');
+  await expect(modal.getByLabel('Club name', { exact: true })).toHaveAttribute('readonly', '');
   await bow.selectOption('Compound');
   await expect(bow).toHaveValue('Compound');
   await modal.getByLabel('Target', { exact: true }).selectOption('Custom face');

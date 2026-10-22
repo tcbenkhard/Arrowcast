@@ -652,7 +652,9 @@ function ParticipantModal({
   const [name, setName] = useState('');
   const [federationNumber, setFederationNumber] = useState('');
   const [clubNumber, setClubNumber] = useState('');
+  const [clubName, setClubName] = useState('');
   const [clubs, setClubs] = useState<{ clubNumber: string; name: string }[]>([]);
+  const knownClub = clubs.find((club) => club.clubNumber === clubNumber.trim());
   const [clubsLoading, setClubsLoading] = useState(false);
   const [clubsError, setClubsError] = useState('');
   const [pending, setPending] = useState(false);
@@ -771,7 +773,7 @@ function ParticipantModal({
   }, [creating, token, onUnauthorized, retry]);
 
   async function save(
-    body: { participantId: string } | { name: string; federationNumber: string; clubNumber: string },
+    body: { participantId: string } | { name: string; federationNumber: string; clubNumber: string; clubName: string },
   ) {
     if (saving.current) return;
     if (!bowTypes.includes(bowType)) {
@@ -814,6 +816,7 @@ function ParticipantModal({
       setName('');
       setFederationNumber('');
       setClubNumber('');
+      setClubName('');
       setNotice(t('CompetitionParticipants.participant_added', { name: person.name }));
       setFocusVersion((value) => value + 1);
     } catch {
@@ -857,7 +860,12 @@ function ParticipantModal({
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    void save({ name: name.trim(), federationNumber: federationNumber.trim(), clubNumber });
+    void save({
+      name: name.trim(),
+      federationNumber: federationNumber.trim(),
+      clubNumber: clubNumber.trim(),
+      clubName: knownClub?.name ?? clubName.trim(),
+    });
   }
   const bowField = (
     <BowTypeField
@@ -1049,21 +1057,23 @@ function ParticipantModal({
               value={federationNumber}
               onChange={(event) => setFederationNumber(event.target.value)}
             />
-            <label htmlFor="participant-club">{t('CompetitionParticipants.club')}</label>
-            <select
-              id="participant-club"
+            <label htmlFor="participant-club-number">{t('participants.clubNumber')}</label>
+            <input
+              id="participant-club-number"
               required
+              maxLength={200}
               value={clubNumber}
-              disabled={clubsLoading || !!clubsError}
               onChange={(event) => setClubNumber(event.target.value)}
-            >
-              <option value="">{t('CompetitionParticipants.select_a_club')}</option>
-              {clubs.map((club) => (
-                <option key={club.clubNumber} value={club.clubNumber}>
-                  {club.name} ({club.clubNumber})
-                </option>
-              ))}
-            </select>
+            />
+            <label htmlFor="participant-club-name">{t('participants.clubName')}</label>
+            <input
+              id="participant-club-name"
+              required
+              maxLength={200}
+              value={knownClub?.name ?? clubName}
+              readOnly={!!knownClub}
+              onChange={(event) => setClubName(event.target.value)}
+            />
             {bowField}
             {targetField}
           </fieldset>
@@ -1077,9 +1087,6 @@ function ParticipantModal({
                 {t('CompetitionDetailPage.try_again')}
               </button>
             </>
-          )}
-          {!clubsLoading && !clubsError && !clubs.length && (
-            <p>{t('CompetitionParticipants.no_clubs_available_import_clubs_from_settings_first')}</p>
           )}
           {error && (
             <p className="error" role="alert">
@@ -1101,19 +1108,7 @@ function ParticipantModal({
             <button type="button" className="secondary" disabled={pending} onClick={onClose}>
               {t('PasswordChangeForm.cancel')}
             </button>
-            <button
-              type="submit"
-              disabled={
-                pending ||
-                clubsLoading ||
-                !!clubsError ||
-                !clubs.length ||
-                !bowType ||
-                !targetType ||
-                bowsLoading ||
-                !!bowsError
-              }
-            >
+            <button type="submit" disabled={pending || !bowType || !targetType || bowsLoading || !!bowsError}>
               {pending ? t('CompetitionParticipants.adding') : t('CompetitionParticipants.add_participant')}
             </button>
           </div>

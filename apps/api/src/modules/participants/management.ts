@@ -6,7 +6,10 @@ import type { AppDatabase } from '../../db/index.js';
 import { bowTypes, clubs, competitionParticipants, competitions, participants, targetTypes } from '../../db/schema.js';
 import { importCompetitionParticipants, ParticipantImportError, readParticipantWorkbook } from './xlsx-import.js';
 
-type AddBody = ({ participantId: string } | { name: string; federationNumber: string; clubNumber: string }) & {
+type AddBody = (
+  | { participantId: string }
+  | { name: string; federationNumber: string; clubNumber: string; clubName?: string }
+) & {
   bowType: string;
   targetType: string;
 };
@@ -275,6 +278,7 @@ export async function participantManagementRoutes(app: FastifyInstance, { db }: 
                 name: nonBlank,
                 federationNumber: nonBlank,
                 clubNumber: nonBlank,
+                clubName: { type: 'string', maxLength: 200 },
                 bowType: nonBlank,
                 targetType: { ...nonBlank, maxLength: 100 },
               },
@@ -313,8 +317,10 @@ export async function participantManagementRoutes(app: FastifyInstance, { db }: 
       }
       const federationNumber = body.federationNumber.trim();
       const clubNumber = body.clubNumber.trim();
-      if (!db.select().from(clubs).where(eq(clubs.clubNumber, clubNumber)).get()) {
-        return reply.code(400).send({ message: t('participants.existingClub') });
+      const club = db.select().from(clubs).where(eq(clubs.clubNumber, clubNumber)).get();
+      const clubName = body.clubName?.trim();
+      if (!club && !clubName) {
+        return reply.code(400).send({ message: t('participants.clubNameRequired') });
       }
       if (db.select().from(participants).where(eq(participants.federationNumber, federationNumber)).get()) {
         return reply
@@ -323,6 +329,7 @@ export async function participantManagementRoutes(app: FastifyInstance, { db }: 
       }
       const id = randomUUID();
       db.transaction((tx) => {
+        if (!club) tx.insert(clubs).values({ clubNumber, name: clubName! }).onConflictDoNothing().run();
         tx.insert(participants).values({ id, name: body.name.trim(), federationNumber, clubNumber }).run();
         tx.insert(competitionParticipants).values({ competitionId, participantId: id, bowType, targetType }).run();
       });
