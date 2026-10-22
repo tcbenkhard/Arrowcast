@@ -54,6 +54,8 @@
   "CompetitionDetailPage.all_warnings_must_be_resolved_before_transitioning_to_the": "All warnings must be resolved before transitioning to the next phase.",
   "CompetitionDetailPage.starting_the_competition_will_lock_the_competition_participants": "Starting the competition will lock the competition participants.",
   "CompetitionDetailPage.warning_not_all_participants_are_checked_in": "\n\nWarning: Not all participants are checked in.",
+  "CompetitionDetailPage.warning_not_all_rounds_submitted": "\n\nWarning: Not all checked-in participants have submitted scores for every round.",
+  "CompetitionDetailPage.could_not_check_rounds_please_try_again": "Could not check whether all rounds have been submitted. Please try again.",
   "CompetitionDetailPage.start_competition_54": "\n\nStart competition?",
   "CompetitionDetailPage.closing_the_competition_will_lock_all_scores_disable_all": "Closing the competition will lock all scores, disable all score entry access, and end the competition.",
   "CompetitionDetailPage.end_competition_56": "\n\nEnd competition?",

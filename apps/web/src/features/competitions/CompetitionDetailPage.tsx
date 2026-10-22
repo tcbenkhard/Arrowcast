@@ -12,7 +12,7 @@ import type { Participant } from '../participants/CompetitionParticipants';
 import { competitionWarnings } from './warnings';
 import { shootingLineReduction } from './shooting-lines';
 import { CompetitionParticipants } from '../participants/CompetitionParticipants';
-import type { LaneQrCode } from '@arrowcast/contracts';
+import type { LaneQrCode, ScoringStanding } from '@arrowcast/contracts';
 import { LaneScoringCodes } from '../scoring/LaneScoringCodes';
 import { ScoringSettings } from '../scoring/ScoringSettings';
 
@@ -167,17 +167,32 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
           t('CompetitionDetailPage.start_competition_54');
         if (!window.confirm(message)) return;
       }
-      if (status === 'Closed') {
-        const message =
-          t('CompetitionDetailPage.closing_the_competition_will_lock_all_scores_disable_all') +
-          t('CompetitionDetailPage.end_competition_56');
-        if (!window.confirm(message)) return;
-      }
     }
     statusInProgress.current = true;
     setChangingStatus(true);
     setStatusError('');
     try {
+      if (status === 'Closed') {
+        const standingsResponse = await managementRequest(
+          `/api/v1/admin/competitions/${encodeURIComponent(competition.id)}/scoring-standings`,
+          token,
+          { cache: 'no-store' },
+        );
+        if (standingsResponse.status === 401) {
+          onUnauthorized(t(expiredMessage));
+          return;
+        }
+        if (!standingsResponse.ok) throw new Error(t('CompetitionDetailPage.could_not_check_rounds_please_try_again'));
+        const standings = (await standingsResponse.json()) as ScoringStanding[];
+        const hasMissingRounds = standings.some(
+          (participant) => participant.checkedIn && participant.enteredRounds < participant.totalRounds,
+        );
+        const message =
+          (hasMissingRounds ? `${t('CompetitionDetailPage.warning_not_all_rounds_submitted').trimStart()}\n\n` : '') +
+          t('CompetitionDetailPage.closing_the_competition_will_lock_all_scores_disable_all') +
+          t('CompetitionDetailPage.end_competition_56');
+        if (!window.confirm(message)) return;
+      }
       const response = await managementRequest(
         `/api/v1/admin/competitions/${encodeURIComponent(competition.id)}/status`,
         token,

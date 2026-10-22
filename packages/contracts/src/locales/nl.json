@@ -54,6 +54,8 @@
   "CompetitionDetailPage.all_warnings_must_be_resolved_before_transitioning_to_the": "Los alle waarschuwingen op voordat je naar de volgende fase gaat.",
   "CompetitionDetailPage.starting_the_competition_will_lock_the_competition_participants": "Als je de wedstrijd start, wordt de deelnemerslijst vergrendeld.",
   "CompetitionDetailPage.warning_not_all_participants_are_checked_in": "\n\nWaarschuwing: niet alle deelnemers zijn aangemeld.",
+  "CompetitionDetailPage.warning_not_all_rounds_submitted": "\n\nWaarschuwing: niet alle aangemelde deelnemers hebben de scores voor alle rondes ingediend.",
+  "CompetitionDetailPage.could_not_check_rounds_please_try_again": "Kon niet controleren of alle rondes zijn ingediend. Probeer het opnieuw.",
   "CompetitionDetailPage.start_competition_54": "\n\nWedstrijd starten?",
   "CompetitionDetailPage.closing_the_competition_will_lock_all_scores_disable_all": "Als je de wedstrijd sluit, worden alle scores vergrendeld, vervalt de toegang voor score-invoer en eindigt de wedstrijd.",
   "CompetitionDetailPage.end_competition_56": "\n\nWedstrijd beëindigen?",

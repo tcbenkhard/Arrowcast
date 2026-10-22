@@ -647,6 +647,87 @@ for (const allCheckedIn of [true, false]) {
   });
 }
 
+for (const enteredRounds of [0, 1, 2]) {
+  test(`closing a competition checks current scores with ${enteredRounds} submitted rounds`, async ({ page }) => {
+    const competition = {
+      id: 'close-confirmation',
+      name: 'Close confirmation',
+      date: '2026-12-01',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      numberOfRounds: 2,
+      arrowsPerRound: 3,
+      status: 'Active',
+      range: { id: 'range', name: 'Range' },
+    };
+    const base = '**/api/v1/admin/competitions/close-confirmation';
+    await page.route(base, (route) => route.fulfill({ json: competition }));
+    await page.route('**/api/v1/admin/target-types', (route) => route.fulfill({ json: ['Face A'] }));
+    await page.route(`${base}/lanes`, (route) =>
+      route.fulfill({
+        json: [{ laneId: 'lane', number: 1, distanceMeters: 18, targetType: 'Face A', numberOfTargets: 1 }],
+      }),
+    );
+    await page.route(`${base}/participants`, (route) => route.fulfill({ json: [] }));
+    let standingsRequests = 0;
+    let failCheck = true;
+    await page.route(`${base}/scoring-standings`, (route) => {
+      standingsRequests++;
+      return failCheck
+        ? route.fulfill({ status: 500, json: {} })
+        : route.fulfill({
+            json: [
+              { checkedIn: true, enteredRounds: 2, totalRounds: 2 },
+              { checkedIn: true, enteredRounds, totalRounds: 2 },
+              { checkedIn: false, enteredRounds: 0, totalRounds: 2 },
+            ].map((standing, index) => ({
+              ...standing,
+              participantId: String(index),
+              name: `Archer ${index}`,
+              totalScore: 0,
+              averageScore: 0,
+              lastArrows: [],
+            })),
+          });
+    });
+    let statusRequests = 0;
+    await page.route(`${base}/status`, (route) => {
+      statusRequests++;
+      expect(route.request().postDataJSON()).toEqual({ status: 'Closed' });
+      competition.status = 'Closed';
+      return route.fulfill({ json: competition });
+    });
+    await page.goto('/admin/competitions/close-confirmation');
+    const end = page.getByRole('button', { name: 'End competition', exact: true });
+    const flow = page.getByRole('region', { name: 'Competition flow', exact: true });
+    await expect(end).toBeEnabled();
+    await end.click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Could not check whether all rounds' })).toBeVisible();
+    expect(statusRequests).toBe(0);
+    failCheck = false;
+    for (const accept of [false, true]) {
+      const previousStandingsRequests = standingsRequests;
+      const dialogPromise = page.waitForEvent('dialog').then(async (dialog) => {
+        expect(dialog.type()).toBe('confirm');
+        expect(dialog.message()).toContain('Closing the competition will lock all scores');
+        if (enteredRounds < 2)
+          expect(dialog.message()).toContain(
+            'Warning: Not all checked-in participants have submitted scores for every round.',
+          );
+        else expect(dialog.message()).not.toContain('Warning:');
+        if (accept) await dialog.accept();
+        else await dialog.dismiss();
+      });
+      await end.click();
+      await dialogPromise;
+      expect(standingsRequests).toBeGreaterThan(previousStandingsRequests);
+      await expect(flow.locator('[aria-current="step"]')).toContainText(accept ? 'Closed' : 'Active');
+      if (!accept) await expect(end).toBeEnabled();
+      expect(statusRequests).toBe(accept ? 1 : 0);
+    }
+  });
+}
+
 test('warnings below the flow follow lane edits, participant target changes and removals', async ({ page }) => {
   const competition = {
     id: 'warnings',
