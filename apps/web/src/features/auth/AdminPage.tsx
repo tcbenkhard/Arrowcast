@@ -1,7 +1,7 @@
 import { Icon } from '../../components/Icon';
 import { ArrowCastLogo } from '../../components/ArrowCastLogo';
 import { LanguageSelect } from '../../components/LanguageSelect';
-import { t, message, setLanguage, useLanguage } from '../../i18n';
+import { t, message, setLanguage } from '../../i18n';
 import type { Language } from '../../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -203,7 +203,6 @@ function ProfileMenu({
   onLogout: () => void;
   onChangePassword: () => void;
 }) {
-  const language = useLanguage();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   async function changeLanguage(value: Language) {
@@ -237,18 +236,13 @@ function ProfileMenu({
         {Array.from(username.trim())[0]?.toLocaleUpperCase() || '?'}
       </button>
       <div id="profile-dropdown" className="profile-dropdown" popover="auto">
-        <label htmlFor="profile-language">{t('language.label')}</label>
-        <select
-          id="profile-language"
-          value={language}
+        <LanguageSelect
+          flags
           disabled={pending}
-          onChange={(event) => {
-            void changeLanguage(event.target.value as Language);
+          onChange={(value) => {
+            void changeLanguage(value);
           }}
-        >
-          <option value="nl">{t('language.nl')}</option>
-          <option value="en">{t('language.en')}</option>
-        </select>
+        />
         {error && <p role="alert">{message(error)}</p>}
         <button onClick={onChangePassword}>{t('AdminPage.change_password')}</button>
         <hr />

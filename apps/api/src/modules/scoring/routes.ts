@@ -3,20 +3,9 @@ import { randomUUID } from 'node:crypto';
 import cookie from '@fastify/cookie';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { ScoringMutation, ScoringStanding } from '@arrowcast/contracts';
-import { calculateAverageScore } from '@arrowcast/scoring';
+import type { ScoringMutation } from '@arrowcast/contracts';
 import type { AppDatabase } from '../../db/index.js';
-import {
-  arrowScores,
-  competitionParticipants,
-  competitions,
-  laneScoringGrants,
-  lanes,
-  participants,
-  roundScores,
-  scorecards,
-  scoringSessions,
-} from '../../db/schema.js';
+import { competitions, laneScoringGrants, lanes, scoringSessions } from '../../db/schema.js';
 import {
   hashToken,
   initializeLaneScoring,
@@ -29,6 +18,9 @@ import {
   validGrant,
   restoreLaneCodes,
 } from './service.js';
+
+import { scoringStandings } from './standings.js';
+import { exportResults, resultsFilename } from './results-export.js';
 
 const grantParams = {
   type: 'object',
@@ -219,54 +211,25 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
     async (request, reply) => {
       const competition = findCompetition(request.params.competitionId);
       if (!competition) return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
-      return db.transaction((tx) => {
-        const people = tx
-          .select({
-            participantId: participants.id,
-            name: participants.name,
-            laneNumber: lanes.number,
-            targetLetter: competitionParticipants.targetLetter,
-          })
-          .from(competitionParticipants)
-          .innerJoin(participants, eq(participants.id, competitionParticipants.participantId))
-          .leftJoin(lanes, eq(lanes.id, competitionParticipants.laneId))
-          .where(eq(competitionParticipants.competitionId, competition.id))
-          .all();
-        const scores = tx
-          .select({ participantId: scorecards.participantId, roundId: roundScores.id, symbol: arrowScores.symbol })
-          .from(scorecards)
-          .innerJoin(roundScores, and(eq(roundScores.scorecardId, scorecards.id), eq(roundScores.status, 'submitted')))
-          .leftJoin(arrowScores, eq(arrowScores.roundScoreId, roundScores.id))
-          .where(eq(scorecards.competitionId, competition.id))
-          .orderBy(roundScores.roundNumber, arrowScores.arrowIndex)
-          .all();
-        const totals = new Map<string, { rounds: Set<string>; total: number; lastArrows: string[] }>();
-        for (const score of scores) {
-          const total = totals.get(score.participantId) ?? { rounds: new Set<string>(), total: 0, lastArrows: [] };
-          total.rounds.add(score.roundId);
-          total.total += score.symbol && score.symbol !== 'M' ? Number(score.symbol) : 0;
-          if (score.symbol !== null) {
-            total.lastArrows.push(score.symbol);
-            if (total.lastArrows.length > 3) total.lastArrows.shift();
-          }
-          totals.set(score.participantId, total);
-        }
-        return people
-          .map((person): ScoringStanding => {
-            const total = totals.get(person.participantId);
-            const enteredRounds = total?.rounds.size ?? 0;
-            const totalScore = total?.total ?? 0;
-            return {
-              ...person,
-              enteredRounds,
-              totalRounds: competition.numberOfRounds,
-              totalScore,
-              averageScore: calculateAverageScore(totalScore, enteredRounds, competition.arrowsPerRound),
-              lastArrows: total?.lastArrows ?? [],
-            };
-          })
-          .sort((a, b) => b.averageScore - a.averageScore || a.name.localeCompare(b.name, 'nl'));
-      });
+      return db.transaction((tx) => scoringStandings(tx, competition));
+    },
+  );
+  app.get<{ Params: { competitionId: string } }>(
+    '/competitions/:competitionId/results-export',
+    { schema: { params: competitionParams } },
+    async (request, reply) => {
+      const competition = findCompetition(request.params.competitionId);
+      if (!competition) return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
+      if (competition.status !== 'Closed')
+        return reply.code(409).send({ message: t('ScoringSettings.close_before_export') });
+      const buffer = db.transaction((tx) => exportResults(tx, competition));
+      return reply
+        .type('application/vnd.ms-excel')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="results.xls"; filename*=UTF-8''${encodeURIComponent(resultsFilename(competition))}`,
+        )
+        .send(buffer);
     },
   );
   app.post<{ Params: { competitionId: string } }>(

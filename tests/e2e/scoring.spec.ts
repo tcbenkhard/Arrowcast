@@ -55,7 +55,25 @@ async function fixture(request: APIRequestContext, arrowsPerRound = 2) {
       ).ok(),
     ).toBeTruthy();
   }
-  return { token, headers, competition, base };
+  async function checkInParticipants() {
+    const people = await (await request.get(`${base}/participants`, { headers })).json();
+    for (const person of people) {
+      expect(
+        (
+          await request.patch(`${base}/participants/${person.id}/check-in`, {
+            headers,
+            data: { checkedIn: true },
+          })
+        ).ok(),
+      ).toBeTruthy();
+    }
+  }
+  async function checkIn() {
+    const response = await request.patch(`${base}/status`, { headers, data: { status: 'Check-in' } });
+    await checkInParticipants();
+    return response;
+  }
+  return { token, headers, competition, base, checkIn, checkInParticipants };
 }
 async function pressScore(page: Page, value: number) {
   await page.getByRole('button', { name: value === 0 ? 'Score Miss' : `Score ${value}`, exact: true }).click();
@@ -67,9 +85,89 @@ async function save(page: Page) {
   await expect(page.locator('.scoring-notice')).toContainText(/Scores saved|All rounds saved/);
 }
 
+test('details recommend fewer shooting lines after check-in changes and clear the banner after reassignment', async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  await f.checkIn();
+  const people = await (await request.get(`${f.base}/participants`, { headers: f.headers })).json();
+  const absent = ['A', 'C'].map((letter) =>
+    people.find((person: { targetLetter: string }) => person.targetLetter === letter),
+  );
+  await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
+  await page.goto(`/admin/competitions/${f.competition.id}`);
+  const details = page.getByRole('region', { name: 'Details', exact: true });
+  const banner = details.getByRole('status');
+  await expect(banner).toHaveCount(0);
+  const participants = page.getByRole('region', { name: 'Participants', exact: true });
+  for (const person of absent) {
+    const row = participants.getByRole('row').filter({ hasText: person.name });
+    await row.locator('.check-in-checkbox').click();
+    await expect(row.locator('.check-in-checkbox')).not.toBeChecked();
+    await expect(row.locator('.check-in-checkbox')).toBeEnabled();
+  }
+  await expect(banner).toContainText('from 2 to 1 shooting lines');
+  await page.reload();
+  await expect(banner).toContainText('from 2 to 1 shooting lines');
+  page.once('dialog', (dialog) => dialog.accept());
+  await participants.getByRole('button', { name: 'Reassign checked-in participants', exact: true }).click();
+  await expect(banner).toHaveCount(0);
+  await page.reload();
+  await expect(participants.locator('.check-in-checkbox:checked')).toHaveCount(2);
+  await expect(banner).toHaveCount(0);
+});
+
+test('absent participants are hidden from score entry and live scores and labelled in final results', async ({
+  page,
+  request,
+  browser,
+}) => {
+  const f = await fixture(request);
+  const started = await (await f.checkIn()).json();
+  const people = await (await request.get(`${f.base}/participants`, { headers: f.headers })).json();
+  const absent = people[0];
+  expect(
+    (
+      await request.patch(`${f.base}/participants/${absent.id}/check-in`, {
+        headers: f.headers,
+        data: { checkedIn: false },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  expect(
+    (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } })).ok(),
+  ).toBeTruthy();
+  await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
+  await page.goto(`/admin/competitions/${f.competition.id}`);
+  const table = page.getByRole('table', { name: 'Scoring standings' });
+  await expect(table.locator('tbody tr')).toHaveCount(3);
+  await expect(table.getByRole('rowheader', { name: absent.name, exact: true })).toHaveCount(0);
+  const phoneContext = await browser.newContext();
+  await phoneContext.addInitScript(() => localStorage.setItem('arrowcast.language', 'en'));
+  try {
+    const phone = await phoneContext.newPage();
+    const code = (started.qrCodes as LaneQrCode[]).find((code) => code.laneId === absent.laneId)!;
+    await phone.goto(code.path);
+    await expect(phone.getByRole('group', { name: 'Lane participants', exact: true })).toBeVisible();
+    await expect(phone.locator('.scoring-participant-toggle')).toHaveCount(1);
+    await expect(phone.locator('.scoring-participant-toggle')).not.toContainText(absent.name);
+  } finally {
+    await phoneContext.close();
+  }
+  expect(
+    (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Closed' } })).ok(),
+  ).toBeTruthy();
+  await page.reload();
+  await expect(table.locator('tbody tr')).toHaveCount(4);
+  const row = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: absent.name, exact: true }) });
+  await expect(row).toContainText('Absent');
+  await expect(row.locator('td')).toHaveText(['—', 'Absent', '—', '———']);
+});
+
 test('live scores stay up to date in fullscreen and return to the competition screen', async ({ page, request }) => {
   const f = await fixture(request);
-  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  await f.checkIn();
   await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
   let totalScore = 10;
@@ -92,6 +190,7 @@ test('live scores stay up to date in fullscreen and return to the competition sc
   );
   await page.goto(`/admin/competitions/${f.competition.id}`);
   const scores = page.getByRole('region', { name: 'Live scoring', exact: true });
+  await expect(scores.getByRole('button', { name: 'Export results', exact: true })).toHaveCount(0);
   const table = scores.getByRole('table', { name: 'Scoring standings' });
   await expect(table.getByRole('columnheader')).toHaveText([
     'Participant',
@@ -128,7 +227,15 @@ test('live scores stay up to date in fullscreen and return to the competition sc
     (await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Closed' } })).ok(),
   ).toBeTruthy();
   await page.reload();
-  await expect(table.getByRole('columnheader')).toHaveText([
+  await expect(scores).toHaveCount(0);
+  const results = page.getByRole('region', { name: 'Results', exact: true });
+  await expect(results.getByRole('heading', { name: 'Results', exact: true })).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await results.getByRole('button', { name: 'Export results', exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(`${f.competition.name.toLowerCase().replace(/\s/g, '_')}_2026-11-01.xls`);
+  expect(await download.failure()).toBeNull();
+  await expect(results.getByRole('table', { name: 'Scoring standings' }).getByRole('columnheader')).toHaveText([
     'Participant',
     'Round',
     'Total score',
@@ -139,7 +246,7 @@ test('live scores stay up to date in fullscreen and return to the competition sc
 
 test('fullscreen scrolling continues when refreshed scores reorder the standings', async ({ page, request }) => {
   const f = await fixture(request);
-  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  await f.checkIn();
   await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
   const standings = Array.from({ length: 60 }, (_, index) => ({
@@ -189,9 +296,7 @@ test('correcting the second arrow with backspace selects the next arrow in draft
   request,
 }) => {
   const f = await fixture(request, 3);
-  const started = await (
-    await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })
-  ).json();
+  const started = await (await f.checkIn()).json();
   await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   await page.goto((started.qrCodes[0] as LaneQrCode).path);
   const participant = page
@@ -235,9 +340,7 @@ test('old scoring QR links redirect to scores and retain their QR token for auth
   request,
 }) => {
   const f = await fixture(request);
-  const checkIn = await (
-    await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })
-  ).json();
+  const checkIn = await (await f.checkIn()).json();
   await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   const code = checkIn.qrCodes[0] as LaneQrCode;
   await page.goto(code.path.replace('/scores/', '/scoring/'));
@@ -248,7 +351,7 @@ test('old scoring QR links redirect to scores and retain their QR token for auth
 
 test('lane QR codes use the device public hostname instead of a browser-local hostname', async ({ page, request }) => {
   const f = await fixture(request);
-  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  await f.checkIn();
   await page.addInitScript((token) => {
     sessionStorage.setItem('arrowcast.admin.jwt', token);
     localStorage.setItem('arrowcast.hostname', 'http://arrowcast.local');
@@ -280,7 +383,7 @@ test('QR links follow tournament and club networks while preserving settings and
   request,
 }) => {
   const f = await fixture(request);
-  await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  await f.checkIn();
   await page.addInitScript((token) => {
     sessionStorage.setItem('arrowcast.admin.jwt', token);
     localStorage.setItem('arrowcast.hostname', 'http://arrowcast.local');
@@ -338,10 +441,11 @@ test('print lane QRs during check-in, start, enter on a phone, resume on another
   const f = await fixture(request);
   await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), f.token);
   await page.goto(`/admin/competitions/${f.competition.id}`);
-  const settings = page.getByRole('region', { name: 'Live scoring', exact: true });
+  const settings = page.getByRole('region', { name: /^(Live scoring|Results)$/ });
   await expect(page.getByRole('region', { name: 'Details', exact: true })).toContainText(f.competition.name);
   await expect(settings).toHaveCount(0);
   await page.getByRole('button', { name: 'Start check-in', exact: true }).click();
+  await f.checkInParticipants();
   await expect(page.getByRole('button', { name: 'Start competition', exact: true })).toBeVisible();
   await expect(settings).toHaveCount(0);
   const qr = page.getByRole('region', { name: 'Lane scoring QR codes' });
@@ -497,9 +601,7 @@ test('choose lane participants, retain drafts and correct recorded scores includ
   request,
 }) => {
   const f = await fixture(request);
-  const started = await (
-    await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })
-  ).json();
+  const started = await (await f.checkIn()).json();
   await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   const code = started.qrCodes[0] as LaneQrCode;
   await page.goto(code.path);
@@ -600,7 +702,7 @@ test('choose lane participants, retain drafts and correct recorded scores includ
 
 test('a stale phone cannot overwrite another phone and revoked codes stop access', async ({ request, browser }) => {
   const f = await fixture(request);
-  const checkingIn = await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } });
+  const checkingIn = await f.checkIn();
   expect(checkingIn.ok()).toBeTruthy();
   const started = await checkingIn.json();
   await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
@@ -639,9 +741,7 @@ test('a stale phone cannot overwrite another phone and revoked codes stop access
 
 test('ending a competition removes open scoring cards and rejects QR scans', async ({ page, request, browser }) => {
   const f = await fixture(request);
-  const started = await (
-    await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Check-in' } })
-  ).json();
+  const started = await (await f.checkIn()).json();
   await request.patch(`${f.base}/status`, { headers: f.headers, data: { status: 'Active' } });
   const code = started.qrCodes[0] as LaneQrCode;
   const url = new URL(code.path, test.info().project.use.baseURL).href;

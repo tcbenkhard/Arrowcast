@@ -1,7 +1,15 @@
 import type { Language } from '../i18n';
 import { setLanguage, t, useLanguage } from '../i18n';
 
-export function LanguageSelect({ flags = false }: { flags?: boolean }) {
+export function LanguageSelect({
+  flags = false,
+  disabled = false,
+  onChange = setLanguage,
+}: {
+  flags?: boolean;
+  disabled?: boolean;
+  onChange?: (language: Language) => void;
+}) {
   const language = useLanguage();
   if (flags) {
     return (
@@ -13,7 +21,8 @@ export function LanguageSelect({ flags = false }: { flags?: boolean }) {
             aria-label={t(`language.${value}`)}
             title={t(`language.${value}`)}
             aria-pressed={language === value}
-            onClick={() => setLanguage(value)}
+            disabled={disabled}
+            onClick={() => onChange(value)}
           >
             <svg width="30" height="20" viewBox="0 0 60 40" aria-hidden="true" focusable="false">
               {value === 'nl' ? (
@@ -40,7 +49,12 @@ export function LanguageSelect({ flags = false }: { flags?: boolean }) {
   return (
     <div className="language-select">
       <label htmlFor="public-language">{t('language.label')}</label>
-      <select id="public-language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
+      <select
+        id="public-language"
+        value={language}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value as Language)}
+      >
         <option value="nl">{t('language.nl')}</option>
         <option value="en">{t('language.en')}</option>
       </select>

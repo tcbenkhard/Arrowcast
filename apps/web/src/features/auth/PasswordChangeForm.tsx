@@ -1,7 +1,7 @@
-import { t, message } from '../../i18n';
-import { managementRequest } from '../../lib/http';
-import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { useState } from 'react';
+import { message, t } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 
 export function PasswordChangeForm({
   token,
@@ -116,14 +116,16 @@ export function PasswordChangeForm({
           {pending ? t('PasswordChangeForm.opslaan') : t('PasswordChangeForm.wachtwoord_opslaan')}
         </button>
       </form>
-      {onCancel && (
-        <button className="secondary" disabled={pending} onClick={onCancel}>
-          {t('PasswordChangeForm.cancel')}
+      <div className="password-change-actions">
+        {onCancel && (
+          <button type="button" className="danger" disabled={pending} onClick={onCancel}>
+            {t('PasswordChangeForm.cancel')}
+          </button>
+        )}
+        <button type="button" className="secondary" disabled={pending} onClick={() => onLogout()}>
+          {t('PasswordChangeForm.uitloggen')}
         </button>
-      )}
-      <button className="secondary" disabled={pending} onClick={() => onLogout()}>
-        {t('PasswordChangeForm.uitloggen')}
-      </button>
+      </div>
     </main>
   );
 }

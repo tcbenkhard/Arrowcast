@@ -24,7 +24,8 @@
     "cheerio": "1.2.0",
     "drizzle-orm": "0.45.4",
     "exceljs": "^4.4.0",
-    "fastify": "5.12.7"
+    "fastify": "5.12.7",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",

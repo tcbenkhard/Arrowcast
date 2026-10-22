@@ -41,6 +41,7 @@ export interface ScoringContext {
 
 export interface ScoringStanding {
   participantId: string;
+  checkedIn: boolean;
   name: string;
   laneNumber: number | null;
   targetLetter: string | null;

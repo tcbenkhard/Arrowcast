@@ -5,7 +5,13 @@ import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
 import { AssignmentError, assignParticipants } from './assignments.js';
 import type { LaneQrCode } from '@arrowcast/contracts';
-import { finalizeScores, initializeLaneScoring, issueLaneCodes, revokeGrants } from '../scoring/service.js';
+import {
+  finalizeScores,
+  initializeLaneScoring,
+  issueLaneCodes,
+  resetUnenteredScores,
+  revokeGrants,
+} from '../scoring/service.js';
 import {
   competitionParticipants,
   competitionLanes,
@@ -436,19 +442,15 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
       if (targetIndex === currentIndex || targetIndex > currentIndex + 1) {
         return reply.code(409).send({ message: t('routes.move_to_the_next_status_or_an_earlier_status') });
       }
-      if (
-        targetIndex < 2 &&
-        db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, current.id)).get()
-      ) {
-        return reply
-          .code(409)
-          .send({ message: t('routes.scores_already_exist_participants_assignments_and_scoring_format_must') });
-      }
       let updated;
       let qrCodes: LaneQrCode[] | undefined;
       try {
         updated = db.transaction((tx) => {
           if (targetIndex < 2) {
+            if (!resetUnenteredScores(tx, current.id))
+              throw new AssignmentError(
+                t('routes.scores_already_exist_participants_assignments_and_scoring_format_must'),
+              );
             revokeGrants(tx, current.id);
             tx.delete(laneScoringState).where(eq(laneScoringState.competitionId, current.id)).run();
           }

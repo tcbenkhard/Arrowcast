@@ -1,8 +1,9 @@
-import { t, message } from '../../i18n';
-import { managementRequest } from '../../lib/http';
-import { useModal } from '../../hooks/useModal';
-import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Icon } from '../../components/Icon';
+import { useModal } from '../../hooks/useModal';
+import { message, t } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { BowTypeField } from './BowTypeField';
 
 export interface Participant {
@@ -327,10 +328,12 @@ export function CompetitionParticipants({
               />
               <button
                 type="button"
+                className="with-icon participant-import-button"
                 hidden={!expanded}
                 disabled={loading || !!error || busy || open}
                 onClick={() => importInput.current?.click()}
               >
+                <Icon name="import" />
                 {t('CompetitionParticipants.import')}
               </button>
             </>
@@ -350,10 +353,12 @@ export function CompetitionParticipants({
           {canAdd && (
             <button
               ref={addButton}
+              className="with-icon"
               hidden={!expanded}
               disabled={loading || !!error || busy}
               onClick={() => setOpen(true)}
             >
+              <Icon name="userPlus" />
               {t('CompetitionParticipants.add_participant')}
             </button>
           )}
@@ -555,9 +560,10 @@ export function CompetitionParticipants({
                                   })
                                 : '\u2014'}
                             </td>
-                            <td>
+                            <td className="participant-check-in-cell">
                               <input
                                 type="checkbox"
+                                className="check-in-checkbox"
                                 aria-label={t('CompetitionParticipants.check_in', {
                                   p0: person.name,
                                   p1: person.federationNumber,

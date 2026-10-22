@@ -107,11 +107,9 @@ export function ScoringStandings({
                           : '\u2014'}
                       </td>
                     )}
-                    <td>
-                      {person.enteredRounds}/{person.totalRounds}
-                    </td>
-                    <td>{person.totalScore}</td>
-                    <td>{person.averageScore.toFixed(2)}</td>
+                    <td>{person.checkedIn === false ? '\u2014' : `${person.enteredRounds}/${person.totalRounds}`}</td>
+                    <td>{person.checkedIn === false ? t('ScoringStandings.absent') : person.totalScore}</td>
+                    <td>{person.checkedIn === false ? '\u2014' : person.averageScore.toFixed(2)}</td>
                     <td>
                       <span className="standings-last-arrows">
                         {Array.from({ length: 3 }, (_, index) => (

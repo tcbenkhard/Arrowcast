@@ -14,7 +14,7 @@ test('a profile language switch updates all pages immediately and survives a fre
   await page.goto('/admin');
   await expect(page.getByRole('link', { name: 'Wedstrijden', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Profiel: admin' }).click();
-  await page.getByLabel('Taal', { exact: true }).selectOption('en');
+  await page.locator('#profile-dropdown').getByRole('button', { name: 'Engels', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.getByRole('link', { name: 'Competitions', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
@@ -25,7 +25,7 @@ test('a profile language switch updates all pages immediately and survives a fre
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await page.getByRole('button', { name: 'Profile: admin' }).click();
-  await page.getByLabel('Language', { exact: true }).selectOption('nl');
+  await page.locator('#profile-dropdown').getByRole('button', { name: 'Dutch', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Instellingen', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Gebruikers', exact: true })).toBeVisible();
 });

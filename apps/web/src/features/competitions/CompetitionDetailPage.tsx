@@ -10,6 +10,7 @@ import { useNavigate, useParams } from 'react-router';
 import { CompetitionDetailsModal } from './CompetitionDetailsModal';
 import type { Participant } from '../participants/CompetitionParticipants';
 import { competitionWarnings } from './warnings';
+import { shootingLineReduction } from './shooting-lines';
 import { CompetitionParticipants } from '../participants/CompetitionParticipants';
 import type { LaneQrCode } from '@arrowcast/contracts';
 import { LaneScoringCodes } from '../scoring/LaneScoringCodes';
@@ -97,6 +98,10 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
     laneSnapshot?.data != null &&
     participantSnapshot?.id === competitionId &&
     participantSnapshot?.data != null;
+  const lineReduction =
+    validationReady && competition?.status === 'Check-in'
+      ? shootingLineReduction(laneSnapshot.data!, participantSnapshot.data!)
+      : null;
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [changingStatus, setChangingStatus] = useState(false);
@@ -381,6 +386,11 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
                 </button>
               </div>
             )}
+            {lineReduction && (
+              <p className="competition-info" role="status">
+                {t('CompetitionDetailPage.fewer_shooting_lines', lineReduction)}
+              </p>
+            )}
           </section>
           {detailsAction && (
             <CompetitionDetailsModal
@@ -562,91 +572,93 @@ function CompetitionLanes({
           <p>{t('CompetitionDetailPage.no_lanes_assigned')}</p>
         ) : (
           <>
-            {!readOnly && selectedLanes.size > 0 && (
-              <div
-                className="lane-bulk-controls"
-                role="group"
-                aria-label={t('CompetitionDetailPage.edit_selected_lanes')}
-              >
-                <p>{t('CompetitionDetailPage.apply_to_selection')}</p>
-                <select
-                  aria-label={t('CompetitionDetailPage.target_type_for_selected_lanes')}
-                  value=""
-                  onChange={(event) =>
-                    changeSelected({ targetType: (JSON.parse(event.target.value) as string | null) ?? '' })
-                  }
-                >
-                  <option value="" disabled>
-                    {t('CompetitionDetailPage.target_type')}
-                  </option>
-                  <option value="null">{t('CompetitionDetailPage.not_configured')}</option>
-                  {targetTypes.map((type) => (
-                    <option key={type} value={JSON.stringify(type)}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  aria-label={t('CompetitionDetailPage.number_of_targets_for_selected_lanes')}
-                  value=""
-                  onChange={(event) => changeSelected({ numberOfTargets: Number(event.target.value) })}
-                >
-                  <option value="" disabled>
-                    {t('CompetitionDetailPage.number_of_targets')}
-                  </option>
-                  {targetCounts.map((count) => (
-                    <option key={count} value={count}>
-                      {count}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
             <div className="table-scroll">
-              <table className="lane-configuration-table" aria-label={t('CompetitionDetailPage.lane_configuration')}>
-                <thead>
-                  <tr>
-                    {!readOnly && (
-                      <th scope="col">
-                        <label className="lane-selection">
-                          <input
-                            ref={selectAll}
-                            type="checkbox"
-                            aria-label={t('selection.allLanes')}
-                            checked={allSelected}
-                            onChange={(event) =>
-                              setSelectedLanes(
-                                event.target.checked ? new Set(lanes.map((lane) => lane.laneId)) : new Set(),
-                              )
-                            }
-                          />
-                        </label>
-                      </th>
-                    )}
-                    <th scope="col">{t('CompetitionDetailPage.lane')}</th>
-                    <th scope="col">{t('CompetitionDetailPage.distance')}</th>
-                    <th scope="col">{t('CompetitionDetailPage.target_type')}</th>
-                    <th scope="col">{t('CompetitionDetailPage.number_of_targets')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lanes.map((lane) => (
-                    <LaneConfiguration
-                      readOnly={readOnly}
-                      onChange={changeLane}
-                      key={lane.laneId}
-                      lane={lane}
-                      targetTypes={targetTypes}
-                      bulkUpdate={bulkUpdate}
-                      selected={selectedLanes.has(lane.laneId)}
-                      onSelect={(selected) => selectLane(lane.laneId, selected)}
-                      competitionId={competitionId}
-                      token={token}
-                      onUnauthorized={onUnauthorized}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              <div className={readOnly ? undefined : 'lane-configuration-layout'}>
+                {!readOnly && selectedLanes.size > 0 && (
+                  <div
+                    className="lane-bulk-controls"
+                    role="group"
+                    aria-label={t('CompetitionDetailPage.edit_selected_lanes')}
+                  >
+                    <p>{t('CompetitionDetailPage.apply_to_selection')}</p>
+                    <select
+                      aria-label={t('CompetitionDetailPage.target_type_for_selected_lanes')}
+                      value=""
+                      onChange={(event) =>
+                        changeSelected({ targetType: (JSON.parse(event.target.value) as string | null) ?? '' })
+                      }
+                    >
+                      <option value="" disabled>
+                        {t('CompetitionDetailPage.target_type')}
+                      </option>
+                      <option value="null">{t('CompetitionDetailPage.not_configured')}</option>
+                      {targetTypes.map((type) => (
+                        <option key={type} value={JSON.stringify(type)}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label={t('CompetitionDetailPage.number_of_targets_for_selected_lanes')}
+                      value=""
+                      onChange={(event) => changeSelected({ numberOfTargets: Number(event.target.value) })}
+                    >
+                      <option value="" disabled>
+                        {t('CompetitionDetailPage.number_of_targets')}
+                      </option>
+                      {targetCounts.map((count) => (
+                        <option key={count} value={count}>
+                          {count}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <table className="lane-configuration-table" aria-label={t('CompetitionDetailPage.lane_configuration')}>
+                  <thead>
+                    <tr>
+                      {!readOnly && (
+                        <th scope="col">
+                          <label className="lane-selection">
+                            <input
+                              ref={selectAll}
+                              type="checkbox"
+                              aria-label={t('selection.allLanes')}
+                              checked={allSelected}
+                              onChange={(event) =>
+                                setSelectedLanes(
+                                  event.target.checked ? new Set(lanes.map((lane) => lane.laneId)) : new Set(),
+                                )
+                              }
+                            />
+                          </label>
+                        </th>
+                      )}
+                      <th scope="col">{t('CompetitionDetailPage.lane')}</th>
+                      <th scope="col">{t('CompetitionDetailPage.distance')}</th>
+                      <th scope="col">{t('CompetitionDetailPage.target_type')}</th>
+                      <th scope="col">{t('CompetitionDetailPage.number_of_targets')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lanes.map((lane) => (
+                      <LaneConfiguration
+                        readOnly={readOnly}
+                        onChange={changeLane}
+                        key={lane.laneId}
+                        lane={lane}
+                        targetTypes={targetTypes}
+                        bulkUpdate={bulkUpdate}
+                        selected={selectedLanes.has(lane.laneId)}
+                        onSelect={(selected) => selectLane(lane.laneId, selected)}
+                        competitionId={competitionId}
+                        token={token}
+                        onUnauthorized={onUnauthorized}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}

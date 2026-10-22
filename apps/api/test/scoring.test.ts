@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { eq, sql } from 'drizzle-orm';
+import { read, utils } from 'xlsx';
 import SQLite from 'better-sqlite3';
 import type { LaneQrCode, ScoringContext, ScoringMutation } from '@arrowcast/contracts';
 import { buildApp } from '../src/app.js';
@@ -154,6 +155,203 @@ async function setup(t: TestContext) {
   };
   return fixture;
 }
+
+for (const legacy of [false, true]) {
+  test(`absent archers are excluded from scoring and remain in final results (legacy state: ${legacy})`, async (t) => {
+    const f = await setup(t);
+    const markAbsent = () => {
+      for (const id of ['a', 'other']) {
+        f.db
+          .update(competitionParticipants)
+          .set({ checkedIn: false })
+          .where(eq(competitionParticipants.participantId, id))
+          .run();
+      }
+    };
+    if (!legacy) markAbsent();
+    const codes = await f.start();
+    if (legacy) markAbsent();
+    const code = codes.find((code) => code.laneId === 'lane-1')!;
+    const session = await f.exchange(code);
+    assert.deepEqual(
+      session.context.participants.map((person) => person.id),
+      ['c'],
+    );
+    assert.equal(session.context.currentParticipantId, 'c');
+    const empty = await f.exchange(codes.find((code) => code.laneId === 'lane-2')!);
+    assert.deepEqual(empty.context.participants, []);
+    assert.equal(empty.context.currentParticipantId, null);
+    assert.equal(empty.context.completed, true);
+    assert.equal((await f.save(code, session.cookie)).statusCode, 403);
+    assert.equal((await f.save(code, session.cookie, { participantId: 'c' })).statusCode, 200);
+    const progress = (await f.context(code, session.cookie)).json() as ScoringContext;
+    assert.equal(progress.currentParticipantId, 'c');
+    assert.equal(progress.currentRoundNumber, 2);
+    assert.equal(
+      (await f.save(code, session.cookie, { participantId: 'c', roundNumber: 2, expectedVersion: 1 })).statusCode,
+      200,
+    );
+    assert.equal((await f.context(code, session.cookie)).json().completed, true);
+    const base = '/api/v1/admin/competitions/competition';
+    const standings = async () => (await f.app.inject({ url: `${base}/scoring-standings`, headers: f.admin })).json();
+    assert.deepEqual(
+      (await standings()).map((person: { participantId: string }) => person.participantId),
+      ['c'],
+    );
+    const closed = await f.app.inject({
+      method: 'PATCH',
+      url: `${base}/status`,
+      headers: f.admin,
+      payload: { status: 'Closed' },
+    });
+    assert.equal(closed.statusCode, 200, closed.body);
+    const results = await standings();
+    assert.deepEqual(
+      results.map((person: { participantId: string }) => person.participantId),
+      ['c', 'a', 'other'],
+    );
+    assert.ok(
+      results
+        .slice(1)
+        .every(
+          (person: { checkedIn: boolean; enteredRounds: number }) => !person.checkedIn && person.enteredRounds === 0,
+        ),
+    );
+    assert.deepEqual(
+      f.db
+        .select()
+        .from(scorecards)
+        .all()
+        .map((card) => card.participantId),
+      ['c'],
+    );
+    const exported = await f.app.inject({ url: `${base}/results-export`, headers: f.admin });
+    assert.equal(exported.statusCode, 200);
+    const workbook = read(exported.rawPayload, { type: 'buffer' });
+    const rows = utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]!]!, { header: 1 });
+    assert.deepEqual(rows, [
+      ['bondsnummer', 'naam', 'clubnummer', 'clubnaam', 'totaalscore', 'gemiddelde'],
+      ['c', 'Archer C', 'club', 'Archery club', 38, 9.5],
+      ['a', 'Archer A', 'club', 'Archery club', 'Afwezig', 'Afwezig'],
+      ['other', 'Other lane archer', 'club', 'Archery club', 'Afwezig', 'Afwezig'],
+    ]);
+  });
+}
+
+for (const status of ['Active', 'Closed']) {
+  test(`automatic scores for absent archers allow returning from ${status} to check-in and admitting a late archer`, async (t) => {
+    const f = await setup(t);
+    f.db
+      .update(competitionParticipants)
+      .set({ checkedIn: false })
+      .where(eq(competitionParticipants.participantId, 'a'))
+      .run();
+    const code = (await f.start())[0]!;
+    const session = await f.exchange(code);
+    const base = '/api/v1/admin/competitions/competition';
+    const changeStatus = (status: string) =>
+      f.app.inject({ method: 'PATCH', url: `${base}/status`, headers: f.admin, payload: { status } });
+    if (status === 'Closed') assert.equal((await changeStatus('Closed')).statusCode, 200);
+    // Simulate scores created for an absent participant by earlier finalization code.
+    f.db
+      .insert(scorecards)
+      .values({
+        id: 'automatic-card',
+        competitionId: 'competition',
+        participantId: 'a',
+        version: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      .run();
+    for (let number = 1; number <= 2; number++) {
+      const id = `automatic-round-${number}`;
+      f.db
+        .insert(roundScores)
+        .values({ id, scorecardId: 'automatic-card', roundNumber: number, status: 'submitted', submittedAt: 1 })
+        .run();
+      f.db
+        .insert(arrowScores)
+        .values([1, 2].map((arrowIndex) => ({ roundScoreId: id, arrowIndex, symbol: 'M' })))
+        .run();
+    }
+    const response = await changeStatus('Check-in');
+    assert.equal(response.statusCode, 200, response.body);
+    for (const table of [scorecards, roundScores, arrowScores, laneScoringState]) {
+      assert.deepEqual(f.db.select().from(table).all(), []);
+    }
+    assert.equal((await f.context(code, session.cookie)).statusCode, 403);
+    const checkedIn = await f.app.inject({
+      method: 'PATCH',
+      url: `${base}/participants/a/check-in`,
+      headers: f.admin,
+      payload: { checkedIn: true },
+    });
+    assert.equal(checkedIn.statusCode, 200, checkedIn.body);
+    assert.equal((await changeStatus('Active')).statusCode, 200);
+    const replacement = (response.json().qrCodes as LaneQrCode[]).find((next) => next.laneId === code.laneId)!;
+    const resumed = await f.exchange(replacement);
+    assert.deepEqual(
+      resumed.context.participants.map((person) => person.id),
+      ['a', 'c'],
+    );
+    assert.deepEqual(resumed.context.rounds, []);
+    assert.equal(resumed.context.currentParticipantId, 'a');
+    assert.equal((await f.save(replacement, resumed.cookie)).statusCode, 200);
+  });
+}
+
+test('a failed return to check-in restores automatic scores and the previous competition state', async (t) => {
+  const f = await setup(t);
+  await f.start();
+  const status = (status: string) =>
+    f.app.inject({
+      method: 'PATCH',
+      url: '/api/v1/admin/competitions/competition/status',
+      headers: f.admin,
+      payload: { status },
+    });
+  assert.equal((await status('Closed')).statusCode, 200);
+  const cards = f.db.select().from(scorecards).all();
+  const rounds = f.db.select().from(roundScores).all();
+  const arrows = f.db.select().from(arrowScores).all();
+  const grants = f.db.select().from(laneScoringGrants).all();
+  const progress = f.db.select().from(laneScoringState).all();
+  f.db.run(sql`CREATE TRIGGER fail_return BEFORE UPDATE OF status ON competitions
+    WHEN NEW.status = 'Check-in' BEGIN SELECT RAISE(ABORT, 'simulated return failure'); END`);
+  assert.equal((await status('Check-in')).statusCode, 500);
+  assert.deepEqual(f.db.select().from(scorecards).all(), cards);
+  assert.deepEqual(f.db.select().from(roundScores).all(), rounds);
+  assert.deepEqual(f.db.select().from(arrowScores).all(), arrows);
+  assert.deepEqual(f.db.select().from(laneScoringGrants).all(), grants);
+  assert.deepEqual(f.db.select().from(laneScoringState).all(), progress);
+  assert.equal(f.db.select().from(competitions).where(eq(competitions.id, 'competition')).get()?.status, 'Closed');
+});
+
+test('manually entered misses block returning to check-in even when the archer is absent', async (t) => {
+  const f = await setup(t);
+  const code = (await f.start())[0]!;
+  const session = await f.exchange(code);
+  assert.equal((await f.save(code, session.cookie, { arrows: ['M', 'M'] })).statusCode, 200);
+  f.db
+    .update(competitionParticipants)
+    .set({ checkedIn: false })
+    .where(eq(competitionParticipants.participantId, 'a'))
+    .run();
+  const before = f.db.select().from(arrowScores).all();
+  for (const status of ['Scheduled', 'Check-in']) {
+    const response = await f.app.inject({
+      method: 'PATCH',
+      url: '/api/v1/admin/competitions/competition/status',
+      headers: f.admin,
+      payload: { status },
+    });
+    assert.equal(response.statusCode, 409, response.body);
+    assert.deepEqual(f.db.select().from(arrowScores).all(), before);
+    assert.equal(f.db.select().from(scoreChanges).all().length, 1);
+    assert.equal(f.db.select().from(competitions).where(eq(competitions.id, 'competition')).get()?.status, 'Active');
+  }
+});
 
 test('check-in issues printable codes, keeps scoring closed, and preserves codes through reassignment and activation', async (t) => {
   const f = await setup(t);
@@ -656,6 +854,7 @@ test('closing fills missing arrows and rounds with misses and corrects averages 
   assert.deepEqual(await standings(), [
     {
       participantId: 'a',
+      checkedIn: true,
       name: 'Archer A',
       laneNumber: 1,
       targetLetter: 'A',
@@ -667,6 +866,7 @@ test('closing fills missing arrows and rounds with misses and corrects averages 
     },
     {
       participantId: 'c',
+      checkedIn: true,
       name: 'Archer C',
       laneNumber: 1,
       targetLetter: 'C',
@@ -678,6 +878,7 @@ test('closing fills missing arrows and rounds with misses and corrects averages 
     },
     {
       participantId: 'other',
+      checkedIn: true,
       name: 'Other lane archer',
       laneNumber: 2,
       targetLetter: 'A',
@@ -861,6 +1062,7 @@ test('admins retrieve identical QR codes after restart and standings rank submit
   assert.deepEqual(standings, [
     {
       participantId: 'c',
+      checkedIn: true,
       name: 'Archer C',
       laneNumber: 1,
       targetLetter: 'C',
@@ -872,6 +1074,7 @@ test('admins retrieve identical QR codes after restart and standings rank submit
     },
     {
       participantId: 'a',
+      checkedIn: true,
       name: 'Archer A',
       laneNumber: 1,
       targetLetter: 'A',
@@ -883,6 +1086,7 @@ test('admins retrieve identical QR codes after restart and standings rank submit
     },
     {
       participantId: 'other',
+      checkedIn: true,
       name: 'Other lane archer',
       laneNumber: 2,
       targetLetter: 'A',
@@ -918,4 +1122,77 @@ test('legacy QR codes recover without revoking printouts or scoring sessions', a
   await f.restart();
   assert.deepEqual((await f.app.inject({ url, headers: f.admin })).json(), restored);
   assert.equal((await f.save(codes[0]!, session.cookie)).statusCode, 200);
+});
+
+test('closed results export is a real XLS with final scores, text identifiers and competition date', async (t) => {
+  const f = await setup(t);
+  const url = '/api/v1/admin/competitions/competition/results-export';
+  assert.equal((await f.app.inject({ url })).statusCode, 401);
+  assert.equal((await f.app.inject({ url, headers: f.admin })).statusCode, 409);
+  assert.equal(
+    (await f.app.inject({ url: url.replace('competition/results', 'missing/results'), headers: f.admin })).statusCode,
+    404,
+  );
+  const code = (await f.start())[0]!;
+  assert.equal((await f.app.inject({ url, headers: f.admin })).statusCode, 409);
+  const session = await f.exchange(code);
+  assert.equal((await f.save(code, session.cookie)).statusCode, 200);
+  assert.equal(
+    (await f.save(code, session.cookie, { participantId: 'c', expectedVersion: 1, arrows: [null, '8'], submit: false }))
+      .statusCode,
+    200,
+  );
+  f.db.insert(clubs).values({ clubNumber: '0012', name: 'Club & Vrienden' }).run();
+  f.db
+    .update(participants)
+    .set({ federationNumber: '000123', name: '=Ren\u00e9', clubNumber: '0012' })
+    .where(eq(participants.id, 'a'))
+    .run();
+  f.db.update(competitions).set({ name: 'Jaarlijkse Wedstrijd' }).where(eq(competitions.id, 'competition')).run();
+  const close = await f.app.inject({
+    method: 'PATCH',
+    url: '/api/v1/admin/competitions/competition/status',
+    headers: f.admin,
+    payload: { status: 'Closed' },
+  });
+  assert.equal(close.statusCode, 200, close.body);
+  const response = await f.app.inject({ url, headers: f.admin });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(response.headers['content-type'], 'application/vnd.ms-excel');
+  assert.match(
+    String(response.headers['content-disposition']),
+    /filename\*=UTF-8''jaarlijkse_wedstrijd_2026-11-01\.xls/,
+  );
+  assert.match(String(response.headers['cache-control']), /no-store/);
+  assert.equal(response.rawPayload.subarray(0, 8).toString('hex'), 'd0cf11e0a1b11ae1');
+  const workbook = read(response.rawPayload, { type: 'buffer' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]!]!;
+  assert.deepEqual(utils.sheet_to_json(sheet, { header: 1 }), [
+    ['bondsnummer', 'naam', 'clubnummer', 'clubnaam', 'totaalscore', 'gemiddelde'],
+    ['000123', '=Ren\u00e9', '0012', 'Club & Vrienden', 19, 4.75],
+    ['c', 'Archer C', 'club', 'Archery club', 8, 2],
+    ['other', 'Other lane archer', 'club', 'Archery club', 0, 0],
+  ]);
+  assert.equal(sheet.B2.t, 's');
+  assert.equal(sheet.B2.f, undefined);
+  assert.equal(sheet.F2.t, 'n');
+  assert.equal(sheet.F2.w, '4.75');
+  f.db
+    .insert(competitions)
+    .values({
+      id: 'empty',
+      name: 'Empty competition',
+      date: '2026-11-02',
+      startingTime: '09:00',
+      endingTime: '12:00',
+      rangeId: 'range',
+      status: 'Closed',
+    })
+    .run();
+  const empty = await f.app.inject({ url: url.replace('competition/results', 'empty/results'), headers: f.admin });
+  assert.equal(empty.statusCode, 200);
+  const emptyBook = read(empty.rawPayload, { type: 'buffer' });
+  assert.deepEqual(utils.sheet_to_json(emptyBook.Sheets[emptyBook.SheetNames[0]!]!, { header: 1 }), [
+    ['bondsnummer', 'naam', 'clubnummer', 'clubnaam', 'totaalscore', 'gemiddelde'],
+  ]);
 });

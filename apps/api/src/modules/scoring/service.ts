@@ -1,6 +1,6 @@
 import { t } from '@arrowcast/contracts/i18n';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 import type { LaneQrCode, ScoringContext, ScoringMutation } from '@arrowcast/contracts';
 import { calculateRoundTotal, isValidRound } from '@arrowcast/scoring';
 import type { AppDatabase } from '../../db/index.js';
@@ -42,7 +42,11 @@ export function initializeLaneScoring(db: Database, competitionId: string) {
       .select({ id: competitionParticipants.participantId })
       .from(competitionParticipants)
       .where(
-        and(eq(competitionParticipants.competitionId, competitionId), eq(competitionParticipants.laneId, lane.laneId)),
+        and(
+          eq(competitionParticipants.competitionId, competitionId),
+          eq(competitionParticipants.laneId, lane.laneId),
+          eq(competitionParticipants.checkedIn, true),
+        ),
       )
       .orderBy(competitionParticipants.targetLetter)
       .all()
@@ -80,6 +84,34 @@ export function revokeGrants(db: Database, competitionId: string) {
     .run();
 }
 
+// Run inside the status transaction. Finalization creates submitted misses without
+// an audit entry; actual input, including drafts and manually entered misses, must stay locked.
+export function resetUnenteredScores(db: Database, competitionId: string): boolean {
+  const cards = db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, competitionId));
+  if (db.select({ id: scoreChanges.id }).from(scoreChanges).where(inArray(scoreChanges.scorecardId, cards)).get())
+    return false;
+  const rounds = db.select({ id: roundScores.id }).from(roundScores).where(inArray(roundScores.scorecardId, cards));
+  // Preserve score data without an audit trail unless it matches automatic finalization.
+  if (
+    db
+      .select({ id: arrowScores.roundScoreId })
+      .from(arrowScores)
+      .innerJoin(roundScores, eq(roundScores.id, arrowScores.roundScoreId))
+      .where(
+        and(
+          inArray(roundScores.scorecardId, cards),
+          or(ne(arrowScores.symbol, 'M'), ne(roundScores.status, 'submitted')),
+        ),
+      )
+      .get()
+  )
+    return false;
+  db.delete(arrowScores).where(inArray(arrowScores.roundScoreId, rounds)).run();
+  db.delete(roundScores).where(inArray(roundScores.scorecardId, cards)).run();
+  db.delete(scorecards).where(eq(scorecards.competitionId, competitionId)).run();
+  return true;
+}
+
 // Run within the closing transaction so every configured arrow counts in the final average.
 export function finalizeScores(db: Database, competitionId: string) {
   const competition = db.select().from(competitions).where(eq(competitions.id, competitionId)).get()!;
@@ -87,7 +119,7 @@ export function finalizeScores(db: Database, competitionId: string) {
   const people = db
     .select()
     .from(competitionParticipants)
-    .where(eq(competitionParticipants.competitionId, competitionId))
+    .where(and(eq(competitionParticipants.competitionId, competitionId), eq(competitionParticipants.checkedIn, true)))
     .all();
   for (const person of people) {
     let card = db
@@ -240,14 +272,51 @@ export function validGrant(db: Database, grantId: string) {
   return grant;
 }
 
-export function scoringContext(db: Database, grant: typeof laneScoringGrants.$inferSelect): ScoringContext {
-  const competition = db.select().from(competitions).where(eq(competitions.id, grant.competitionId)).get()!;
-  const lane = db.select().from(lanes).where(eq(lanes.id, grant.laneId)).get()!;
+// Existing active competitions may still have absent archers in their saved order.
+function presentLaneState(db: Database, competition: typeof competitions.$inferSelect, laneId: string) {
   const state = db
     .select()
     .from(laneScoringState)
-    .where(and(eq(laneScoringState.competitionId, grant.competitionId), eq(laneScoringState.laneId, grant.laneId)))
+    .where(and(eq(laneScoringState.competitionId, competition.id), eq(laneScoringState.laneId, laneId)))
     .get();
+  if (!state) return undefined;
+  const absent = new Set(
+    db
+      .select({ id: competitionParticipants.participantId })
+      .from(competitionParticipants)
+      .where(
+        and(eq(competitionParticipants.competitionId, competition.id), eq(competitionParticipants.checkedIn, false)),
+      )
+      .all()
+      .map((person) => person.id),
+  );
+  const participantOrder = state.participantOrder.filter((id) => !absent.has(id));
+  if (participantOrder.length === state.participantOrder.length) return state;
+  const submitted = db
+    .select({ participantId: scorecards.participantId, roundNumber: roundScores.roundNumber })
+    .from(scorecards)
+    .innerJoin(roundScores, eq(roundScores.scorecardId, scorecards.id))
+    .where(and(eq(scorecards.competitionId, competition.id), eq(roundScores.status, 'submitted')))
+    .all();
+  const saved = new Set(submitted.map((round) => `${round.participantId}/${round.roundNumber}`));
+  for (let number = 1; number <= competition.numberOfRounds; number++) {
+    const missing = participantOrder.find((id) => !saved.has(`${id}/${number}`));
+    if (missing)
+      return {
+        ...state,
+        participantOrder,
+        currentParticipantId: missing,
+        currentRoundNumber: number,
+        completed: false,
+      };
+  }
+  return { ...state, participantOrder, currentParticipantId: null, completed: true };
+}
+
+export function scoringContext(db: Database, grant: typeof laneScoringGrants.$inferSelect): ScoringContext {
+  const competition = db.select().from(competitions).where(eq(competitions.id, grant.competitionId)).get()!;
+  const lane = db.select().from(lanes).where(eq(lanes.id, grant.laneId)).get()!;
+  const state = presentLaneState(db, competition, grant.laneId);
   if (!state) throw new ScoringError(403, t('service.scoring_has_not_started_for_this_lane'));
   const assigned = db
     .select({ id: participants.id, name: participants.name, targetLetter: competitionParticipants.targetLetter })
@@ -257,6 +326,7 @@ export function scoringContext(db: Database, grant: typeof laneScoringGrants.$in
       and(
         eq(competitionParticipants.competitionId, grant.competitionId),
         eq(competitionParticipants.laneId, grant.laneId),
+        eq(competitionParticipants.checkedIn, true),
       ),
     )
     .all();
@@ -329,11 +399,7 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
   const competition = db.select().from(competitions).where(eq(competitions.id, grant.competitionId)).get()!;
   if (competition.status !== 'Active' || competition.scoringLocked)
     throw new ScoringError(403, t('service.scoring_is_paused_or_the_competition_is_closed'));
-  const state = db
-    .select()
-    .from(laneScoringState)
-    .where(and(eq(laneScoringState.competitionId, grant.competitionId), eq(laneScoringState.laneId, grant.laneId)))
-    .get();
+  const state = presentLaneState(db, competition, grant.laneId);
   if (!state || state.version !== body.expectedVersion)
     throw new ScoringError(409, t('ScoringPage.lane_progress_changed_on_another_device_reload_the_latest'));
   const assignment = db
@@ -344,6 +410,7 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
         eq(competitionParticipants.competitionId, grant.competitionId),
         eq(competitionParticipants.participantId, body.participantId),
         eq(competitionParticipants.laneId, grant.laneId),
+        eq(competitionParticipants.checkedIn, true),
       ),
     )
     .get();
@@ -438,6 +505,7 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
     .update(laneScoringState)
     .set({
       version: result.version,
+      participantOrder: state.participantOrder,
       currentParticipantId: nextParticipant,
       currentRoundNumber: nextRound,
       completed,

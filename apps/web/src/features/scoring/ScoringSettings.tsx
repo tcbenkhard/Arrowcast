@@ -19,6 +19,7 @@ export function ScoringSettings({
   onChange: (settings: Partial<Settings>) => void;
 }) {
   const [pending, setPending] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const panel = useRef<HTMLElement>(null);
@@ -115,6 +116,36 @@ export function ScoringSettings({
       setFullscreenError(t('ScoringSettings.fullscreen_failed'));
     }
   }
+  async function downloadResults() {
+    if (exporting) return;
+    setExporting(true);
+    setError('');
+    try {
+      const response = await managementRequest(
+        `/api/v1/admin/competitions/${encodeURIComponent(competition.id)}/results-export`,
+        token,
+      );
+      if (response.status === 401) {
+        onUnauthorized(t('AdminPage.je_sessie_is_verlopen_log_opnieuw_in'));
+        return;
+      }
+      if (!response.ok) throw new Error(t('ScoringSettings.export_failed'));
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const filename = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename ? decodeURIComponent(filename) : 'results.xls';
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setError(t('ScoringSettings.export_failed'));
+    } finally {
+      setExporting(false);
+    }
+  }
   async function updateLock() {
     if (pending) return;
     setPending(true);
@@ -148,7 +179,9 @@ export function ScoringSettings({
         <div className="live-score-logo">
           <ArrowCastLogo />
         </div>
-        <h3 id="scoring-settings-title">{t('ScoringSettings.scoring')}</h3>
+        <h3 id="scoring-settings-title">
+          {t(competition.status === 'Closed' ? 'ScoringSettings.results' : 'ScoringSettings.scoring')}
+        </h3>
       </div>
       <div className="section-header live-score-toolbar">
         {competition.status === 'Active' && (
@@ -159,6 +192,18 @@ export function ScoringSettings({
           </p>
         )}
         <div className="live-score-actions">
+          {competition.status === 'Closed' && (
+            <button
+              type="button"
+              className="secondary live-score-controls"
+              disabled={exporting}
+              onClick={() => {
+                void downloadResults();
+              }}
+            >
+              {t('ScoringSettings.export_results')}
+            </button>
+          )}
           {competition.status === 'Active' && (
             <button
               className="secondary live-score-controls"
