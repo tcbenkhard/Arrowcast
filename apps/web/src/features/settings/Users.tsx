@@ -1,9 +1,9 @@
-import { TrashIcon } from '../../components/TrashIcon';
-import { t, message } from '../../i18n';
-import { managementRequest } from '../../lib/http';
-import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { TrashIcon } from '../../components/TrashIcon';
 import { useModal } from '../../hooks/useModal';
+import { message, t } from '../../i18n';
+import { managementRequest } from '../../lib/http';
 import { SettingsCard } from './SettingsCard';
 
 interface User {
@@ -38,6 +38,7 @@ export function Users({ token, onUnauthorized }: AuthProps) {
   }, [editing]);
 
   function open(user: User | 'new', trigger: HTMLElement) {
+    if (user !== 'new' && user.username === 'admin') return;
     opener.current = trigger;
     setNotice('');
     setEditing(user);
@@ -109,11 +110,19 @@ export function Users({ token, onUnauthorized }: AuthProps) {
               {users.map((user) => (
                 <tr
                   key={user.username}
-                  className="user-row"
-                  onClick={(event) => open(user, event.currentTarget.querySelector('button')!)}
+                  className={user.username === 'admin' ? undefined : 'user-row'}
+                  onClick={
+                    user.username === 'admin'
+                      ? undefined
+                      : (event) => open(user, event.currentTarget.querySelector('button')!)
+                  }
                 >
                   <th scope="row">
-                    <button className="user-edit-button">{user.name || user.username}</button>
+                    {user.username === 'admin' ? (
+                      user.name || user.username
+                    ) : (
+                      <button className="user-edit-button">{user.name || user.username}</button>
+                    )}
                   </th>
                   <td>{user.username}</td>
                   <td>{t(roleNames[user.role])}</td>

@@ -407,6 +407,7 @@
   "users.only_administrators_can_manage_users": "Alleen beheerders kunnen gebruikers beheren.",
   "users.user_not_found": "Gebruiker niet gevonden.",
   "users.the_admin_account_cannot_be_removed": "Het admin-account kan niet worden verwijderd.",
+  "users.the_admin_account_cannot_be_edited": "Het admin-account kan niet worden bewerkt.",
   "users.keep_at_least_one_administrator": "Behoud minstens één beheerder.",
   "users.enter_a_name_username_and_initial_password_with_at": "Vul een naam, gebruikersnaam en eerste wachtwoord van minstens 8 tekens in.",
   "users.this_username_is_already_in_use": "Deze gebruikersnaam is al in gebruik.",

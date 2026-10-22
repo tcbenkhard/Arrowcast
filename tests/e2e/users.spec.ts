@@ -1,6 +1,6 @@
-import { expect, test } from './fixtures';
-import { testAdminToken } from './admin';
 import { request } from 'node:http';
+import { testAdminToken } from './admin';
+import { expect, test } from './fixtures';
 
 test('administrator adds and edits a user, who must change their password and cannot open settings', async ({
   page,
@@ -97,15 +97,13 @@ test('administrator adds and edits a user, who must change their password and ca
   await expect(modal).toBeHidden();
   await expect(users.getByRole('status')).toHaveText('User "Edited Browser User" removed.');
   await expect(users.getByText('edited-browser-user', { exact: true })).toHaveCount(0);
+  const adminRow = users.getByRole('row', { name: /Administrator admin Administrator/ });
+  await expect(adminRow.getByRole('button')).toHaveCount(0);
+  await expect(adminRow).not.toHaveClass('user-row');
+  await adminRow.getByRole('rowheader').click();
+  await expect(modal).toBeHidden();
   await users.getByText('admin', { exact: true }).click();
-  await expect(modal).toHaveAccessibleName('Edit user');
-  await expect(modal.getByRole('button', { name: 'Remove user', exact: true })).toHaveCount(0);
-  await expect(modal.getByLabel('Username', { exact: true })).toHaveAttribute('readonly', '');
-  await expect(modal.getByLabel('Reset password', { exact: true })).toHaveCount(0);
-  await expect(
-    modal.getByText('Log in as admin and use Change password in your profile to change this password.'),
-  ).toBeVisible();
-  await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(modal).toBeHidden();
   await page.reload();
   await page.getByRole('button', { name: 'Expand: Users', exact: true }).click();
   await expect(users.getByRole('row', { name: /Administrator admin Administrator/ })).toBeVisible();

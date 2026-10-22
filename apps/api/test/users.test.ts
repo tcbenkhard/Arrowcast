@@ -11,12 +11,14 @@ const initial = {
   role: 'competition_manager',
 };
 
-test('the built-in admin password can only change through its authenticated password-change flow', async (t) => {
+test('the built-in admin cannot be edited through user management but can change its own password', async (t) => {
   const app = buildApp(config);
   t.after(() => app.close());
   const admin = await loginAdmin(app);
   const headers = { authorization: `Bearer ${admin.json().token}` };
   const profile = { name: 'Administrator', username: 'admin', role: 'admin' };
+  const originalUsers = (await app.inject({ url: '/api/v1/admin/users', headers })).json();
+  const originalAdmin = originalUsers.find((user: { username: string }) => user.username === 'admin');
   assert.equal(
     (await app.inject({ method: 'POST', url: '/api/v1/admin/users', headers, payload: { ...initial, role: 'admin' } }))
       .statusCode,
@@ -35,17 +37,29 @@ test('the built-in admin password can only change through its authenticated pass
   });
   assert.equal(onboarded.statusCode, 200);
   for (const token of [admin.json().token, onboarded.json().token]) {
-    const reset = await app.inject({
-      method: 'PUT',
-      url: '/api/v1/admin/users/admin',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { ...profile, password: 'forbidden-reset-password' },
-    });
-    assert.equal(reset.statusCode, 403);
+    for (const changes of [
+      {},
+      { name: 'Changed Administrator' },
+      { username: 'renamed-admin' },
+      { role: 'competition_manager' },
+      { language: 'en' },
+      { password: 'forbidden-reset-password' },
+    ]) {
+      const edit = await app.inject({
+        method: 'PUT',
+        url: '/api/v1/admin/users/admin',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { ...profile, ...changes },
+      });
+      assert.equal(edit.statusCode, 403);
+      assert.equal(edit.json().message, 'The admin account cannot be edited.');
+    }
   }
-  assert.equal(
-    (await app.inject({ method: 'PUT', url: '/api/v1/admin/users/admin', headers, payload: profile })).statusCode,
-    200,
+  assert.deepEqual(
+    (await app.inject({ url: '/api/v1/admin/users', headers }))
+      .json()
+      .find((user: { username: string }) => user.username === 'admin'),
+    originalAdmin,
   );
   const changed = await app.inject({
     method: 'POST',
@@ -221,7 +235,7 @@ test('user validation, editing, promotion, password resets and last administrato
         payload: { name: 'Admin', username: 'admin', role: 'competition_manager' },
       })
     ).statusCode,
-    409,
+    403,
   );
   const login = await app.inject({
     method: 'POST',
@@ -282,13 +296,21 @@ test('user validation, editing, promotion, password resets and last administrato
   });
   assert.equal(resetLogin.statusCode, 200);
   assert.equal(resetLogin.json().forceChangePassword, true);
+  const resetChanged = await app.inject({
+    method: 'POST',
+    url: '/api/v1/admin/password',
+    headers: { authorization: `Bearer ${resetLogin.json().token}` },
+    payload: { currentPassword: 'reset-password', newPassword: 'new-manager-password' },
+  });
+  assert.equal(resetChanged.statusCode, 200);
+  const selfHeaders = { authorization: `Bearer ${resetChanged.json().token}` };
   const selfEdit = await app.inject({
     method: 'PUT',
-    url: '/api/v1/admin/users/admin',
-    headers,
-    payload: { name: 'Administrator', username: 'admin', role: 'competition_manager' },
+    url: '/api/v1/admin/users/renamed-manager',
+    headers: selfHeaders,
+    payload: { name: 'Updated User', username: 'renamed-manager', role: 'competition_manager' },
   });
   assert.equal(selfEdit.statusCode, 200);
   assert.equal(selfEdit.json().sessionRevoked, true);
-  assert.equal((await app.inject({ url: '/api/v1/admin/users', headers })).statusCode, 401);
+  assert.equal((await app.inject({ url: '/api/v1/admin/users', headers: selfHeaders })).statusCode, 401);
 });

@@ -1,7 +1,7 @@
-import { t } from '@arrowcast/contracts/i18n';
-import type { FastifyInstance } from 'fastify';
 import { randomInt } from 'node:crypto';
+import { t } from '@arrowcast/contracts/i18n';
 import { asc, eq } from 'drizzle-orm';
+import type { FastifyInstance } from 'fastify';
 import type { AppDatabase } from '../../db/index.js';
 import { users } from '../../db/schema.js';
 import { hashPassword } from './password.js';
@@ -114,8 +114,8 @@ export async function userRoutes(app: FastifyInstance, { db }: { db: AppDatabase
       const name = request.body.name.trim();
       const username = request.body.username.trim();
       const { role, password } = request.body;
-      if (request.params.username === 'admin' && password !== undefined) {
-        return reply.code(403).send({ message: t('users.log_in_as_admin_to_change_its_password_through') });
+      if (request.params.username === 'admin') {
+        return reply.code(403).send({ message: t('users.the_admin_account_cannot_be_edited') });
       }
       if (!name || !username || (password !== undefined && password.trim().length < 8)) {
         return reply.code(400).send({ message: t('Users.enter_a_name_username_and_a_password_with_at') });
@@ -124,9 +124,6 @@ export async function userRoutes(app: FastifyInstance, { db }: { db: AppDatabase
       const result = db.transaction((tx) => {
         const existing = tx.select().from(users).where(eq(users.username, request.params.username)).get();
         if (!existing) return { status: 404, message: t('users.user_not_found') };
-        if (existing.username === 'admin' && username !== 'admin') {
-          return { status: 403, message: t('users.the_admin_username_cannot_be_changed') };
-        }
         if (username !== existing.username && tx.select().from(users).where(eq(users.username, username)).get()) {
           return { status: 409, message: t('users.this_username_is_already_in_use') };
         }
