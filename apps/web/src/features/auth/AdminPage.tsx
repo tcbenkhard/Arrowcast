@@ -48,10 +48,6 @@ export function AdminPage() {
         if (!response.ok) throw new Error(t('AdminPage.session_check_failed'));
         const result = await decodeJson<AdminSession>(response);
         if (controller.signal.aborted) return;
-        if (result.expiresAt <= Date.now()) {
-          logout(t('AdminPage.je_sessie_is_verlopen_log_opnieuw_in'));
-          return;
-        }
         setSession(result);
         setLanguage(result.language);
       } catch {
@@ -62,17 +58,6 @@ export function AdminPage() {
     })();
     return () => controller.abort();
   }, [token, retry]);
-
-  useEffect(() => {
-    if (!session) return;
-    const timer = window.setTimeout(
-      () => {
-        logout(t('AdminPage.je_sessie_is_verlopen_log_opnieuw_in'));
-      },
-      Math.max(0, session.expiresAt - Date.now()),
-    );
-    return () => window.clearTimeout(timer);
-  }, [session]);
 
   if (!token) {
     return (

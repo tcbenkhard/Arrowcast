@@ -32,7 +32,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
   const findUser = (username: string) => config.db.select().from(users).where(eq(users.username, username)).get();
   await app.register(jwt, {
     secret: config.jwtSecret,
-    sign: { algorithm: 'HS256', expiresIn: '1h', iss: 'arrowcast', aud: 'arrowcast-admin' },
+    sign: { algorithm: 'HS256', expiresIn: '24h', iss: 'arrowcast', aud: 'arrowcast-admin' },
     verify: { algorithms: ['HS256'], allowedIss: 'arrowcast', allowedAud: 'arrowcast-admin' },
   });
   await app.register(rateLimit, { global: false });

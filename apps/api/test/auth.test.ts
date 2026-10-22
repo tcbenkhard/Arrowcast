@@ -24,7 +24,7 @@ test('login issues a JWT that grants access to the protected admin endpoint', as
   assert.equal(login.headers['cache-control'], 'no-store');
   const { token, expiresAt } = login.json();
   assert.equal(token.split('.').length, 3);
-  assert.ok(expiresAt > Date.now() && expiresAt <= Date.now() + 3600000);
+  assert.ok(Math.abs(expiresAt - (Date.now() + 24 * 3600000)) < 5000);
   const me = await app.inject({ url: '/api/v1/admin/me', headers: { authorization: `Bearer ${token}` } });
   assert.equal(me.statusCode, 200);
   assert.deepEqual(me.json(), {

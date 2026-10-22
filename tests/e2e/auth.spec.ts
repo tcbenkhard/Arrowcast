@@ -80,14 +80,19 @@ test('profile menu opens a cancellable password change and saves the new passwor
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 });
 
-test('an active portal returns to login when its JWT expires', async ({ page }) => {
-  await page.clock.install();
+test('the portal ignores browser time and returns to login when the server rejects the session', async ({ page }) => {
+  await page.clock.install({ time: new Date(Date.now() - 2 * 86400000) });
   await page.goto('/admin');
   await page.getByLabel('Username').fill('admin');
   await page.getByLabel('Password').fill('admin');
   await page.getByRole('button', { name: 'Log in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Competitions', exact: true })).toBeVisible();
-  await page.clock.fastForward(3600001);
+  await page.clock.fastForward(4 * 86400000);
+  await expect(page.getByRole('heading', { name: 'Competitions', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Competitions', exact: true })).toBeVisible();
+  await page.route('**/api/v1/admin/me', (route) => route.fulfill({ status: 401, json: { message: 'Token expired' } }));
+  await page.reload();
   await expect(page.getByRole('heading', { name: 'Log in', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('expired');
 });
@@ -111,6 +116,7 @@ test('the public home stays public and scoring requires a lane link', async ({ p
 });
 
 test('first login requires a new password, survives reload and unlocks the portal', async ({ page }) => {
+  await page.clock.install({ time: new Date(Date.now() + 2 * 86400000) });
   await page.goto('/admin/settings');
   await page.getByLabel('Username').fill('first-login');
   await page.getByLabel('Password', { exact: true }).fill('admin');
