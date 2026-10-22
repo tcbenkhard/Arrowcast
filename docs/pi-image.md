@@ -11,33 +11,37 @@ below. Backup/restore UI and browser onboarding are not implemented.
 ## Build and download
 
 1. Push this implementation to GitHub and open **Actions → Raspberry Pi image**.
-2. Choose **Run workflow** on the desired branch. No secrets or registry account
-   need to be configured.
-3. When the workflow passes, download its `arrowcast-pi-<commit>` artifact and
+2. Configure the update signing keys described below. Choose **Run workflow**
+   on **main** and select **patch**, **minor**, or **major** (default: patch).
+3. When the workflow passes, download its `arrowcast-pi-v<version>` artifact and
    extract the artifact ZIP. The `.img.xz` inside is the installation image.
    Build artifacts are retained for 14 days; download them while available.
 
-`main` is the release branch. Merge changes into `main` and push it before
-creating a new version tag; the workflow rejects release tags whose commits are
-not on `main`. Do not move existing published tags. For example:
+Branch pushes and pull requests run CI checks. Tag pushes do not run checks or
+start image builds. Merge changes into `main` before starting a manual release;
+the release workflow rejects other branches.
 
-```sh
-git switch main
-git pull --ff-only origin main
-git push origin main
-git tag v0.0.8
-git push origin v0.0.8
-```
+The manual workflow validates signing configuration and runs checks, then bumps
+the root `package.json` version and updates `package-lock.json`. For example,
+from `1.2.3`, patch produces `1.2.4`, minor produces `1.3.0`, and major produces
+`2.0.0`. It commits these files to `main` and creates the corresponding `v` tag.
+Workspace package versions are independent and remain unchanged. Version commits
+and tags are pushed atomically; if `main` advances during checks, start a new run
+against the updated branch. Repository rules must allow the Actions token to
+push the version commit and tag.
 
-Pushing a version tag such as `v1.0.0` runs the same checks/build and attaches the
+The workflow builds the exact tagged commit and attaches the
 image, SHA256SUMS, installation guide, version and source/build-tool revisions
 to a **GitHub Release**. The workflow creates a draft, uploads all assets, then
 automatically publishes the release once the uploads succeed. Failed uploads
 leave a draft that can be retried. Published release files persist independently
-of the short-lived Actions artifact. A rerun will not overwrite a published release.
+of the short-lived Actions artifact. Retry failed jobs in the same workflow run
+to reuse its version tag; rerunning all jobs also reuses that run's tag. Starting
+a new manual run creates a new version. A rerun will not overwrite a published
+release. Do not move existing published tags.
 
-GitHub Actions must be enabled and repository policy must allow the release job
-to write repository contents. Manual runs upload artifacts only. Public downloads
+GitHub Actions must be enabled and repository policy must allow the version and
+release jobs to write repository contents. Public downloads
 without a GitHub login require publishing in a public repository. Private
 repository releases remain private. Each image must be smaller than GitHub's
 2 GiB per-asset limit; the build fails rather than silently omit an oversized image.
@@ -251,10 +255,9 @@ above. There is no need to generate a replacement private key for a formatting
 mistake. "Could not read key of Public Key" means the configured public-key value
 could not be parsed; Git's default-branch hints are unrelated.
 
-Tag builds require these settings and a stable version such as `v1.2.0`.
-Manual image builds without a public key still work, but display that updates
-are not configured. A manually built image with the key can install a published
-stable release. Previously built images do not acquire the updater automatically;
+Manual releases require these settings and create a stable version such as
+`v1.2.0`. Images include the public key and can install a published stable
+release. Previously built images do not acquire the updater automatically;
 installing this image on an existing card still requires preserving its data.
 
 The workflow packages the exact compiled ARM64 application from the image,

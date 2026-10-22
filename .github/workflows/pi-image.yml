@@ -2,15 +2,22 @@ name: Raspberry Pi image
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v[0-9]*'
+    inputs:
+      bump:
+        description: Version increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: read
 
 concurrency:
-  group: pi-image-${{ github.ref }}
+  group: pi-image-release
   cancel-in-progress: false
 
 jobs:
@@ -18,27 +25,20 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     steps:
+      - name: Require releases to run from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo 'Run this workflow from main.' >&2
+          exit 1
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Require release tags to come from main
-        if: github.ref_type == 'tag'
-        run: git merge-base --is-ancestor HEAD origin/main
       - name: Validate signing configuration for releases
-        if: github.ref_type == 'tag'
         env:
           ARROWCAST_UPDATE_PRIVATE_KEY: ${{ secrets.ARROWCAST_UPDATE_PRIVATE_KEY }}
           ARROWCAST_UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          python3 deploy/pi/signing.py --require-private
-          [[ "$RELEASE_TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-      - name: Validate public key for manual image builds
-        if: github.ref_type != 'tag' && vars.ARROWCAST_UPDATE_PUBLIC_KEY != ''
-        env:
-          ARROWCAST_UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
-        run: python3 deploy/pi/signing.py
+        run: python3 deploy/pi/signing.py --require-private
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -60,13 +60,57 @@ jobs:
       - name: Test update broker
         run: python3 -m unittest discover -s deploy/pi/tests -v
 
-  image:
+  version:
     needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Bump package version and push release tag
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Reuse this run's tag when retrying a failed image build or upload.
+          marker="Arrowcast release run $GITHUB_RUN_ID"
+          while IFS= read -r tag; do
+            if [[ "$(git for-each-ref --format='%(contents:subject)' "refs/tags/$tag")" == "$marker" ]]; then
+              [[ "$(git rev-parse "$tag^1")" == "$GITHUB_SHA" ]]
+              echo "tag=$tag" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done < <(git tag --list 'v[0-9]*')
+          case "$BUMP" in patch|minor|major) ;; *) exit 1 ;; esac
+          npm version "$BUMP" --no-git-tag-version --workspaces=false --ignore-scripts
+          tag="v$(node -p "require('./package.json').version")"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json
+          git commit -m "chore: release $tag"
+          git tag -a "$tag" -m "$marker"
+          # Fail without publishing either ref if main advanced since checks ran.
+          git push --atomic origin HEAD:refs/heads/main "refs/tags/$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  image:
+    needs: version
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.version.outputs.tag }}
           persist-credentials: false
       - name: Install pi-gen build dependencies
         run: |
@@ -78,7 +122,7 @@ jobs:
           df -h .
       - name: Build native ARM64 appliance image
         env:
-          IMAGE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+          IMAGE_VERSION: ${{ needs.version.outputs.tag }}
           UPDATE_REPOSITORY: ${{ github.repository }}
           UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
         run: |
@@ -88,8 +132,9 @@ jobs:
       - name: Upload installation image
         uses: actions/upload-artifact@v4
         with:
-          name: arrowcast-pi-${{ github.sha }}
+          name: arrowcast-pi-${{ needs.version.outputs.tag }}
           path: .pi-build/output/
+          overwrite: true
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -98,6 +143,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pi-image-build-logs-${{ github.sha }}
+          overwrite: true
           path: |
             .pi-build/pi-gen/work/**/build.log
             .pi-build/pi-gen/work/**/debootstrap.log
@@ -105,8 +151,7 @@ jobs:
           retention-days: 7
 
   release:
-    if: github.ref_type == 'tag'
-    needs: image
+    needs: [version, image]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -114,16 +159,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.version.outputs.tag }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
-          name: arrowcast-pi-${{ github.sha }}
+          name: arrowcast-pi-${{ needs.version.outputs.tag }}
           path: image
       - name: Sign application update manifest
         env:
           ARROWCAST_UPDATE_PRIVATE_KEY: ${{ secrets.ARROWCAST_UPDATE_PRIVATE_KEY }}
           ARROWCAST_UPDATE_PUBLIC_KEY: ${{ vars.ARROWCAST_UPDATE_PUBLIC_KEY }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
@@ -148,7 +194,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail

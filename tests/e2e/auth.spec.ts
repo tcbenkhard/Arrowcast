@@ -34,7 +34,10 @@ test('admin requires login, reports bad credentials, restores login and logs out
   await profile.focus();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Tab');
-  await expect(page.getByLabel('Language', { exact: true })).toBeFocused();
+  const language = page.getByRole('group', { name: 'Language', exact: true });
+  await expect(language.getByRole('button', { name: 'Dutch', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(language.getByRole('button', { name: 'English', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Change password', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
