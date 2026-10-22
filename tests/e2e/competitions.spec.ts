@@ -1016,7 +1016,8 @@ test('competition default initializes lanes and participant targets while allowi
     await modal.getByRole('option', { name: 'New participant', exact: true }).click();
     await expect(modal.getByLabel('Target', { exact: true })).toHaveValue('Browser default face');
     await modal.getByLabel('Federation number', { exact: true }).fill(`default-browser-${index}`);
-    await modal.getByLabel('Club', { exact: true }).selectOption('e2e-club');
+    await modal.getByLabel('Club number', { exact: true }).fill('e2e-club');
+    await expect(modal.getByLabel('Club name', { exact: true })).toHaveValue('Browser test club');
     await modal.getByRole('combobox', { name: 'Bow type', exact: true }).selectOption(bows[0]!);
     if (index === 1) await modal.getByLabel('Target', { exact: true }).selectOption(target);
     await modal.getByRole('button', { name: 'Add participant', exact: true }).click();
