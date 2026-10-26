@@ -1,19 +1,20 @@
-import { Icon } from '../../components/Icon';
-import { ArrowCastLogo } from '../../components/ArrowCastLogo';
-import { LanguageSelect } from '../../components/LanguageSelect';
-import { t, message, setLanguage } from '../../i18n';
-import type { Language } from '../../i18n';
-import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Route, Routes } from 'react-router';
+import { ArrowCastLogo } from '../../components/ArrowCastLogo';
+import { Icon } from '../../components/Icon';
+import { LanguageSelect } from '../../components/LanguageSelect';
+import type { Language } from '../../i18n';
+import { message, setLanguage, t } from '../../i18n';
+import { decodeJson, managementRequest } from '../../lib/http';
 import { CompetitionDetailPage } from '../competitions/CompetitionDetailPage';
 import { CompetitionsPage } from '../competitions/CompetitionsPage';
-import { SettingsPage } from '../settings/SettingsPage';
+import { LogbookPage } from '../logbook/LogbookPage';
 import { LogsPage } from '../settings/LogsPage';
+import { SettingsPage } from '../settings/SettingsPage';
 import { PasswordChangeForm } from './PasswordChangeForm';
-import { decodeJson, managementRequest } from '../../lib/http';
-import { readAdminToken, writeAdminToken } from './session';
 import type { AdminSession } from './session';
+import { readAdminToken, writeAdminToken } from './session';
 
 export function AdminPage() {
   const [token, setToken] = useState(readAdminToken);
@@ -127,6 +128,10 @@ export function AdminPage() {
           <Icon name="trophy" />
           {t('AdminPage.competitions')}
         </NavLink>
+        <NavLink className="with-icon" to="/admin/logbook">
+          <Icon name="book" />
+          {t('logbook.title')}
+        </NavLink>
         {session.role === 'admin' && (
           <NavLink className="settings-tab with-icon" to="/admin/settings">
             <Icon name="settings" />
@@ -135,6 +140,7 @@ export function AdminPage() {
         )}
       </nav>
       <Routes>
+        <Route path="logbook" element={<LogbookPage token={token} onUnauthorized={logout} />} />
         <Route
           path="logs"
           element={

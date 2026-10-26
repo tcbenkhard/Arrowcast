@@ -14,6 +14,7 @@ test('admin requires login, reports bad credentials, restores login and logs out
   await expect(page).toHaveURL('/admin/competitions');
   await expect(page.getByRole('navigation', { name: 'Admin navigation' }).getByRole('link')).toHaveText([
     'Competitions',
+    'Score logbook',
     'Settings',
   ]);
   await page.reload();

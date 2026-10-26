@@ -1,3 +1,5 @@
+import { ScoreKeypad } from './ScoreKeypad';
+import { ScoreSheet } from './ScoreSheet';
 import type { ScoringContext, ScoringMutation } from '@arrowcast/contracts';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
@@ -6,8 +8,6 @@ import { message, t } from '../../i18n';
 import { HttpError, requireJson, scoringRequest } from '../../lib/http';
 
 const headers = { 'Content-Type': 'application/json', 'X-Arrowcast-Scoring': '1' };
-const buttons = ['10', '9', '8', '7', '6', '5', '4', '3', '2', '1', 'M'];
-const arrowValue = (symbol: string | null) => (symbol === 'M' || symbol === null ? 0 : Number(symbol));
 function submissionId() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   // getRandomValues is also available when a venue serves scoring over LAN HTTP.
@@ -439,68 +439,13 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
                               })}
                             </p>
                           )}
-                          <div className="scoring-arrow-row">
-                            <div
-                              className="scoring-arrow-slots"
-                              role="group"
-                              aria-label={t('ScoringPage.arrow_scores')}
-                            >
-                              {arrows.map((symbol, index) => (
-                                <button
-                                  key={index}
-                                  className={index === arrowIndex ? 'selected' : 'secondary'}
-                                  aria-label={t('ScoringPage.arrow', {
-                                    p0: index + 1,
-                                    p1: symbol ?? t('ScoringPage.not_entered'),
-                                  })}
-                                  aria-pressed={index === arrowIndex}
-                                  disabled={entryDisabled}
-                                  onClick={() => setArrowIndex(index)}
-                                >
-                                  {symbol ?? '—'}
-                                </button>
-                              ))}
-                            </div>
-                            <p className="scoring-subtotal">
-                              <span>{t('ScoringPage.round_total')}</span>
-                              <strong>{arrows.reduce<number>((sum, value) => sum + arrowValue(value), 0)}</strong>
-                            </p>
-                          </div>
-                          <div className="scoring-keypad" role="group" aria-label={t('ScoringPage.score_keypad')}>
-                            {buttons.map((symbol) => (
-                              <button
-                                key={symbol}
-                                disabled={entryDisabled}
-                                aria-label={
-                                  symbol === 'M' ? t('ScoringPage.score_miss') : t('ScoringPage.score', { p0: symbol })
-                                }
-                                onClick={() => {
-                                  save(
-                                    arrows.map((value, index) => (index === arrowIndex ? symbol : value)),
-                                    false,
-                                  );
-                                  setArrowIndex(Math.min(arrowIndex + 1, arrows.length - 1));
-                                }}
-                              >
-                                {symbol === 'M' ? t('ScoringPage.miss') : symbol}
-                              </button>
-                            ))}
-                            <button
-                              className="scoring-backspace"
-                              aria-label={t('ScoringPage.backspace')}
-                              disabled={entryDisabled || (arrows[arrowIndex] === null && arrowIndex === 0)}
-                              onClick={() => {
-                                const indexToClear = arrows[arrowIndex] === null ? arrowIndex - 1 : arrowIndex;
-                                save(
-                                  arrows.map((value, index) => (index === indexToClear ? null : value)),
-                                  false,
-                                );
-                                setArrowIndex(indexToClear);
-                              }}
-                            >
-                              ←
-                            </button>
-                          </div>
+                          <ScoreKeypad
+                            arrows={arrows}
+                            arrowIndex={arrowIndex}
+                            setArrowIndex={setArrowIndex}
+                            disabled={entryDisabled}
+                            onChange={(values) => save(values, false)}
+                          />
                           <button
                             className="scoring-save"
                             disabled={entryDisabled || arrows.some((value) => value === null)}
@@ -508,9 +453,11 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
                           >
                             {correcting ? t('ScoringPage.save_correction') : t('ScoringPage.save')}
                           </button>
-                          <ParticipantScores
-                            context={context}
-                            participantId={participant.id}
+                          <ScoreSheet
+                            rounds={context.rounds.filter((round) => round.participantId === participant.id)}
+                            numberOfRounds={context.competition.numberOfRounds}
+                            arrowsPerRound={context.competition.arrowsPerRound}
+                            currentRoundNumber={context.currentRoundNumber}
                             selectedRound={selection.roundNumber}
                             disabled={disabled}
                             onSelectRound={(roundNumber) => chooseRound({ participantId: participant.id, roundNumber })}
@@ -532,84 +479,5 @@ function ScoringLane({ competitionId, laneId, grantId }: { competitionId: string
         <LanguageSelect flags />
       </footer>
     </main>
-  );
-}
-
-function ParticipantScores({
-  context,
-  participantId,
-  selectedRound,
-  disabled,
-  onSelectRound,
-}: {
-  context: ScoringContext;
-  participantId: string;
-  selectedRound: number;
-  disabled: boolean;
-  onSelectRound: (roundNumber: number) => void;
-}) {
-  const rounds = new Map(
-    context.rounds.filter((round) => round.participantId === participantId).map((round) => [round.roundNumber, round]),
-  );
-  let cumulativeTotal = 0;
-  return (
-    <div className="table-scroll participant-scorecard">
-      <h3>{t('ScoringPage.scoresheet')}</h3>
-      <table aria-label={t('ScoringPage.participant_scores')}>
-        <thead>
-          <tr>
-            <th scope="col">
-              <span className="visually-hidden">{t('ScoringPage.round')}</span>
-            </th>
-            {Array.from({ length: context.competition.arrowsPerRound }, (_, index) => (
-              <th scope="col" key={index}>
-                <span className="visually-hidden">{t('scoring.arrowHeading', { number: index + 1 })}</span>
-              </th>
-            ))}
-            <th scope="col" aria-label={t('ScoringPage.round_total_295')}>
-              {t('scoring.subtotalHeading')}
-            </th>
-            <th scope="col" aria-label={t('ScoringPage.cumulative_total')}>
-              {t('scoring.totalHeading')}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from({ length: context.competition.numberOfRounds }, (_, index) => {
-            const round = rounds.get(index + 1);
-            const hasScores = round?.arrows.some((value) => value !== null);
-            const roundDisabled = disabled || index + 1 > context.currentRoundNumber;
-            cumulativeTotal += round?.total ?? 0;
-            return (
-              <tr
-                key={index}
-                className={selectedRound === index + 1 ? 'selected-round' : undefined}
-                aria-disabled={roundDisabled}
-                onClick={() => {
-                  if (!roundDisabled) onSelectRound(index + 1);
-                }}
-              >
-                <th scope="row">
-                  <button
-                    type="button"
-                    className="scoresheet-round"
-                    aria-label={t('ScoringPage.edit_round', { p0: index + 1 })}
-                    aria-pressed={selectedRound === index + 1}
-                    disabled={roundDisabled}
-                  >
-                    {index + 1}
-                  </button>
-                </th>
-                {Array.from({ length: context.competition.arrowsPerRound }, (_, arrowIndex) => (
-                  <td key={arrowIndex}>{round?.arrows[arrowIndex] ?? '—'}</td>
-                ))}
-                <td>{hasScores ? round!.total : '—'}</td>
-                <td>{hasScores ? cumulativeTotal : '—'}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
   );
 }

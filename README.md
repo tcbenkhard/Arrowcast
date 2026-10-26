@@ -64,6 +64,18 @@ Door deze code te scannen, opent de score-invoer direct in de browser van een sm
 
 Scores worden opgeslagen in het centrale systeem zodra de invoer bevestigd is.
 
+### Persoonlijk scorelogboek
+
+Naast wedstrijden is er een doorlopend **Scorelogboek** voor individuele clubtrainingen, zonder baanregistratie of einddatum.
+
+- Open het tabblad **Scorelogboek** in het beheerportal en druk de vaste QR-code af.
+- Na het scannen kiest de schutter een naam uit de bestaande deelnemerslijst. Bij het eerste gebruik maakt diegene een pincode van 4 tot 6 cijfers aan; daarna is deze pincode nodig voor score-invoer.
+- Een lijstje bestaat uit 10 series van 3 pijlen. **Opslaan** bewaart een concept. Bij verversen blijven in hetzelfde browsertabblad ook nog niet opgeslagen pijlen en de geselecteerde ronde behouden.
+- Ook de laatste serie wordt eerst opgeslagen. Daarna verschijnt **Beëindigen**. De definitieve score krijgt een datum en tijd en telt mee in het overzicht. **Opnieuw proberen** opent een nieuw lijstje voor dezelfde persoon.
+- Het beheertabblad toont per persoon de gemiddelde score per lijstje, het gemiddelde per pijl en de hoogste score. Klik op een naam voor de historie.
+
+De logboekscores en gehashte pincodes staan in aparte tabellen; er worden geen wedstrijden, baanindelingen of wedstrijdregistraties voor aangemaakt. De QR-link `/scores/logbook` verloopt niet en gebruikt hetzelfde bereikbare websiteadres als de QR-codes voor wedstrijden.
+
 ### 🏆 Live scores en tussenstanden
 
 Tijdens de wedstrijd heeft de wedstrijdleiding een actueel overzicht van de resultaten.

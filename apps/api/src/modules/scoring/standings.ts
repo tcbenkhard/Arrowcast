@@ -1,6 +1,6 @@
 import type { ScoringStanding } from '@arrowcast/contracts';
 import { calculateAverageScore } from '@arrowcast/scoring';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import type { AppDatabase } from '../../db/index.js';
 import {
   arrowScores,
@@ -32,7 +32,7 @@ export function scoringStandings(
   const scores = db
     .select({ participantId: scorecards.participantId, roundId: roundScores.id, symbol: arrowScores.symbol })
     .from(scorecards)
-    .innerJoin(roundScores, and(eq(roundScores.scorecardId, scorecards.id), eq(roundScores.status, 'submitted')))
+    .innerJoin(roundScores, and(eq(roundScores.scorecardId, scorecards.id), isNotNull(roundScores.submittedAt)))
     .leftJoin(arrowScores, eq(arrowScores.roundScoreId, roundScores.id))
     .where(eq(scorecards.competitionId, competition.id))
     .orderBy(roundScores.roundNumber, arrowScores.arrowIndex)

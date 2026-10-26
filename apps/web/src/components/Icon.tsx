@@ -1,4 +1,6 @@
 const paths = {
+  exit: 'M9 3H4v18h5M14 7l5 5-5 5M8 12h11',
+  book: 'M5 3h14v18H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 3v18M11 8h5M11 12h5',
   trophy: 'M8 3h8v6a4 4 0 0 1-8 0ZM8 5H4v2a4 4 0 0 0 4 4M16 5h4v2a4 4 0 0 1-4 4M12 13v8M8 21h8',
   pencil: 'm16 3 5 5-12 12-6 1 1-6ZM14 5l5 5',
   checklist: 'M9 5h11M9 12h11M9 19h11M3 4l1 1 2-2M3 11l1 1 2-2M3 18l1 1 2-2',

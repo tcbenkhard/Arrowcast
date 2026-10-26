@@ -148,6 +148,27 @@
       "when": 1792529304410,
       "tag": "0020_user_language",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1792937886802,
+      "tag": "0021_score_logbook",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1792940003983,
+      "tag": "0022_club_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1793004738328,
+      "tag": "0023_simplify_data_model",
+      "breakpoints": true
     }
   ]
 }

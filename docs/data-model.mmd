@@ -1,0 +1,214 @@
+---
+title: ArrowCast datamodel
+config:
+  theme: base
+  look: classic
+  layout: elk
+  themeVariables:
+    primaryColor: "#eef4ff"
+    primaryTextColor: "#10233f"
+    primaryBorderColor: "#1f49bd"
+    lineColor: "#58708f"
+    tertiaryColor: "#fff8e6"
+    fontFamily: "Inter, Segoe UI, Arial, sans-serif"
+---
+erDiagram
+    USERS {
+        text username PK
+        text name
+        text password_hash
+        text role
+        text language
+        boolean force_change_password
+        integer session_version
+    }
+
+    CLUBS {
+        text club_number PK
+        text name
+    }
+
+    CLUB_SETTINGS {
+        integer id PK "singleton: 1"
+        text club_number FK "nullable"
+    }
+
+    PARTICIPANTS {
+        text id PK
+        text federation_number UK
+        text name
+        text club_number FK
+    }
+
+    BOW_TYPES {
+        text name PK
+    }
+
+    TARGET_TYPES {
+        text name PK
+    }
+
+    RANGES {
+        text id PK
+        text name
+    }
+
+    RANGE_DISTANCES {
+        text range_id PK,FK
+        real distance_meters PK
+    }
+
+    LANES {
+        text id PK
+        text range_id FK
+        integer number
+    }
+
+    COMPETITIONS {
+        text id PK
+        text name
+        text date
+        text starting_time
+        text ending_time
+        text range_id FK
+        text status
+        integer number_of_rounds
+        integer arrows_per_round
+        text default_target_type FK "nullable"
+        boolean scoring_locked
+    }
+
+    COMPETITION_LANES {
+        text competition_id PK,FK
+        text lane_id PK,FK
+        text range_id FK
+        real distance_meters FK
+        text target_type "nullable override"
+        integer number_of_targets
+    }
+
+    COMPETITION_PARTICIPANTS {
+        text competition_id PK,FK
+        text participant_id PK,FK
+        text bow_type FK "nullable"
+        text target_type FK "nullable"
+        boolean checked_in
+        text lane_id FK "nullable"
+        text target_letter "A-D, nullable"
+    }
+
+    LANE_SCORING_GRANTS {
+        text id PK
+        text competition_id FK
+        text lane_id FK
+        text token "nullable"
+        text token_hash UK
+        integer created_at
+        integer expires_at
+        integer revoked_at "nullable"
+    }
+
+    SCORING_SESSIONS {
+        text id PK
+        text grant_id FK
+        text token_hash UK
+        integer created_at
+        integer expires_at
+        integer revoked_at "nullable"
+    }
+
+    LANE_SCORING_STATE {
+        text competition_id PK,FK
+        text lane_id PK,FK
+        integer current_round_number
+        text current_participant_id FK "nullable"
+        json participant_order
+        boolean completed
+        integer version
+        integer updated_at
+    }
+
+    SCORECARDS {
+        text id PK
+        text competition_id FK
+        text participant_id FK
+        integer version
+        integer created_at
+        integer updated_at
+    }
+
+    ROUND_SCORES {
+        text id PK
+        text scorecard_id FK
+        integer round_number
+        integer submitted_at "nullable"
+    }
+
+    ARROW_SCORES {
+        text round_score_id PK,FK
+        integer arrow_index PK
+        text symbol "M or 1-10"
+    }
+
+    SCORING_MUTATIONS {
+        text id PK
+        text session_id FK
+        text scorecard_id FK
+        text request_hash
+        integer result_version
+        integer round_number
+        json before
+        json after
+        boolean submitted
+        integer created_at
+    }
+
+    LOGBOOK_PINS {
+        text participant_id PK,FK
+        text pin_hash
+    }
+
+    LOGBOOK_ENTRIES {
+        text id PK
+        text participant_id FK
+        text token_hash UK
+        integer expires_at
+        json rounds
+        integer version
+        integer total "nullable"
+        integer created_at
+        integer completed_at "nullable"
+    }
+
+    CLUBS ||--o{ PARTICIPANTS : has
+    CLUBS o|--o| CLUB_SETTINGS : selected_in
+
+    RANGES ||--o{ RANGE_DISTANCES : allows
+    RANGES ||--o{ LANES : contains
+    RANGES ||--o{ COMPETITIONS : hosts
+    TARGET_TYPES o|--o{ COMPETITIONS : default_for
+
+    COMPETITIONS ||--o{ COMPETITION_LANES : configures
+    LANES ||--o{ COMPETITION_LANES : used_as
+    RANGE_DISTANCES ||--o{ COMPETITION_LANES : sets_distance
+
+    COMPETITIONS ||--o{ COMPETITION_PARTICIPANTS : registers
+    PARTICIPANTS ||--o{ COMPETITION_PARTICIPANTS : enters
+    BOW_TYPES o|--o{ COMPETITION_PARTICIPANTS : uses
+    TARGET_TYPES o|--o{ COMPETITION_PARTICIPANTS : shoots_at
+    COMPETITION_LANES o|--o{ COMPETITION_PARTICIPANTS : assigned_to
+
+    COMPETITION_LANES ||--o{ LANE_SCORING_GRANTS : authorizes
+    LANE_SCORING_GRANTS ||--o{ SCORING_SESSIONS : opens
+    COMPETITION_LANES ||--o| LANE_SCORING_STATE : tracks
+    COMPETITION_PARTICIPANTS o|--o{ LANE_SCORING_STATE : current_archer
+
+    COMPETITION_PARTICIPANTS ||--o| SCORECARDS : owns
+    SCORECARDS ||--o{ ROUND_SCORES : contains
+    ROUND_SCORES ||--o{ ARROW_SCORES : contains
+
+    SCORING_SESSIONS ||--o{ SCORING_MUTATIONS : receives
+    SCORECARDS ||--o{ SCORING_MUTATIONS : audited_by
+
+    PARTICIPANTS ||--o| LOGBOOK_PINS : unlocks_with
+    PARTICIPANTS ||--o{ LOGBOOK_ENTRIES : owns

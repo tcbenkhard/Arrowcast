@@ -4,6 +4,7 @@ import { AdminPage } from './features/auth/AdminPage';
 import { ScoringPage } from './features/scoring/ScoringPage';
 import { LanguageSelect } from './components/LanguageSelect';
 import { ArrowCastLogo } from './components/ArrowCastLogo';
+import { LogbookEntryPage } from './features/logbook/LogbookEntryPage';
 
 export function App() {
   useLanguage();
@@ -24,6 +25,7 @@ export function App() {
           }
         />
         <Route path="/admin/*" element={<AdminPage />} />
+        <Route path="/scores/logbook" element={<LogbookEntryPage />} />
         <Route
           path="/scores"
           element={

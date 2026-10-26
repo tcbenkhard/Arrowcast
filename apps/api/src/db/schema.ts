@@ -38,6 +38,15 @@ export const clubs = sqliteTable(
   ],
 );
 
+export const clubSettings = sqliteTable(
+  'club_settings',
+  {
+    id: integer('id').primaryKey(),
+    clubNumber: text('club_number').references(() => clubs.clubNumber),
+  },
+  (table) => [check('club_settings_singleton', sql`${table.id} = 1`)],
+);
+
 export const participants = sqliteTable(
   'participants',
   {
@@ -309,15 +318,11 @@ export const roundScores = sqliteTable(
       .notNull()
       .references(() => scorecards.id),
     roundNumber: integer('round_number').notNull(),
-    status: text('status', { enum: ['draft', 'submitted'] })
-      .notNull()
-      .default('draft'),
     submittedAt: integer('submitted_at'),
   },
   (table) => [
     unique('round_scores_number_unique').on(table.scorecardId, table.roundNumber),
     check('round_scores_round_valid', sql`${table.roundNumber} > 0 AND typeof(${table.roundNumber}) = 'integer'`),
-    check('round_scores_status_valid', sql`${table.status} IN ('draft', 'submitted')`),
   ],
 );
 
@@ -345,25 +350,40 @@ export const scoringMutations = sqliteTable('scoring_mutations', {
   sessionId: text('session_id')
     .notNull()
     .references(() => scoringSessions.id),
-  requestHash: text('request_hash').notNull(),
-  result: text('result', { mode: 'json' }).$type<{ version: number }>().notNull(),
-  createdAt: integer('created_at').notNull(),
-});
-
-export const scoreChanges = sqliteTable('score_changes', {
-  id: text('id').primaryKey(),
   scorecardId: text('scorecard_id')
     .notNull()
     .references(() => scorecards.id),
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => scoringSessions.id),
-  mutationId: text('mutation_id')
-    .notNull()
-    .references(() => scoringMutations.id),
+  requestHash: text('request_hash').notNull(),
+  resultVersion: integer('result_version').notNull(),
   roundNumber: integer('round_number').notNull(),
   before: text('before', { mode: 'json' }).$type<(string | null)[]>().notNull(),
   after: text('after', { mode: 'json' }).$type<(string | null)[]>().notNull(),
   submitted: integer('submitted', { mode: 'boolean' }).notNull(),
   createdAt: integer('created_at').notNull(),
 });
+
+// Club practice stays independent of competition registrations and lane scoring.
+export const logbookPins = sqliteTable('logbook_pins', {
+  participantId: text('participant_id')
+    .primaryKey()
+    .references(() => participants.id),
+  pinHash: text('pin_hash').notNull(),
+});
+
+export const logbookEntries = sqliteTable(
+  'logbook_entries',
+  {
+    id: text('id').primaryKey(),
+    participantId: text('participant_id')
+      .notNull()
+      .references(() => participants.id),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: integer('expires_at').notNull(),
+    rounds: text('rounds', { mode: 'json' }).$type<(string | null)[][]>().notNull(),
+    version: integer('version').notNull().default(0),
+    total: integer('total'),
+    createdAt: integer('created_at').notNull(),
+    completedAt: integer('completed_at'),
+  },
+  (table) => [index('logbook_entries_participant_completed_index').on(table.participantId, table.completedAt)],
+);

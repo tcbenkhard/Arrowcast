@@ -26,7 +26,6 @@ import {
   ranges,
   roundScores,
   scorecards,
-  scoreChanges,
   scoringMutations,
   scoringSessions,
   targetTypes,
@@ -266,10 +265,7 @@ for (const status of ['Active', 'Closed']) {
       .run();
     for (let number = 1; number <= 2; number++) {
       const id = `automatic-round-${number}`;
-      f.db
-        .insert(roundScores)
-        .values({ id, scorecardId: 'automatic-card', roundNumber: number, status: 'submitted', submittedAt: 1 })
-        .run();
+      f.db.insert(roundScores).values({ id, scorecardId: 'automatic-card', roundNumber: number, submittedAt: 1 }).run();
       f.db
         .insert(arrowScores)
         .values([1, 2].map((arrowIndex) => ({ roundScoreId: id, arrowIndex, symbol: 'M' })))
@@ -348,7 +344,7 @@ test('manually entered misses block returning to check-in even when the archer i
     });
     assert.equal(response.statusCode, 409, response.body);
     assert.deepEqual(f.db.select().from(arrowScores).all(), before);
-    assert.equal(f.db.select().from(scoreChanges).all().length, 1);
+    assert.equal(f.db.select().from(scoringMutations).all().length, 1);
     assert.equal(f.db.select().from(competitions).where(eq(competitions.id, 'competition')).get()?.status, 'Active');
   }
 });
@@ -493,7 +489,6 @@ test('editing preserves scoring format locks and removing a scored competition c
     arrowScores,
     roundScores,
     scorecards,
-    scoreChanges,
     scoringMutations,
     scoringSessions,
     laneScoringGrants,
@@ -634,13 +629,12 @@ test('drafts survive restart and device changes; Save rotates participants, wrap
     20,
   );
   assert.equal(f.db.select().from(scoringMutations).all().length, 5);
-  assert.equal(f.db.select().from(scoreChanges).all().length, 5);
   assert.equal(f.db.select().from(arrowScores).all().length, 8);
   assert.equal((await f.save(code, first.cookie, { expectedVersion: 5, arrows: ['8', '9'] })).statusCode, 200);
   const corrected = (await f.context(code, first.cookie)).json() as ScoringContext;
   assert.equal(corrected.completed, true);
   assert.equal(corrected.rounds.find((r) => r.participantId === 'a' && r.roundNumber === 1)?.total, 17);
-  assert.deepEqual(f.db.select().from(scoreChanges).all().at(-1)?.before, ['10', '9']);
+  assert.deepEqual(f.db.select().from(scoringMutations).all().at(-1)?.before, ['10', '9']);
 });
 
 test('lane participants can score out of order and correct earlier rounds without skipping unfinished scores', async (t) => {
@@ -702,7 +696,7 @@ test('lane scoring stays within one submitted round and blocks future drafts wit
   }
   async function blocked(participantId: string, roundNumber: number) {
     const before = (await f.context(code, session.cookie)).json();
-    const auditCount = f.db.select().from(scoreChanges).all().length;
+    const auditCount = f.db.select().from(scoringMutations).all().length;
     for (const submit of [false, true]) {
       const response = await f.save(code, session.cookie, {
         participantId,
@@ -714,7 +708,6 @@ test('lane scoring stays within one submitted round and blocks future drafts wit
       assert.match(response.json().message, /for everyone in your lane/);
     }
     assert.deepEqual((await f.context(code, session.cookie)).json(), before);
-    assert.equal(f.db.select().from(scoreChanges).all().length, auditCount);
     assert.equal(f.db.select().from(scoringMutations).all().length, auditCount);
   }
   await blocked('a', 2);
@@ -897,7 +890,7 @@ test('closing fills missing arrows and rounds with misses and corrects averages 
       .select()
       .from(roundScores)
       .all()
-      .every((round) => round.status === 'submitted' && round.submittedAt !== null),
+      .every((round) => round.submittedAt !== null),
   );
   assert.ok(
     f.db
@@ -956,11 +949,11 @@ test('a failed write rolls back scores, lane progress, audit and idempotency tog
   const code = (await f.start())[0]!;
   const session = await f.exchange(code);
   f.db.run(
-    sql`CREATE TRIGGER fail_score_audit BEFORE INSERT ON score_changes BEGIN SELECT RAISE(ABORT, 'simulated audit failure'); END`,
+    sql`CREATE TRIGGER fail_score_audit BEFORE INSERT ON scoring_mutations BEGIN SELECT RAISE(ABORT, 'simulated audit failure'); END`,
   );
   const submissionId = randomUUID();
   assert.equal((await f.save(code, session.cookie, { submissionId })).statusCode, 500);
-  for (const table of [scorecards, roundScores, arrowScores, scoringMutations, scoreChanges])
+  for (const table of [scorecards, roundScores, arrowScores, scoringMutations])
     assert.equal(f.db.select().from(table).all().length, 0);
   assert.equal((await f.context(code, session.cookie)).json().version, 0);
   f.db.run(sql`DROP TRIGGER fail_score_audit`);

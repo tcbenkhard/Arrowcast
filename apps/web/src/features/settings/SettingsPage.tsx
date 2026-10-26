@@ -9,6 +9,7 @@ import { PublicAccess } from './PublicAccess';
 import { SettingsCard } from './SettingsCard';
 import { Updates } from './Updates';
 import { Users } from './Users';
+import { Club } from './Club';
 
 interface ImportState {
   status: 'idle' | 'running' | 'completed' | 'failed';
@@ -102,6 +103,7 @@ export function SettingsPage({ token, onUnauthorized }: { token: string; onUnaut
     <section className="settings-page" aria-labelledby="settings-heading">
       <h2 id="settings-heading">{t('AdminPage.settings')}</h2>
       <div className="settings-cards">
+        <Club token={token} onUnauthorized={onUnauthorized} />
         <RangesPage token={token} onUnauthorized={onUnauthorized} />
         <TargetTypesPage token={token} onUnauthorized={onUnauthorized} />
         <Users token={token} onUnauthorized={onUnauthorized} />

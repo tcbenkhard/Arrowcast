@@ -1,6 +1,6 @@
 import { buildApp } from '../../apps/api/src/app.js';
 import { openDatabase } from '../../apps/api/src/db/index.js';
-import { clubs, users } from '../../apps/api/src/db/schema.js';
+import { clubs, participants, users } from '../../apps/api/src/db/schema.js';
 import { hashPassword } from '../../apps/api/src/modules/auth/password.js';
 import { eq } from 'drizzle-orm';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -12,6 +12,15 @@ const directory = mkdtempSync(join(tmpdir(), 'arrowcast-e2e-'));
 const databasePath = join(directory, 'test.sqlite');
 const fixture = openDatabase(databasePath);
 fixture.db.insert(clubs).values({ clubNumber: 'e2e-club', name: 'Browser test club' }).run();
+fixture.db
+  .insert(participants)
+  .values({
+    id: 'logbook-browser-archer',
+    name: 'Logbook browser archer',
+    federationNumber: 'logbook-browser',
+    clubNumber: 'e2e-club',
+  })
+  .run();
 fixture.close();
 
 // Isolated test credentials; never use the installation's .env or real account.

@@ -51,3 +51,29 @@ export interface ScoringStanding {
   averageScore: number;
   lastArrows: string[];
 }
+export interface LogbookPerson {
+  id: string;
+  name: string;
+  clubName: string;
+  hasPin: boolean;
+}
+
+export interface LogbookHistoryEntry {
+  id: string;
+  total: number;
+  completedAt: number;
+}
+
+export interface LogbookContext {
+  participant: { id: string; name: string };
+  entry: { id: string; rounds: (string | null)[][]; version: number; completedAt: number | null; total: number | null };
+  history: LogbookHistoryEntry[];
+}
+
+export interface LogbookSummary {
+  participantId: string;
+  name: string;
+  averageScore: number;
+  averagePerArrow: number;
+  highestScore: number;
+}

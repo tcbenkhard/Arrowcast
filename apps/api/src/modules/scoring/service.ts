@@ -1,6 +1,6 @@
 import { t } from '@arrowcast/contracts/i18n';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { and, eq, inArray, isNull, ne, or } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import type { LaneQrCode, ScoringContext, ScoringMutation } from '@arrowcast/contracts';
 import { calculateRoundTotal, isValidRound } from '@arrowcast/scoring';
 import type { AppDatabase } from '../../db/index.js';
@@ -15,7 +15,6 @@ import {
   participants,
   roundScores,
   scorecards,
-  scoreChanges,
   scoringMutations,
   scoringSessions,
 } from '../../db/schema.js';
@@ -89,7 +88,13 @@ export function revokeGrants(db: Database, competitionId: string) {
 // an audit entry; actual input, including drafts and manually entered misses, must stay locked.
 export function resetUnenteredScores(db: Database, competitionId: string): boolean {
   const cards = db.select({ id: scorecards.id }).from(scorecards).where(eq(scorecards.competitionId, competitionId));
-  if (db.select({ id: scoreChanges.id }).from(scoreChanges).where(inArray(scoreChanges.scorecardId, cards)).get())
+  if (
+    db
+      .select({ id: scoringMutations.id })
+      .from(scoringMutations)
+      .where(inArray(scoringMutations.scorecardId, cards))
+      .get()
+  )
     return false;
   const rounds = db.select({ id: roundScores.id }).from(roundScores).where(inArray(roundScores.scorecardId, cards));
   // Preserve score data without an audit trail unless it matches automatic finalization.
@@ -99,10 +104,7 @@ export function resetUnenteredScores(db: Database, competitionId: string): boole
       .from(arrowScores)
       .innerJoin(roundScores, eq(roundScores.id, arrowScores.roundScoreId))
       .where(
-        and(
-          inArray(roundScores.scorecardId, cards),
-          or(ne(arrowScores.symbol, 'M'), ne(roundScores.status, 'submitted')),
-        ),
+        and(inArray(roundScores.scorecardId, cards), or(ne(arrowScores.symbol, 'M'), isNull(roundScores.submittedAt))),
       )
       .get()
   )
@@ -166,8 +168,8 @@ export function finalizeScores(db: Database, competitionId: string) {
         db.insert(arrowScores).values({ roundScoreId: round.id, arrowIndex: index, symbol: 'M' }).run();
         changed = true;
       }
-      if (round.status !== 'submitted') {
-        db.update(roundScores).set({ status: 'submitted', submittedAt: now }).where(eq(roundScores.id, round.id)).run();
+      if (round.submittedAt === null) {
+        db.update(roundScores).set({ submittedAt: now }).where(eq(roundScores.id, round.id)).run();
         changed = true;
       }
     }
@@ -298,7 +300,7 @@ function presentLaneState(db: Database, competition: typeof competitions.$inferS
     .select({ participantId: scorecards.participantId, roundNumber: roundScores.roundNumber })
     .from(scorecards)
     .innerJoin(roundScores, eq(roundScores.scorecardId, scorecards.id))
-    .where(and(eq(scorecards.competitionId, competition.id), eq(roundScores.status, 'submitted')))
+    .where(and(eq(scorecards.competitionId, competition.id), isNotNull(roundScores.submittedAt)))
     .all();
   const saved = new Set(submitted.map((round) => `${round.participantId}/${round.roundNumber}`));
   for (let number = 1; number <= competition.numberOfRounds; number++) {
@@ -355,7 +357,7 @@ export function scoringContext(db: Database, grant: typeof laneScoringGrants.$in
       rounds.push({
         participantId: person.id,
         roundNumber: round.roundNumber,
-        status: round.status,
+        status: round.submittedAt === null ? 'draft' : 'submitted',
         arrows,
         total: calculateRoundTotal(arrows),
       });
@@ -396,7 +398,7 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
   if (previous) {
     if (previous.sessionId !== sessionId || previous.requestHash !== requestHash)
       throw new ScoringError(409, t('service.submission_id_has_already_been_used_with_different_input'));
-    return previous.result;
+    return { version: previous.resultVersion };
   }
   const competition = db.select().from(competitions).where(eq(competitions.id, grant.competitionId)).get()!;
   if (competition.status !== 'Active' || competition.scoringLocked)
@@ -455,7 +457,7 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
     .from(roundScores)
     .where(and(eq(roundScores.scorecardId, card.id), eq(roundScores.roundNumber, body.roundNumber)))
     .get();
-  if (round?.status === 'submitted' && !body.submit)
+  if (round && round.submittedAt !== null && !body.submit)
     throw new ScoringError(409, t('service.save_a_complete_correction_to_update_a_submitted_round'));
   if (!round)
     round = db
@@ -473,8 +475,7 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
         .values({ roundScoreId: round.id, arrowIndex: index + 1, symbol })
         .run();
   });
-  if (body.submit)
-    db.update(roundScores).set({ status: 'submitted', submittedAt: now }).where(eq(roundScores.id, round.id)).run();
+  if (body.submit) db.update(roundScores).set({ submittedAt: now }).where(eq(roundScores.id, round.id)).run();
   db.update(scorecards)
     .set({ version: card.version + 1, updatedAt: now })
     .where(eq(scorecards.id, card.id))
@@ -487,7 +488,7 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
       .select({ participantId: scorecards.participantId, roundNumber: roundScores.roundNumber })
       .from(scorecards)
       .innerJoin(roundScores, eq(roundScores.scorecardId, scorecards.id))
-      .where(and(eq(scorecards.competitionId, grant.competitionId), eq(roundScores.status, 'submitted')))
+      .where(and(eq(scorecards.competitionId, grant.competitionId), isNotNull(roundScores.submittedAt)))
       .all();
     const saved = new Set(submitted.map((r) => `${r.participantId}/${r.roundNumber}`));
     nextParticipant = null;
@@ -523,13 +524,13 @@ export function saveScores(db: Database, grantId: string, sessionId: string, bod
     .returning()
     .get();
   if (!updated) throw new ScoringError(409, t('service.lane_progress_changed_reload_the_latest_scores'));
-  db.insert(scoringMutations).values({ id: body.submissionId, sessionId, requestHash, result, createdAt: now }).run();
-  db.insert(scoreChanges)
+  db.insert(scoringMutations)
     .values({
-      id: randomUUID(),
+      id: body.submissionId,
       scorecardId: card.id,
       sessionId,
-      mutationId: body.submissionId,
+      requestHash,
+      resultVersion: result.version,
       roundNumber: body.roundNumber,
       before,
       after: body.arrows,

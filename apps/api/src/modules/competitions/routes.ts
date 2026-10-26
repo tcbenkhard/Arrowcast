@@ -24,14 +24,7 @@ import {
   scorecards,
   targetTypes,
 } from '../../db/schema.js';
-import {
-  arrowScores,
-  laneScoringGrants,
-  roundScores,
-  scoreChanges,
-  scoringMutations,
-  scoringSessions,
-} from '../../db/schema.js';
+import { arrowScores, laneScoringGrants, roundScores, scoringMutations, scoringSessions } from '../../db/schema.js';
 
 interface CreateCompetitionBody {
   name: string;
@@ -384,11 +377,10 @@ export async function competitionRoutes(app: FastifyInstance, { db }: { db: AppD
           .select({ id: scoringSessions.id })
           .from(scoringSessions)
           .where(inArray(scoringSessions.grantId, grants));
-        tx.delete(scoreChanges).where(inArray(scoreChanges.scorecardId, cards)).run();
+        tx.delete(scoringMutations).where(inArray(scoringMutations.sessionId, sessions)).run();
         tx.delete(arrowScores).where(inArray(arrowScores.roundScoreId, rounds)).run();
         tx.delete(roundScores).where(inArray(roundScores.scorecardId, cards)).run();
         tx.delete(scorecards).where(eq(scorecards.competitionId, competition.id)).run();
-        tx.delete(scoringMutations).where(inArray(scoringMutations.sessionId, sessions)).run();
         tx.delete(scoringSessions).where(inArray(scoringSessions.grantId, grants)).run();
         tx.delete(laneScoringGrants).where(eq(laneScoringGrants.competitionId, competition.id)).run();
         tx.delete(laneScoringState).where(eq(laneScoringState.competitionId, competition.id)).run();

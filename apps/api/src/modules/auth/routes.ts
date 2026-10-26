@@ -19,6 +19,8 @@ import type { AuthConfig } from './config.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { administratorOnly, authenticatedManagement, passwordChanged } from './policies.js';
 import { userRoutes } from './users.js';
+import { adminLogbookRoutes, logbookRoutes } from '../logbook/routes.js';
+import { clubSettingsRoutes } from '../clubs/routes.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -75,6 +77,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
 
   // Register every management API route inside this scope to enforce authentication.
   await app.register(scoringRoutes, { db: config.db, prefix: '/scoring' });
+  await app.register(logbookRoutes, { db: config.db, prefix: '/scoring/logbook' });
   await app.register(
     async (admin) => {
       admin.addHook('onRequest', authenticatedManagement(config.db));
@@ -167,6 +170,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
         features.addHook('onRequest', passwordChanged(config.db));
         await features.register(async (settings) => {
           settings.addHook('onRequest', administratorOnly);
+          await settings.register(clubSettingsRoutes, { db: config.db });
           await settings.register(userRoutes, { db: config.db });
           await settings.register(updateRoutes);
           await settings.register(logRoutes);
@@ -180,6 +184,7 @@ export async function authRoutes(app: FastifyInstance, config: AuthConfig & { db
         await features.register(targetTypeRoutes, { db: config.db });
         await features.register(participantManagementRoutes, { db: config.db });
         await features.register(adminScoringRoutes, { db: config.db });
+        await features.register(adminLogbookRoutes, { db: config.db });
       });
     },
     { prefix: '/admin' },

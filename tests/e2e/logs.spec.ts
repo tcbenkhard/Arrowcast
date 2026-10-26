@@ -16,7 +16,7 @@ for (const width of [1280, 375]) {
     await page.getByRole('button', { name: 'Expand: Advanced', exact: true }).click();
     await page.getByRole('button', { name: 'View log files', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/logs$/);
-    await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(2);
+    await expect(page.getByRole('navigation').getByRole('link')).toHaveCount(3);
     await expect(page.getByRole('tabpanel')).toContainText('frontend log entry');
     await page.getByRole('tab', { name: 'Backend logs', exact: true }).click();
     await expect(page.getByRole('tabpanel')).toContainText('Backend started');
