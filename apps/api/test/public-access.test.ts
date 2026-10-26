@@ -1,20 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildApp } from '../src/app.js';
-import { scoringOrigin } from '../src/modules/public-access/routes.js';
+import { ScoringOriginService } from '../src/modules/public-access/scoring-origin-service.js';
 import { loginAdmin } from './helpers.js';
 
 test('hotspot QR address overrides public settings without consulting or changing them', async () => {
   const publicState = { code: 200, body: { origin: 'https://scores.club.nl' } };
   for (const mode of ['wifi', 'hotspot', 'ethernet', 'wifi']) {
     let publicReads = 0;
-    const result = await scoringOrigin(
-      async () => ({ code: 200, body: { mode } }),
-      async () => {
-        publicReads++;
-        return publicState;
+    const result = await new ScoringOriginService(
+      { statusIfAvailable: async () => ({ code: 200, body: { mode } }) },
+      {
+        status: async () => {
+          publicReads++;
+          return publicState;
+        },
       },
-    );
+    ).origin();
     assert.deepEqual(
       result,
       mode === 'hotspot' ? { code: 200, body: { origin: 'http://10.42.0.1', hotspot: true } } : publicState,
@@ -22,12 +24,14 @@ test('hotspot QR address overrides public settings without consulting or changin
     assert.equal(publicReads, mode === 'hotspot' ? 0 : 1);
     assert.equal(publicState.body.origin, 'https://scores.club.nl');
   }
-  const result = await scoringOrigin(
-    async () => ({ code: 200, body: { mode: 'hotspot' } }),
-    async () => {
-      throw new Error('Public broker offline');
+  const result = await new ScoringOriginService(
+    { statusIfAvailable: async () => ({ code: 200, body: { mode: 'hotspot' } }) },
+    {
+      status: async () => {
+        throw new Error('Public broker offline');
+      },
     },
-  );
+  ).origin();
   assert.equal(result.body.origin, 'http://10.42.0.1');
 });
 
@@ -39,17 +43,22 @@ test('unknown Pi network state prevents printing QR codes with a stale club addr
       throw new Error('Network broker unavailable');
     },
   ]) {
-    const result = await scoringOrigin(networkStatus, async () => {
-      throw new Error('Must not consult public settings');
-    });
+    const result = await new ScoringOriginService(
+      { statusIfAvailable: networkStatus },
+      {
+        status: async () => {
+          throw new Error('Must not consult public settings');
+        },
+      },
+    ).origin();
     assert.equal(result.code, 503);
     assert.equal('origin' in result.body, false);
   }
   assert.deepEqual(
-    await scoringOrigin(
-      async () => null,
-      async () => ({ code: 200, body: { origin: null } }),
-    ),
+    await new ScoringOriginService(
+      { statusIfAvailable: async () => null },
+      { status: async () => ({ code: 200, body: { origin: null } }) },
+    ).origin(),
     { code: 200, body: { origin: null } },
   );
 });

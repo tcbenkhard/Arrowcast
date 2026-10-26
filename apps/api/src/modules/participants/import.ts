@@ -1,14 +1,15 @@
 import { t } from '@arrowcast/contracts/i18n';
-import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 import { load } from 'cheerio';
-import type { AppDatabase } from '../../db/index.js';
-import { clubs, participants } from '../../db/schema.js';
+import type {
+  ImportData,
+  ImportedClub as Club,
+  ImportedParticipant as Participant,
+  ScrapedParticipants,
+} from './types.js';
 
+export type { ImportData } from './types.js';
 const origin = 'https://mijn.handboogsport.nl';
-type Club = { clubNumber: string; name: string };
-type Participant = { federationNumber: string; name: string; clubNumber: string };
-export type ImportData = { clubs: Club[]; participants: Participant[] };
 type FetchPage = (url: string) => Promise<string>;
 
 function sourceUrl(path: string, base = origin): string {
@@ -77,7 +78,7 @@ export function parseRegion(html: string): ImportData {
 export async function scrapeLatestParticipants(
   fetchPage: FetchPage,
   progress: (message: string) => void = () => {},
-): Promise<ImportData & { season: string; pages: number }> {
+): Promise<ScrapedParticipants> {
   const latest = latestCompetitions(await fetchPage(`${origin}/bondscompetities/`));
   const clubMap = new Map<string, Club>();
   const participantMap = new Map<string, Participant>();
@@ -133,26 +134,6 @@ export async function scrapeLatestParticipants(
   }
   if (!participantMap.size) throw new Error(t('import.geen_deelnemers_gevonden_niets_opgeslagen', {}, 'nl'));
   return { season: latest.season, pages, clubs: [...clubMap.values()], participants: [...participantMap.values()] };
-}
-
-export function saveParticipants(db: AppDatabase, data: ImportData) {
-  db.transaction((tx) => {
-    for (const club of data.clubs) {
-      tx.insert(clubs)
-        .values(club)
-        .onConflictDoUpdate({ target: clubs.clubNumber, set: { name: club.name } })
-        .run();
-    }
-    for (const person of data.participants) {
-      tx.insert(participants)
-        .values({ id: randomUUID(), ...person })
-        .onConflictDoUpdate({
-          target: participants.federationNumber,
-          set: { name: person.name, clubNumber: person.clubNumber },
-        })
-        .run();
-    }
-  });
 }
 
 export function createPageFetcher(canFetch: () => Promise<boolean> = async () => true): FetchPage {

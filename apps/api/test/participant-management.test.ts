@@ -1,14 +1,14 @@
+import { ParticipantImportService } from '../src/modules/participants/import-service.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import Fastify from 'fastify';
 import { eq } from 'drizzle-orm';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import { clubs, competitions, participants, ranges, targetTypes } from '../src/db/schema.js';
-import { saveParticipants } from '../src/modules/participants/import.js';
 import { participantManagementRoutes } from '../src/modules/participants/management.js';
 
 async function fixture() {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   database.db.insert(targetTypes).values({ name: 'Initial face' }).run();
   database.db.insert(clubs).values({ clubNumber: '0012', name: 'Testclub' }).run();
   database.db.insert(ranges).values({ id: 'range', name: 'Range' }).run();
@@ -26,7 +26,7 @@ async function fixture() {
     )
     .run();
   const app = Fastify({ ajv: { customOptions: { coerceTypes: false, removeAdditional: false } } });
-  await app.register(participantManagementRoutes, { db: database.db });
+  await app.register(participantManagementRoutes, { context: database.context });
   return {
     app,
     database,
@@ -47,7 +47,7 @@ test('fulltext search matches multiple words, accents and number fragments and f
         { name: 'Alex van Dam', federationNumber: '000124', clubNumber: '0012' },
       ],
     };
-    saveParticipants(database.db, data);
+    new ParticipantImportService(database.context).save(data);
     for (const query of ['zoe', 'dijk zo', '000123', '0123']) {
       const response = await app.inject({ url: `/participants?q=${encodeURIComponent(query)}` });
       assert.equal(response.statusCode, 200);
@@ -60,7 +60,10 @@ test('fulltext search matches multiple words, accents and number fragments and f
       assert.equal(response.statusCode, 200);
       assert.deepEqual(response.json(), []);
     }
-    saveParticipants(database.db, { ...data, participants: [{ ...data.participants[0]!, name: 'Updated Archer' }] });
+    new ParticipantImportService(database.context).save({
+      ...data,
+      participants: [{ ...data.participants[0]!, name: 'Updated Archer' }],
+    });
     assert.equal((await app.inject({ url: '/participants?q=zoe' })).json().length, 0);
     assert.equal((await app.inject({ url: '/participants?q=arch' })).json().length, 1);
     database.db.delete(participants).where(eq(participants.federationNumber, '000123')).run();
@@ -244,7 +247,10 @@ test('creates clubs without an import, keeps existing names and lets imports rep
     assert.equal(second.statusCode, 201);
     assert.equal(second.json().clubName, 'Manual Club');
 
-    saveParticipants(database.db, { clubs: [{ clubNumber: '0015', name: 'Imported Club' }], participants: [] });
+    new ParticipantImportService(database.context).save({
+      clubs: [{ clubNumber: '0015', name: 'Imported Club' }],
+      participants: [],
+    });
     const registered = (await app.inject({ url })).json();
     assert.equal(registered.length, 2);
     assert.ok(registered.every((entry: { clubName: string }) => entry.clubName === 'Imported Club'));

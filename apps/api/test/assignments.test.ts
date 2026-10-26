@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import SQLite from 'better-sqlite3';
 import { buildApp } from '../src/app.js';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import {
   bowTypes,
   clubs,
@@ -129,7 +129,7 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
   const directory = mkdtempSync(join(tmpdir(), 'arrowcast-assignments-'));
   const databasePath = join(directory, 'test.sqlite');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const database = openDatabase(databasePath);
+  const database = new DatabaseConnection(databasePath);
   const db = database.db;
   db.insert(ranges).values({ id: 'range', name: 'Indoor' }).run();
   db.insert(rangeDistances).values({ rangeId: 'range', distanceMeters: 18 }).run();
@@ -240,7 +240,7 @@ test('check-in persists assignments, fills open places on re-entry, and rebuilds
     await app.close();
     database.close();
   }
-  const reopened = openDatabase(databasePath);
+  const reopened = new DatabaseConnection(databasePath);
   try {
     assert.equal(
       reopened.db

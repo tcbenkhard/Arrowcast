@@ -13,6 +13,7 @@ for (const width of [1280, 375]) {
     async function clickTarget(target: string) {
       if (target === 'title') {
         const heading = card.getByRole('heading', { name: 'Import participants', exact: true });
+        await heading.scrollIntoViewIfNeeded();
         const bounds = await heading.boundingBox();
         if (!bounds) throw new Error('Card title is not visible');
         await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);

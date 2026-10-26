@@ -1,4 +1,5 @@
 import type { LogbookContext, LogbookPerson } from '@arrowcast/contracts';
+import { calculateRoundTotal } from '@arrowcast/scoring';
 import { useEffect, useRef, useState } from 'react';
 import { LanguageSelect } from '../../components/LanguageSelect';
 import { Icon } from '../../components/Icon';
@@ -13,8 +14,6 @@ import { readLogbookDraft, writeLogbookDraft } from './draft';
 
 const base = '/api/v1/scoring/logbook';
 const headers = { 'X-Arrowcast-Scoring': '1' };
-const total = (arrows: (string | null)[]) =>
-  arrows.reduce<number>((sum, arrow) => sum + (arrow === 'M' ? 0 : Number(arrow)), 0);
 
 export function LogbookEntryPage() {
   const [guest, setGuest] = useState(false);
@@ -400,7 +399,11 @@ export function LogbookEntryPage() {
               </div>
             )}
             <ScoreSheet
-              rounds={rounds.map((arrows, index) => ({ roundNumber: index + 1, arrows, total: total(arrows) }))}
+              rounds={rounds.map((arrows, index) => ({
+                roundNumber: index + 1,
+                arrows,
+                total: calculateRoundTotal(arrows),
+              }))}
               numberOfRounds={10}
               arrowsPerRound={3}
               currentRoundNumber={10}

@@ -1,26 +1,11 @@
-import { t } from '@arrowcast/contracts/i18n';
-import { randomUUID } from 'node:crypto';
 import cookie from '@fastify/cookie';
-import { and, eq, isNull } from 'drizzle-orm';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { ScoringMutation } from '@arrowcast/contracts';
-import type { AppDatabase } from '../../db/index.js';
-import { competitions, laneScoringGrants, lanes, scoringSessions } from '../../db/schema.js';
-import {
-  hashToken,
-  initializeLaneScoring,
-  issueLaneCodes,
-  newToken,
-  revokeGrants,
-  saveScores,
-  ScoringError,
-  scoringContext,
-  validGrant,
-  restoreLaneCodes,
-} from './service.js';
-
-import { scoringStandings } from './standings.js';
-import { exportResults, resultsFilename } from './results-export.js';
+import type { DatabaseContext } from '../../db/context.js';
+import { protectScoringRequests, secureScoringCookie } from '../../shared/scoring-http.js';
+import { ScoringError } from './errors.js';
+import { ScoringSessionService } from './sessions.js';
+import { ScoringAdminService } from './admin-service.js';
 
 const grantParams = {
   type: 'object',
@@ -36,39 +21,15 @@ const competitionParams = {
 const cookieName = 'arrowcast.scoring';
 const cookiePath = (id: string) => `/api/v1/scoring/${id}`;
 
-export async function scoringRoutes(app: FastifyInstance, { db }: { db: AppDatabase }) {
+export async function scoringRoutes(app: FastifyInstance, { context }: { context: DatabaseContext }) {
+  const service = new ScoringSessionService(context);
   await app.register(cookie);
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ScoringError)
       return reply.code(error.statusCode).send({ message: error.message, ...(error.code ? { code: error.code } : {}) });
     throw error;
   });
-  app.addHook('onRequest', async (request, reply) => {
-    reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer');
-    // A required non-simple header prevents cross-origin form/CSRF requests. No CORS is enabled.
-    if (
-      request.method !== 'GET' &&
-      (request.headers['x-arrowcast-scoring'] !== '1' || request.headers['sec-fetch-site'] === 'cross-site')
-    ) {
-      return reply.code(403).send({ message: t('routes.open_scoring_on_this_website_to_save_scores') });
-    }
-  });
-  function authorize(request: FastifyRequest, grantId: string) {
-    const grant = validGrant(db, grantId);
-    const token = request.cookies[cookieName];
-    const session = token
-      ? db
-          .select()
-          .from(scoringSessions)
-          .where(eq(scoringSessions.tokenHash, hashToken(token)))
-          .get()
-      : undefined;
-    if (!session || session.grantId !== grantId || session.revokedAt !== null || session.expiresAt <= Date.now()) {
-      throw new ScoringError(401, t('routes.scan_the_lane_qr_code_to_open_a_scoring'));
-    }
-    return { grant, session };
-  }
-
+  protectScoringRequests(app, { hideReferrer: true });
   app.post<{ Params: { grantId: string }; Body: { token: string } }>(
     '/:grantId/exchange',
     {
@@ -85,33 +46,19 @@ export async function scoringRoutes(app: FastifyInstance, { db }: { db: AppDatab
       },
     },
     async (request, reply) => {
-      const grant = validGrant(db, request.params.grantId);
-      if (hashToken(request.body.token) !== grant.tokenHash)
-        throw new ScoringError(401, t('routes.invalid_lane_scoring_code'));
-      const context = scoringContext(db, grant);
-      const token = newToken();
-      const now = Date.now();
-      const expiresAt = Math.min(grant.expiresAt, now + 86400_000);
-      db.insert(scoringSessions)
-        .values({ id: randomUUID(), grantId: grant.id, tokenHash: hashToken(token), createdAt: now, expiresAt })
-        .run();
+      const { context, token, maxAge } = service.exchangeScoringToken(request.params.grantId, request.body.token);
       reply.setCookie(cookieName, token, {
         httpOnly: true,
         sameSite: 'strict',
-        path: cookiePath(grant.id),
-        secure: request.protocol === 'https' || request.headers.origin?.startsWith('https://') === true,
-        maxAge: Math.floor((expiresAt - now) / 1000),
+        path: cookiePath(request.params.grantId),
+        secure: secureScoringCookie(request),
+        maxAge,
       });
       return context;
     },
   );
-  app.get<{ Params: { grantId: string } }>(
-    '/:grantId/context',
-    { schema: { params: grantParams } },
-    async (request) => {
-      const { grant } = authorize(request, request.params.grantId);
-      return db.transaction((tx) => scoringContext(tx, grant));
-    },
+  app.get<{ Params: { grantId: string } }>('/:grantId/context', { schema: { params: grantParams } }, async (request) =>
+    service.getScoringContext(request.params.grantId, request.cookies[cookieName]),
   );
   app.post<{ Params: { grantId: string }; Body: ScoringMutation }>(
     '/:grantId/scores',
@@ -145,119 +92,54 @@ export async function scoringRoutes(app: FastifyInstance, { db }: { db: AppDatab
         },
       },
     },
-    async (request) => {
-      const { session } = authorize(request, request.params.grantId);
-      return db.transaction((tx) => saveScores(tx, request.params.grantId, session.id, request.body));
-    },
+    async (request) => service.submitScores(request.params.grantId, request.cookies[cookieName], request.body),
   );
 }
 
-export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: AppDatabase }) {
-  const findCompetition = (id: string) => db.select().from(competitions).where(eq(competitions.id, id)).get();
+export async function adminScoringRoutes(app: FastifyInstance, { context }: { context: DatabaseContext }) {
+  const service = new ScoringAdminService(context);
   app.get<{ Params: { competitionId: string } }>(
     '/competitions/:competitionId/scoring-codes',
-    {
-      schema: { params: competitionParams },
-    },
-    async (request, reply) => {
-      const competition = findCompetition(request.params.competitionId);
-      if (!competition) return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
-      if (competition.status !== 'Check-in' && competition.status !== 'Active') return [];
-      return db
-        .select({
-          id: laneScoringGrants.id,
-          laneId: laneScoringGrants.laneId,
-          laneNumber: lanes.number,
-          token: laneScoringGrants.token,
-          expiresAt: laneScoringGrants.expiresAt,
-        })
-        .from(laneScoringGrants)
-        .innerJoin(lanes, eq(lanes.id, laneScoringGrants.laneId))
-        .where(
-          and(eq(laneScoringGrants.competitionId, request.params.competitionId), isNull(laneScoringGrants.revokedAt)),
-        )
-        .orderBy(lanes.number)
-        .all()
-        .filter((grant) => grant.expiresAt > Date.now())
-        .filter(
-          (grant, _, grants) => grant.token || !grants.some((other) => other.laneId === grant.laneId && other.token),
-        )
-        .map(({ token, id, ...grant }) => ({
-          ...grant,
-          grantId: id,
-          ...(token ? { path: `/scores/${request.params.competitionId}/${grant.laneId}/${id}#token=${token}` } : {}),
-        }));
-    },
+    { schema: { params: competitionParams } },
+    async (request) => service.listScoringCodes(request.params.competitionId),
   );
   app.post<{ Params: { competitionId: string } }>(
     '/competitions/:competitionId/scoring-codes/restore',
-    {
-      schema: { params: competitionParams },
-    },
+    { schema: { params: competitionParams } },
     async (request, reply) => {
-      const competition = findCompetition(request.params.competitionId);
-      if (!competition) return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
-      if (competition.status !== 'Check-in' && competition.status !== 'Active') {
-        return reply.code(409).send({ message: t('routes.scoring_has_not_started') });
-      }
-      db.transaction((tx) => restoreLaneCodes(tx, competition.id));
+      service.restoreScoringCodes(request.params.competitionId);
       return reply.code(204).send();
     },
   );
   app.get<{ Params: { competitionId: string } }>(
     '/competitions/:competitionId/scoring-standings',
-    {
-      schema: { params: competitionParams },
-    },
-    async (request, reply) => {
-      const competition = findCompetition(request.params.competitionId);
-      if (!competition) return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
-      return db.transaction((tx) => scoringStandings(tx, competition));
-    },
+    { schema: { params: competitionParams } },
+    async (request) => service.getScoringStandings(request.params.competitionId),
   );
   app.get<{ Params: { competitionId: string } }>(
     '/competitions/:competitionId/results-export',
     { schema: { params: competitionParams } },
     async (request, reply) => {
-      const competition = findCompetition(request.params.competitionId);
-      if (!competition) return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
-      if (competition.status !== 'Closed')
-        return reply.code(409).send({ message: t('ScoringSettings.close_before_export') });
-      const buffer = db.transaction((tx) => exportResults(tx, competition));
+      const result = service.getResultsExport(request.params.competitionId);
       return reply
         .type('application/vnd.ms-excel')
         .header(
           'Content-Disposition',
-          `attachment; filename="results.xls"; filename*=UTF-8''${encodeURIComponent(resultsFilename(competition))}`,
+          `attachment; filename="results.xls"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
         )
-        .send(buffer);
+        .send(result.buffer);
     },
   );
   app.post<{ Params: { competitionId: string } }>(
     '/competitions/:competitionId/scoring-codes',
-    {
-      schema: { params: competitionParams },
-    },
-    async (request, reply) => {
-      const competition = findCompetition(request.params.competitionId);
-      if (!competition) return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
-      if (competition.status !== 'Check-in' && competition.status !== 'Active')
-        return reply.code(409).send({ message: t('routes.start_checkin_before_issuing_scoring_codes') });
-      return db.transaction((tx) => {
-        if (competition.status === 'Active') initializeLaneScoring(tx, competition.id);
-        return issueLaneCodes(tx, competition.id);
-      });
-    },
+    { schema: { params: competitionParams } },
+    async (request) => service.issueScoringCodes(request.params.competitionId),
   );
   app.delete<{ Params: { competitionId: string } }>(
     '/competitions/:competitionId/scoring-codes',
-    {
-      schema: { params: competitionParams },
-    },
+    { schema: { params: competitionParams } },
     async (request, reply) => {
-      if (!findCompetition(request.params.competitionId))
-        return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
-      revokeGrants(db, request.params.competitionId);
+      service.revokeScoringCodes(request.params.competitionId);
       return reply.code(204).send();
     },
   );
@@ -274,11 +156,6 @@ export async function adminScoringRoutes(app: FastifyInstance, { db }: { db: App
         },
       },
     },
-    async (request, reply) => {
-      const competition = findCompetition(request.params.competitionId);
-      if (!competition) return reply.code(404).send({ message: t('CompetitionDetailPage.competition_not_found') });
-      db.update(competitions).set(request.body).where(eq(competitions.id, competition.id)).run();
-      return request.body;
-    },
+    async (request) => service.setScoringLock(request.params.competitionId, request.body.scoringLocked),
   );
 }

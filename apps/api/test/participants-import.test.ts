@@ -1,12 +1,12 @@
+import { ParticipantImportService } from '../src/modules/participants/import-service.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import { clubs, participants } from '../src/db/schema.js';
 import {
   createPageFetcher,
   latestCompetitions,
   parseRegion,
-  saveParticipants,
   scrapeLatestParticipants,
 } from '../src/modules/participants/import.js';
 
@@ -65,12 +65,12 @@ test('discovers latest season and visits every region and bow, deduplicating mem
 });
 
 test('reimport updates membership and name while preserving IDs and unrelated data; failures roll back', () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   try {
     const data = parseRegion(regionHtml);
-    saveParticipants(database.db, data);
+    new ParticipantImportService(database.context).save(data);
     const first = database.db.select().from(participants).get()!;
-    saveParticipants(database.db, {
+    new ParticipantImportService(database.context).save({
       clubs: data.clubs,
       participants: [{ ...data.participants[0]!, name: 'Nieuwe naam', clubNumber: '0013' }],
     });
@@ -82,7 +82,7 @@ test('reimport updates membership and name while preserving IDs and unrelated da
     assert.equal(database.db.select().from(clubs).all().length, 2);
     assert.throws(
       () =>
-        saveParticipants(database.db, {
+        new ParticipantImportService(database.context).save({
           clubs: [{ clubNumber: '0014', name: 'Rollback' }],
           participants: [{ federationNumber: '999', name: 'Ongeldig', clubNumber: 'unknown' }],
         }),

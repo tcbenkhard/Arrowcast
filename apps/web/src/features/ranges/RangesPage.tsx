@@ -1,3 +1,4 @@
+import type { Range } from './range';
 import { TrashIcon } from '../../components/TrashIcon';
 import { t, message } from '../../i18n';
 import { managementRequest } from '../../lib/http';
@@ -5,13 +6,6 @@ import { useModal } from '../../hooks/useModal';
 import { SettingsCard } from '../settings/SettingsCard';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-
-interface Range {
-  id: string;
-  name: string;
-  supportedDistancesMeters: number[];
-  lanes: { id: string; number: number }[];
-}
 
 interface AuthProps {
   token: string;

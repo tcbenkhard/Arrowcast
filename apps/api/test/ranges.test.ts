@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import SQLite from 'better-sqlite3';
 import { buildApp } from '../src/app.js';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import { lanes, rangeDistances, ranges } from '../src/db/schema.js';
 
 const jwtSecret = 'range-test-secret-with-at-least-thirty-two-bytes';
@@ -60,7 +60,7 @@ test('create ranges requires authentication and persists distances and lanes acr
   } finally {
     await app.close();
   }
-  const database = openDatabase(databasePath);
+  const database = new DatabaseConnection(databasePath);
   try {
     assert.equal(database.db.select().from(ranges).all().length, 2);
     assert.deepEqual(
@@ -130,7 +130,7 @@ test('invalid range requests write nothing and a failed child insert rolls back 
 });
 
 test('database enforces lane numbers per range, distance uniqueness and foreign keys', () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   try {
     const db = database.db;
     db.insert(ranges).values({ id: 'indoor', name: 'Indoor' }).run();

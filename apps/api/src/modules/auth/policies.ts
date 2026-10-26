@@ -1,8 +1,7 @@
 import { t } from '@arrowcast/contracts/i18n';
-import { eq } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { AppDatabase } from '../../db/index.js';
-import { users } from '../../db/schema.js';
+import type { DatabaseContext } from '../../db/context.js';
+import { SessionService } from './session-service.js';
 
 export type ManagementPolicy = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
@@ -11,18 +10,12 @@ const unauthorized = async (reply: FastifyReply) => {
 };
 
 /** Verifies both the JWT and its mutable database-backed authorization state. */
-export function authenticatedManagement(db: AppDatabase): ManagementPolicy {
+export function authenticatedManagement(context: DatabaseContext): ManagementPolicy {
+  const service = new SessionService(context);
   return async (request, reply) => {
     try {
       await request.jwtVerify();
-      const user = db.select().from(users).where(eq(users.username, request.user.sub)).get();
-      if (
-        !user ||
-        !['admin', 'competition_manager'].includes(user.role) ||
-        request.user.role !== user.role ||
-        !Number.isFinite(request.user.exp) ||
-        (request.user.sessionVersion ?? 0) !== user.sessionVersion
-      ) {
+      if (!service.validManagementSession(request.user)) {
         await unauthorized(reply);
       }
     } catch {
@@ -32,14 +25,10 @@ export function authenticatedManagement(db: AppDatabase): ManagementPolicy {
 }
 
 /** Denies all feature operations until the bootstrap password has been replaced. */
-export function passwordChanged(db: AppDatabase): ManagementPolicy {
+export function passwordChanged(context: DatabaseContext): ManagementPolicy {
+  const service = new SessionService(context);
   return async (request, reply) => {
-    const user = db
-      .select({ forceChangePassword: users.forceChangePassword })
-      .from(users)
-      .where(eq(users.username, request.user.sub))
-      .get();
-    if (!user || user.forceChangePassword) {
+    if (service.requiresPasswordChange(request.user.sub)) {
       await reply.code(403).send({
         code: 'PASSWORD_CHANGE_REQUIRED',
         message: t('routes.wijzig_eerst_je_wachtwoord', {}, 'nl'),

@@ -1,7 +1,7 @@
+import { calculateRoundTotal } from '@arrowcast/scoring';
 import { t } from '../../i18n';
 
 const buttons = ['10', '9', '8', '7', '6', '5', '4', '3', '2', '1', 'M'];
-const arrowValue = (symbol: string | null) => (symbol === 'M' || symbol === null ? 0 : Number(symbol));
 
 export function ScoreKeypad({
   arrows,
@@ -52,7 +52,7 @@ export function ScoreKeypad({
         {mode === 'score' && (
           <p className="scoring-subtotal">
             <span>{t('ScoringPage.round_total')}</span>
-            <strong>{arrows.reduce<number>((sum, value) => sum + arrowValue(value), 0)}</strong>
+            <strong>{calculateRoundTotal(arrows)}</strong>
           </p>
         )}
       </div>

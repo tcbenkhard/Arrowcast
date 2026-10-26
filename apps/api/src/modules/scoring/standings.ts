@@ -1,42 +1,12 @@
 import type { ScoringStanding } from '@arrowcast/contracts';
 import { calculateAverageScore } from '@arrowcast/scoring';
-import { and, eq, isNotNull } from 'drizzle-orm';
-import type { AppDatabase } from '../../db/index.js';
-import {
-  arrowScores,
-  competitionParticipants,
-  competitions,
-  lanes,
-  participants,
-  roundScores,
-  scorecards,
-} from '../../db/schema.js';
+import type { ScoringCompetition, StandingParticipant, StandingScore } from './types.js';
 
 export function scoringStandings(
-  db: Pick<AppDatabase, 'select'>,
-  competition: typeof competitions.$inferSelect,
+  competition: ScoringCompetition,
+  people: readonly StandingParticipant[],
+  scores: readonly StandingScore[],
 ): ScoringStanding[] {
-  const people = db
-    .select({
-      participantId: participants.id,
-      checkedIn: competitionParticipants.checkedIn,
-      name: participants.name,
-      laneNumber: lanes.number,
-      targetLetter: competitionParticipants.targetLetter,
-    })
-    .from(competitionParticipants)
-    .innerJoin(participants, eq(participants.id, competitionParticipants.participantId))
-    .leftJoin(lanes, eq(lanes.id, competitionParticipants.laneId))
-    .where(eq(competitionParticipants.competitionId, competition.id))
-    .all();
-  const scores = db
-    .select({ participantId: scorecards.participantId, roundId: roundScores.id, symbol: arrowScores.symbol })
-    .from(scorecards)
-    .innerJoin(roundScores, and(eq(roundScores.scorecardId, scorecards.id), isNotNull(roundScores.submittedAt)))
-    .leftJoin(arrowScores, eq(arrowScores.roundScoreId, roundScores.id))
-    .where(eq(scorecards.competitionId, competition.id))
-    .orderBy(roundScores.roundNumber, arrowScores.arrowIndex)
-    .all();
   const totals = new Map<string, { rounds: Set<string>; total: number; lastArrows: string[] }>();
   for (const score of scores) {
     const total = totals.get(score.participantId) ?? { rounds: new Set<string>(), total: 0, lastArrows: [] };

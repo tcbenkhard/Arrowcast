@@ -11,7 +11,7 @@ import { read, utils } from 'xlsx';
 import SQLite from 'better-sqlite3';
 import type { LaneQrCode, ScoringContext, ScoringMutation } from '@arrowcast/contracts';
 import { buildApp } from '../src/app.js';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import {
   arrowScores,
   clubs,
@@ -30,14 +30,14 @@ import {
   scoringSessions,
   targetTypes,
 } from '../src/db/schema.js';
-import { hashToken } from '../src/modules/scoring/service.js';
+import { hashToken } from '../src/shared/tokens.js';
 
 const config = { jwtSecret: 'scoring-test-secret-with-at-least-thirty-two-bytes' };
 const csrf = { 'x-arrowcast-scoring': '1' };
 async function setup(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), 'arrowcast-scoring-'));
   const databasePath = join(directory, 'test.sqlite');
-  const store = openDatabase(databasePath);
+  const store = new DatabaseConnection(databasePath);
   const db = store.db;
   db.insert(ranges).values({ id: 'range', name: 'Indoor' }).run();
   db.insert(rangeDistances).values({ rangeId: 'range', distanceMeters: 18 }).run();

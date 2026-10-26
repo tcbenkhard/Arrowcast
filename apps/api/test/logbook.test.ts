@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { eq } from 'drizzle-orm';
 import { read, utils } from 'xlsx';
 import { buildApp } from '../src/app.js';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import {
   clubs,
   competitionParticipants,
@@ -24,7 +24,7 @@ const jwtSecret = 'logbook-test-secret-with-at-least-thirty-two-bytes';
 test('logbook protects personal scores, resumes drafts and aggregates only completed independent entries', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'arrowcast-logbook-'));
   const databasePath = join(directory, 'test.sqlite');
-  const fixture = openDatabase(databasePath);
+  const fixture = new DatabaseConnection(databasePath);
   fixture.db.insert(clubs).values({ clubNumber: 'club', name: 'Club' }).run();
   fixture.db
     .insert(participants)
@@ -95,6 +95,8 @@ test('logbook protects personal scores, resumes drafts and aggregates only compl
   assert.equal((await authenticate('a', 'abc', true)).statusCode, 400);
   const login = await authenticate('a', '1234', true);
   assert.equal(login.statusCode, 200, login.body);
+  const publicEntryFields = ['completedAt', 'createdAt', 'id', 'participantId', 'rounds', 'total', 'version'];
+  assert.deepEqual(Object.keys(login.json().entry).sort(), publicEntryFields);
   payload.entryId = login.json().entry.id;
   const cookie = login.headers['set-cookie']!.toString().split(';')[0]!;
   const headers = { cookie, 'x-arrowcast-scoring': '1' };
@@ -136,6 +138,7 @@ test('logbook protects personal scores, resumes drafts and aggregates only compl
     payload: { entryId: payload.entryId, rounds: draft, expectedVersion: 0, finish: false },
   });
   assert.equal(draftResponse.statusCode, 200, draftResponse.body);
+  assert.deepEqual(Object.keys(draftResponse.json()).sort(), publicEntryFields);
   assert.equal(draftResponse.json().version, 1);
   assert.deepEqual(await summary(), []);
   const resumed = await authenticate('a', '1234', false, cookie);

@@ -3,16 +3,17 @@ import { test } from 'node:test';
 import ExcelJS from 'exceljs';
 import Fastify from 'fastify';
 import { eq } from 'drizzle-orm';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import { clubs, competitions, competitionParticipants, participants, ranges } from '../src/db/schema.js';
 import { participantManagementRoutes } from '../src/modules/participants/management.js';
-import { matchTarget, readParticipantWorkbook } from '../src/modules/participants/xlsx-import.js';
+import { matchTarget } from '../src/modules/participants/target-matching.js';
+import { readParticipantWorkbook } from '../src/modules/participants/workbook.js';
 import { buildApp } from '../src/app.js';
 
 const url = '/competitions/one/participants/import';
 const example = () => workbook([['185716', 'Timo Benkhard', 'HS Hilversum', 'Recurve', '40cm']], true);
 async function fixture() {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   const db = database.db;
   db.insert(clubs)
     .values([
@@ -32,7 +33,7 @@ async function fixture() {
     })
     .run();
   const app = Fastify();
-  await app.register(participantManagementRoutes, { db });
+  await app.register(participantManagementRoutes, { context: database.context });
   return {
     app,
     db,

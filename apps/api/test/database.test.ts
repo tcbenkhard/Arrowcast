@@ -8,8 +8,8 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
 import { buildApp } from '../src/app.js';
-import { openDatabase } from '../src/db/index.js';
-import { seedAdmin } from '../src/db/seed.js';
+import { DatabaseConnection } from '../src/db/index.js';
+import { AdminBootstrapService } from '../src/modules/auth/bootstrap-service.js';
 import { clubs, participants, users } from '../src/db/schema.js';
 import { hashPassword, verifyPassword } from '../src/modules/auth/password.js';
 
@@ -19,9 +19,9 @@ test('migrations run once and the admin seed never resets an existing account', 
   const directory = mkdtempSync(join(tmpdir(), 'arrowcast-db-'));
   const path = join(directory, 'nested', 'test.sqlite');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const first = openDatabase(path);
+  const first = new DatabaseConnection(path);
   try {
-    await seedAdmin(first.db);
+    await new AdminBootstrapService(first.context).initialize();
     const admin = first.db.select().from(users).get()!;
     assert.equal(admin.username, 'admin');
     assert.equal(admin.role, 'admin');
@@ -29,7 +29,7 @@ test('migrations run once and the admin seed never resets an existing account', 
     assert.ok(await verifyPassword('admin', admin.passwordHash));
     const changedHash = await hashPassword('changed-admin-password');
     first.db.update(users).set({ passwordHash: changedHash }).where(eq(users.username, 'admin')).run();
-    await seedAdmin(first.db);
+    await new AdminBootstrapService(first.context).initialize();
     assert.equal(first.db.select().from(users).get()!.passwordHash, changedHash);
     first.db.insert(users).values({ username: 'another-admin', passwordHash: changedHash }).run();
   } finally {
@@ -127,7 +127,7 @@ test('data model simplification migrates existing scoring and logbook data', () 
     `);
     client.close();
 
-    const upgraded = openDatabase(path);
+    const upgraded = new DatabaseConnection(path);
     try {
       const raw = upgraded.db.$client;
       assert.deepEqual(raw.prepare('SELECT * FROM logbook_entries').get(), {
@@ -180,13 +180,13 @@ test('data model simplification migrates existing scoring and logbook data', () 
 });
 
 test('seed preserves an existing admin account with a different role', async () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   try {
     const passwordHash = await hashPassword('existing-password');
     database.db.$client
       .prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)')
       .run('admin', passwordHash, 'desk');
-    await seedAdmin(database.db);
+    await new AdminBootstrapService(database.context).initialize();
     const admin = database.db.select().from(users).get()!;
     assert.equal(admin.role, 'desk');
     assert.equal(admin.passwordHash, passwordHash);
@@ -196,15 +196,15 @@ test('seed preserves an existing admin account with a different role', async () 
 });
 
 test('renaming the initial administrator does not recreate default credentials on startup', async () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   try {
-    await seedAdmin(database.db);
+    await new AdminBootstrapService(database.context).initialize();
     database.db
       .update(users)
       .set({ username: 'renamed-admin', name: 'Renamed Administrator' })
       .where(eq(users.username, 'admin'))
       .run();
-    await seedAdmin(database.db);
+    await new AdminBootstrapService(database.context).initialize();
     const accounts = database.db.select().from(users).all();
     assert.equal(accounts.length, 1);
     assert.equal(accounts[0]!.username, 'renamed-admin');
@@ -214,7 +214,7 @@ test('renaming the initial administrator does not recreate default credentials o
 });
 
 test('participants preserve membership numbers and reference an existing club', () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   try {
     database.db.insert(clubs).values({ clubNumber: '0012', name: 'Boogvereniging' }).run();
     const participant = { id: 'participant-1', federationNumber: '000123', name: 'Alex', clubNumber: '0012' };
@@ -249,11 +249,11 @@ test('participants preserve membership numbers and reference an existing club', 
 
 test('existing default passwords require changing while custom passwords remain usable', async () => {
   for (const password of ['admin', 'existing-private-password']) {
-    const database = openDatabase(':memory:');
+    const database = new DatabaseConnection(':memory:');
     try {
       const passwordHash = await hashPassword(password);
       database.db.insert(users).values({ username: 'admin', passwordHash }).run();
-      await seedAdmin(database.db);
+      await new AdminBootstrapService(database.context).initialize();
       const user = database.db.select().from(users).get()!;
       assert.equal(user.passwordHash, passwordHash);
       assert.equal(user.forceChangePassword, password === 'admin');

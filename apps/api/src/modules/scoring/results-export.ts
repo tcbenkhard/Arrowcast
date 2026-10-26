@@ -1,8 +1,6 @@
-import { eq } from 'drizzle-orm';
+import type { ScoringStanding } from '@arrowcast/contracts';
 import { utils, write } from 'xlsx';
-import type { AppDatabase } from '../../db/index.js';
-import { clubs, competitionParticipants, competitions, participants } from '../../db/schema.js';
-import { scoringStandings } from './standings.js';
+import type { ResultsParticipant } from './types.js';
 
 export function resultsFilename(competition: { name: string; date: string }): string {
   const name = competition.name
@@ -12,21 +10,9 @@ export function resultsFilename(competition: { name: string; date: string }): st
   return `${name}_${competition.date}.xls`;
 }
 
-export function exportResults(db: Pick<AppDatabase, 'select'>, competition: typeof competitions.$inferSelect): Buffer {
-  const people = db
-    .select({
-      participantId: participants.id,
-      federationNumber: participants.federationNumber,
-      clubNumber: clubs.clubNumber,
-      clubName: clubs.name,
-    })
-    .from(competitionParticipants)
-    .innerJoin(participants, eq(participants.id, competitionParticipants.participantId))
-    .innerJoin(clubs, eq(clubs.clubNumber, participants.clubNumber))
-    .where(eq(competitionParticipants.competitionId, competition.id))
-    .all();
+export function exportResults(standings: readonly ScoringStanding[], people: readonly ResultsParticipant[]): Buffer {
   const details = new Map(people.map((person) => [person.participantId, person]));
-  const rows = scoringStandings(db, competition).map((standing) => {
+  const rows = standings.map((standing) => {
     const person = details.get(standing.participantId)!;
     return [
       person.federationNumber,

@@ -1,26 +1,8 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { FastifyInstance } from 'fastify';
-import { t } from '@arrowcast/contracts/i18n';
-
-const execute = promisify(execFile);
-const sources = {
-  frontend: ['SYSLOG_IDENTIFIER=arrowcast_web'],
-  backend: ['--unit=arrowcast.service'],
-  updates: ['--unit=arrowcast-update.service'],
-} as const;
-type LogSource = keyof typeof sources;
-
-export async function readServiceLogs(source: LogSource): Promise<string> {
-  const { stdout } = await execute(
-    'journalctl',
-    ['--quiet', '--no-pager', '--lines=300', '--output=short-iso', ...sources[source]],
-    { timeout: 5000, maxBuffer: 1024 * 1024, env: { ...process.env, SYSTEMD_COLORS: '0' } },
-  );
-  return stdout;
-}
+import { LogService, logSources, type LogSource } from './service.js';
 
 export async function logRoutes(app: FastifyInstance, options: { readLogs?: (source: LogSource) => Promise<string> }) {
+  const service = options.readLogs ? new LogService({ read: options.readLogs }) : new LogService();
   app.get<{ Params: { source: LogSource } }>(
     '/logs/:source',
     {
@@ -30,17 +12,14 @@ export async function logRoutes(app: FastifyInstance, options: { readLogs?: (sou
         params: {
           type: 'object',
           required: ['source'],
-          properties: { source: { type: 'string', enum: Object.keys(sources) } },
+          properties: { source: { type: 'string', enum: logSources } },
         },
       },
     },
     async (request, reply) => {
       reply.header('Cache-Control', 'no-store');
-      try {
-        return { text: await (options.readLogs ?? readServiceLogs)(request.params.source) };
-      } catch {
-        return reply.code(503).send({ message: t('Logs.unavailable') });
-      }
+      const result = await service.read(request.params.source);
+      return reply.code(result.code).send(result.body);
     },
   );
 }

@@ -1,3 +1,4 @@
+import { calculateRoundTotal } from '@arrowcast/scoring';
 import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { LanguageSelect } from '../../components/LanguageSelect';
@@ -6,8 +7,6 @@ import { ScoreKeypad } from '../scoring/ScoreKeypad';
 import { ScoreSheet } from '../scoring/ScoreSheet';
 
 const emptyRounds = (): (string | null)[][] => Array.from({ length: 10 }, () => [null, null, null]);
-const total = (arrows: (string | null)[]) =>
-  arrows.reduce<number>((sum, arrow) => sum + (arrow === 'M' ? 0 : Number(arrow)), 0);
 
 // Guest scores live only in this component's memory and disappear when it unmounts.
 export function GuestLogbookEntry({ onExit }: { onExit: () => void }) {
@@ -44,7 +43,9 @@ export function GuestLogbookEntry({ onExit }: { onExit: () => void }) {
         {finished ? (
           <>
             <p role="status">
-              {t('logbook.guestResult', { total: rounds.reduce((sum, arrows) => sum + total(arrows), 0) })}
+              {t('logbook.guestResult', {
+                total: rounds.reduce((sum, arrows) => sum + calculateRoundTotal(arrows), 0),
+              })}
             </p>
             <button
               onClick={() => {
@@ -80,7 +81,11 @@ export function GuestLogbookEntry({ onExit }: { onExit: () => void }) {
           </div>
         )}
         <ScoreSheet
-          rounds={rounds.map((arrows, index) => ({ roundNumber: index + 1, arrows, total: total(arrows) }))}
+          rounds={rounds.map((arrows, index) => ({
+            roundNumber: index + 1,
+            arrows,
+            total: calculateRoundTotal(arrows),
+          }))}
           numberOfRounds={10}
           arrowsPerRound={3}
           currentRoundNumber={10}

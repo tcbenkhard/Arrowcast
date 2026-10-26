@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import SQLite from 'better-sqlite3';
 import { buildApp } from '../src/app.js';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import { competitionLanes, competitions, lanes, rangeDistances, ranges } from '../src/db/schema.js';
 
 const jwtSecret = 'competition-test-secret-with-at-least-thirty-two-bytes';
@@ -193,7 +193,7 @@ test('competitions require authentication, validate assignments, sort chronologi
   } finally {
     await app.close();
   }
-  const reopened = openDatabase(databasePath);
+  const reopened = new DatabaseConnection(databasePath);
   try {
     const saved = reopened.db.select().from(competitions).all();
     assert.equal(saved.length, 3);
@@ -213,7 +213,7 @@ test('competitions require authentication, validate assignments, sort chronologi
 });
 
 test('database enforces competition lane ownership, supported distances and unique assignments', () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   const db = database.db;
   try {
     for (const id of ['a', 'b']) {

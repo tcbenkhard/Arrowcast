@@ -1,11 +1,12 @@
 import Fastify from 'fastify';
 import { readAuthConfig } from './modules/auth/config.js';
 import type { AuthConfig } from './modules/auth/config.js';
-import { authRoutes } from './modules/auth/routes.js';
-import { openDatabase } from './db/index.js';
-import { seedAdmin } from './db/seed.js';
+import { apiRoutes } from './api.js';
+import { DatabaseConnection } from './db/index.js';
+import { AdminBootstrapService } from './modules/auth/bootstrap-service.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { applicationErrorHandler } from './shared/http-errors.js';
 
 export function buildApp(config: AuthConfig = readAuthConfig()) {
   const app = Fastify({
@@ -15,7 +16,8 @@ export function buildApp(config: AuthConfig = readAuthConfig()) {
     logger: { redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'] },
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   });
-  const database = openDatabase(config.databasePath);
+  const database = new DatabaseConnection(config.databasePath);
+  app.setErrorHandler(applicationErrorHandler);
   const versionFile = fileURLToPath(new URL('../../../VERSION', import.meta.url));
   const version = existsSync(versionFile) ? readFileSync(versionFile, 'utf8').trim() : 'development';
   app.get('/api/v1/health', async () => ({ version }));
@@ -26,8 +28,8 @@ export function buildApp(config: AuthConfig = readAuthConfig()) {
   });
   app.addHook('onClose', async () => database.close());
   app.register(async (api) => {
-    await seedAdmin(database.db);
-    await api.register(authRoutes, { ...config, db: database.db, prefix: '/api/v1' });
+    await new AdminBootstrapService(database.context).initialize();
+    await api.register(apiRoutes, { ...config, context: database.context, prefix: '/api/v1' });
   });
   return app;
 }

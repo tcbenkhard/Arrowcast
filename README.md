@@ -1,5 +1,7 @@
 # 🏹 ArrowCast
 
+Ontwikkelaars: zie [code-indeling en verantwoordelijkheden](docs/code-organization.md).
+
 ### Digitaal scorebeheer voor boogschietverenigingen
 
 **Minder administratie. Meer aandacht voor het boogschieten.**

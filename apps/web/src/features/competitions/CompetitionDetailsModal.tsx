@@ -1,17 +1,12 @@
+import { LaneAssignments } from './LaneAssignments';
+import type { Range } from '../ranges/range';
 import { TrashIcon } from '../../components/TrashIcon';
 import { t, message } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useModal } from '../../hooks/useModal';
-import type { Competition } from './CompetitionDetailPage';
-
-interface Range {
-  id: string;
-  name: string;
-  supportedDistancesMeters: number[];
-  lanes: { id: string; number: number }[];
-}
+import type { Competition } from './competition';
 
 export function CompetitionDetailsModal({
   mode,
@@ -319,59 +314,16 @@ export function CompetitionDetailsModal({
               <p className="muted">{t('CompetitionDetailsModal.the_range_is_locked_after_checkin_starts')}</p>
             )}
             {range && !loading && !loadError && (
-              <fieldset className="competition-lanes" disabled={competition.status !== 'Scheduled'}>
-                <legend>{t('CompetitionDetailsModal.lanes_and_distances')}</legend>
-                <p className="muted">
-                  {t('CompetitionDetailsModal.choose_a_distance_to_include_a_lane_leave_unused')}
-                  {lanesChanged &&
-                    t('CompetitionDetailsModal.changing_lanes_or_distances_will_clear_existing_participant_placements')}
-                </p>
-                <div
-                  className="distance-list"
-                  role="group"
-                  aria-label={t('CompetitionDetailsModal.set_distance_for_all_lanes')}
-                >
-                  <span>{t('CompetitionDetailsModal.set_all_lanes_to')}</span>
-                  {range.supportedDistancesMeters.map((distance) => (
-                    <button
-                      key={distance}
-                      type="button"
-                      className="distance-link"
-                      aria-label={t('CompetitionDetailsModal.set_all_lanes_to_m', { p0: distance })}
-                      onClick={() => setAssignments(Object.fromEntries(range.lanes.map((lane) => [lane.id, distance])))}
-                    >
-                      {distance} {t('CompetitionDetailPage.m')}
-                    </button>
-                  ))}
-                </div>
-                {range.lanes.map((lane) => (
-                  <div className="lane-assignment" key={lane.id}>
-                    <label htmlFor={`edit-lane-${lane.id}`}>
-                      {t('CompetitionDetailPage.lane')} {lane.number}
-                    </label>
-                    <select
-                      id={`edit-lane-${lane.id}`}
-                      value={assignments[lane.id] ?? ''}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setAssignments((current) => {
-                          const next = { ...current };
-                          if (value) next[lane.id] = Number(value);
-                          else delete next[lane.id];
-                          return next;
-                        });
-                      }}
-                    >
-                      <option value="">{t('CompetitionDetailsModal.not_assigned')}</option>
-                      {range.supportedDistancesMeters.map((distance) => (
-                        <option key={distance} value={distance}>
-                          {distance} {t('CompetitionDetailPage.m')}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </fieldset>
+              <LaneAssignments
+                range={range}
+                assignments={assignments}
+                onChange={setAssignments}
+                idPrefix="edit-lane"
+                disabled={competition.status !== 'Scheduled'}
+              >
+                {lanesChanged &&
+                  t('CompetitionDetailsModal.changing_lanes_or_distances_will_clear_existing_participant_placements')}
+              </LaneAssignments>
             )}
           </fieldset>
         )}

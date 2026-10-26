@@ -1,3 +1,5 @@
+import { LaneAssignments } from './LaneAssignments';
+import type { Range } from '../ranges/range';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -5,24 +7,7 @@ import { useModal } from '../../hooks/useModal';
 import { message, t } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { CompetitionStatusBadge } from './CompetitionStatusBadge';
-import type { CompetitionStatus } from './status';
-
-interface Competition {
-  id: string;
-  status: CompetitionStatus;
-  name: string;
-  date: string;
-  startingTime: string;
-  endingTime: string;
-  range: { id: string; name: string };
-}
-
-interface Range {
-  id: string;
-  name: string;
-  supportedDistancesMeters: number[];
-  lanes: { id: string; number: number }[];
-}
+import { compareCompetitions, type CompetitionSummary as Competition } from './competition';
 
 interface AuthProps {
   token: string;
@@ -30,17 +15,6 @@ interface AuthProps {
 }
 
 const expiredMessage = 'AdminPage.je_sessie_is_verlopen_of_ongeldig_log_opnieuw_in';
-const statusOrder: Record<CompetitionStatus, number> = { Active: 0, 'Check-in': 1, Scheduled: 2, Closed: 3 };
-
-function compareCompetitions(a: Competition, b: Competition) {
-  return (
-    statusOrder[a.status] - statusOrder[b.status] ||
-    a.date.localeCompare(b.date) ||
-    a.startingTime.localeCompare(b.startingTime) ||
-    a.id.localeCompare(b.id)
-  );
-}
-
 function tabToField(event: KeyboardEvent<HTMLInputElement>, previousId: string, nextId: string) {
   if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
   const field = event.currentTarget.form?.elements.namedItem(event.shiftKey ? previousId : nextId);
@@ -436,59 +410,7 @@ function AddCompetitionModal({
                 ))}
               </select>
               {range && (
-                <fieldset className="competition-lanes">
-                  <legend>{t('CompetitionDetailsModal.lanes_and_distances')}</legend>
-                  <p className="muted">
-                    {t('CompetitionDetailsModal.choose_a_distance_to_include_a_lane_leave_unused')}
-                  </p>
-                  <div
-                    className="distance-list"
-                    role="group"
-                    aria-label={t('CompetitionDetailsModal.set_distance_for_all_lanes')}
-                  >
-                    <span>{t('CompetitionDetailsModal.set_all_lanes_to')}</span>
-                    {range.supportedDistancesMeters.map((distance) => (
-                      <button
-                        key={distance}
-                        type="button"
-                        className="distance-link"
-                        aria-label={t('CompetitionDetailsModal.set_all_lanes_to_m', { p0: distance })}
-                        onClick={() =>
-                          setAssignments(Object.fromEntries(range.lanes.map((lane) => [lane.id, distance])))
-                        }
-                      >
-                        {distance} {t('CompetitionDetailPage.m')}
-                      </button>
-                    ))}
-                  </div>
-                  {range.lanes.map((lane) => (
-                    <div className="lane-assignment" key={lane.id}>
-                      <label htmlFor={`lane-${lane.id}`}>
-                        {t('CompetitionDetailPage.lane')} {lane.number}
-                      </label>
-                      <select
-                        id={`lane-${lane.id}`}
-                        value={assignments[lane.id] ?? ''}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setAssignments((current) => {
-                            const next = { ...current };
-                            if (value) next[lane.id] = Number(value);
-                            else delete next[lane.id];
-                            return next;
-                          });
-                        }}
-                      >
-                        <option value="">{t('CompetitionDetailsModal.not_assigned')}</option>
-                        {range.supportedDistancesMeters.map((distance) => (
-                          <option key={distance} value={distance}>
-                            {distance} {t('CompetitionDetailPage.m')}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
-                </fieldset>
+                <LaneAssignments range={range} assignments={assignments} onChange={setAssignments} idPrefix="lane" />
               )}
             </>
           )}

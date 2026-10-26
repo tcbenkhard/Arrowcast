@@ -1,5 +1,6 @@
-import { openDatabase } from '../db/index.js';
-import { createPageFetcher, saveParticipants, scrapeLatestParticipants } from '../modules/participants/import.js';
+import { DatabaseConnection } from '../db/index.js';
+import { createPageFetcher, scrapeLatestParticipants } from '../modules/participants/import.js';
+import { ParticipantImportService } from '../modules/participants/import-service.js';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -12,9 +13,9 @@ async function main() {
     );
     return;
   }
-  const database = openDatabase(process.env.DATABASE_PATH?.trim() || 'data/arrowcast.sqlite');
+  const database = new DatabaseConnection(process.env.DATABASE_PATH?.trim() || 'data/arrowcast.sqlite');
   try {
-    saveParticipants(database.db, data);
+    new ParticipantImportService(database.context).save(data);
     console.log(
       `Import ${data.season} voltooid: ${data.participants.length} unieke deelnemers en ${data.clubs.length} verenigingen opgeslagen (${data.pages} uitslagenpagina's).`,
     );

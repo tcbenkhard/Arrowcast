@@ -2,6 +2,7 @@ import { t, message } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
 import type { ScoringStanding } from '@arrowcast/contracts';
+import { arrowScoreValue } from '@arrowcast/scoring';
 
 export function ScoringStandings({
   competitionId,
@@ -42,9 +43,7 @@ export function ScoringStandings({
           setStandings(
             result.map((person) => ({
               ...person,
-              lastArrows: [...(person.lastArrows ?? [])].sort(
-                (a, b) => (b === 'M' ? 0 : Number(b)) - (a === 'M' ? 0 : Number(a)),
-              ),
+              lastArrows: [...(person.lastArrows ?? [])].sort((a, b) => arrowScoreValue(b) - arrowScoreValue(a)),
             })),
           );
           setError('');

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import SQLite from 'better-sqlite3';
 import { buildApp } from '../src/app.js';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import { targetTypes } from '../src/db/schema.js';
 
 const jwtSecret = 'target-type-test-secret-with-at-least-thirty-two-bytes';
@@ -76,7 +76,7 @@ test('target types are seeded, authenticated, validated, unique and persisted ac
   } finally {
     await app.close();
   }
-  const reopened = openDatabase(databasePath);
+  const reopened = new DatabaseConnection(databasePath);
   try {
     const saved = reopened.db
       .select()
@@ -183,7 +183,7 @@ test('bulk deletion validates input, preserves types in use and persists deletio
   } finally {
     await app.close();
   }
-  const reopened = openDatabase(databasePath);
+  const reopened = new DatabaseConnection(databasePath);
   try {
     const saved = reopened.db
       .select()

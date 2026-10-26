@@ -1,23 +1,16 @@
-import { t } from '@arrowcast/contracts/i18n';
-import { asc, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import type { AppDatabase } from '../../db/index.js';
-import { competitionLanes, competitionParticipants, competitions, targetTypes } from '../../db/schema.js';
+import type { DatabaseContext } from '../../db/context.js';
 import { administratorOnly } from '../auth/policies.js';
+import { TargetTypeService } from './service.js';
 
-export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDatabase }) {
+export async function targetTypeRoutes(app: FastifyInstance, { context }: { context: DatabaseContext }) {
+  const service = new TargetTypeService(context);
   app.get(
     '/target-types',
     {
       schema: { response: { 200: { type: 'array', items: { type: 'string' } } } },
     },
-    async () =>
-      db
-        .select()
-        .from(targetTypes)
-        .orderBy(asc(sql`lower(${targetTypes.name})`))
-        .all()
-        .map((type) => type.name),
+    async () => service.list(),
   );
 
   app.post<{ Body: { name: string } }>(
@@ -35,11 +28,8 @@ export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDa
       },
     },
     async (request, reply) => {
-      const name = request.body.name.trim();
-      const created = db.insert(targetTypes).values({ name }).onConflictDoNothing().returning().get();
-      if (!created)
-        return reply.code(409).send({ message: t('TargetTypesPage.a_target_type_with_this_name_already_exists') });
-      return reply.type('application/json').code(201).send(JSON.stringify(created.name));
+      const name = service.create(request.body.name.trim());
+      return reply.type('application/json').code(201).send(JSON.stringify(name));
     },
   );
 
@@ -64,31 +54,6 @@ export async function targetTypeRoutes(app: FastifyInstance, { db }: { db: AppDa
         },
       },
     },
-    async (request, reply) => {
-      const removed = db.transaction((tx) => {
-        const used = tx
-          .select({ name: competitionLanes.targetType })
-          .from(competitionLanes)
-          .where(inArray(competitionLanes.targetType, request.body.names))
-          .get();
-        const usedByParticipant = tx
-          .select({ name: competitionParticipants.targetType })
-          .from(competitionParticipants)
-          .where(inArray(competitionParticipants.targetType, request.body.names))
-          .get();
-        const usedAsDefault = tx
-          .select({ name: competitions.defaultTargetType })
-          .from(competitions)
-          .where(inArray(competitions.defaultTargetType, request.body.names))
-          .get();
-        if (used || usedByParticipant || usedAsDefault) return null;
-        return tx.delete(targetTypes).where(inArray(targetTypes.name, request.body.names)).returning().all();
-      });
-      if (removed === null)
-        return reply
-          .code(409)
-          .send({ message: t('TargetTypesPage.een_of_meer_geselecteerde_target_types_zijn_in_gebruik', {}, 'nl') });
-      return { removed: removed.map((type) => type.name) };
-    },
+    async (request) => ({ removed: service.remove(request.body.names) }),
   );
 }

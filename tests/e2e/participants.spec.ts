@@ -246,6 +246,7 @@ test('participant modal searches, adds existing people with the keyboard and cre
   await expect(modal.getByLabel('Full name', { exact: true })).toHaveValue('New Archer');
   await modal.getByLabel('Federation number', { exact: true }).fill('000124');
   const clubSearch = modal.getByRole('combobox', { name: 'Search by club name or number' });
+  await expect(modal.getByText('Loading clubs...', { exact: true })).toBeHidden();
   const emptyClubBounds = await modal.boundingBox();
   await clubSearch.fill('testCLUB');
   await expect(modal.getByRole('option', { name: 'Testclub (0012)', exact: true })).toBeVisible();

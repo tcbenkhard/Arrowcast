@@ -1,7 +1,4 @@
 import { t } from '@arrowcast/contracts/i18n';
-import { and, eq, getTableColumns } from 'drizzle-orm';
-import type { AppDatabase } from '../../db/index.js';
-import { competitionLanes, competitionParticipants, lanes, participants } from '../../db/schema.js';
 
 export const letters = ['A', 'B', 'C', 'D'] as const;
 type Letter = (typeof letters)[number];
@@ -279,42 +276,5 @@ function mixClubs(
         remaining.delete(index);
       }
     }
-  }
-}
-
-export function assignParticipants(
-  db: Pick<AppDatabase, 'select' | 'update'>,
-  competitionId: string,
-  reassign = false,
-) {
-  const selection = eq(competitionParticipants.competitionId, competitionId);
-  const people = db
-    .select({ ...getTableColumns(competitionParticipants), clubNumber: participants.clubNumber })
-    .from(competitionParticipants)
-    .innerJoin(participants, eq(participants.id, competitionParticipants.participantId))
-    .where(selection)
-    .all();
-  const laneList = db
-    .select({
-      laneId: lanes.id,
-      number: lanes.number,
-      targetType: competitionLanes.targetType,
-      numberOfTargets: competitionLanes.numberOfTargets,
-    })
-    .from(competitionLanes)
-    .innerJoin(lanes, eq(lanes.id, competitionLanes.laneId))
-    .where(eq(competitionLanes.competitionId, competitionId))
-    .orderBy(lanes.number)
-    .all();
-  const plan = planAssignments(
-    laneList,
-    reassign ? people.filter((p) => p.checkedIn).map((p) => ({ ...p, laneId: null, targetLetter: null })) : people,
-  );
-  if (reassign) db.update(competitionParticipants).set({ laneId: null, targetLetter: null }).where(selection).run();
-  for (const { participantId, ...place } of plan) {
-    db.update(competitionParticipants)
-      .set(place)
-      .where(and(selection, eq(competitionParticipants.participantId, participantId)))
-      .run();
   }
 }

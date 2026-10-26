@@ -4,7 +4,7 @@ import { setImmediate } from 'node:timers/promises';
 import { test } from 'node:test';
 import Fastify from 'fastify';
 import { buildApp } from '../src/app.js';
-import { openDatabase } from '../src/db/index.js';
+import { DatabaseConnection } from '../src/db/index.js';
 import { participants } from '../src/db/schema.js';
 import { participantRoutes } from '../src/modules/participants/routes.js';
 
@@ -50,7 +50,7 @@ test('import endpoints require admin authentication', async () => {
 });
 
 test('background import reports progress, blocks duplicate starts and saves results', async () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   const app = Fastify();
   let complete!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -58,7 +58,7 @@ test('background import reports progress, blocks duplicate starts and saves resu
   });
   let calls = 0;
   await app.register(participantRoutes, {
-    db: database.db,
+    context: database.context,
     scrape: async (progress) => {
       calls++;
       progress('Regio 101 verwerkt');
@@ -87,11 +87,11 @@ test('background import reports progress, blocks duplicate starts and saves resu
 });
 
 test('a failed import leaves the database unchanged and allows retry', async () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   const app = Fastify();
   let calls = 0;
   await app.register(participantRoutes, {
-    db: database.db,
+    context: database.context,
     scrape: async () => {
       if (++calls === 1) throw new Error('Source unavailable');
       return data;
@@ -111,12 +111,12 @@ test('a failed import leaves the database unchanged and allows retry', async () 
 });
 
 test('imports require internet access and become available after reconnection', async () => {
-  const database = openDatabase(':memory:');
+  const database = new DatabaseConnection(':memory:');
   const app = Fastify();
   let online = false;
   let calls = 0;
   await app.register(participantRoutes, {
-    db: database.db,
+    context: database.context,
     canImport: async () => online,
     scrape: async () => {
       calls++;
@@ -141,6 +141,40 @@ test('imports require internet access and become available after reconnection', 
     assert.equal(completed.available, false);
     assert.equal(calls, 1);
   } finally {
+    await app.close();
+    database.close();
+  }
+});
+
+test('closing the route scope waits for its active import to persist before the database can close', async () => {
+  const database = new DatabaseConnection(':memory:');
+  const app = Fastify();
+  let complete!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  await app.register(participantRoutes, {
+    context: database.context,
+    scrape: async () => {
+      await gate;
+      return data;
+    },
+  });
+  try {
+    assert.equal((await app.inject({ method: 'POST', url })).statusCode, 202);
+    let closed = false;
+    const closing = app.close().then(() => {
+      closed = true;
+    });
+    await setImmediate();
+    assert.equal(closed, false);
+    assert.equal(database.db.select().from(participants).all().length, 0);
+    complete();
+    await closing;
+    assert.equal(closed, true);
+    assert.equal(database.db.select().from(participants).all().length, 1);
+  } finally {
+    complete();
     await app.close();
     database.close();
   }
