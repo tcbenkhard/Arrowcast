@@ -12,7 +12,7 @@ if not secret.exists():
     secret.write_text(secrets.token_hex(48))
     secret.chmod(0o600)
 os.environ['JWT_SECRET'] = secret.read_text().strip()
-for directory in ['/run/arrowcast-network', '/var/log/arrowcast']:
+for directory in ['/run/arrowcast-network', '/run/arrowcast-public', '/var/log/arrowcast']:
     Path(directory).mkdir(parents=True, exist_ok=True)
 for source in ['backend', 'frontend', 'updates']:
     path = Path(f'/var/log/arrowcast/{source}.log')

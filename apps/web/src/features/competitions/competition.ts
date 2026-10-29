@@ -23,7 +23,7 @@ const statusOrder: Record<CompetitionStatus, number> = { Active: 0, 'Check-in': 
 export function compareCompetitions(a: CompetitionSummary, b: CompetitionSummary): number {
   return (
     statusOrder[a.status] - statusOrder[b.status] ||
-    a.date.localeCompare(b.date) ||
+    b.date.localeCompare(a.date) ||
     a.startingTime.localeCompare(b.startingTime) ||
     a.id.localeCompare(b.id)
   );

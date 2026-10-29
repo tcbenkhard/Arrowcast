@@ -16,7 +16,8 @@ docker compose up --build
 
 De container gebruikt dezelfde gebouwde React-frontend, Fastify-API,
 SQLite-migraties, eerste beheerder, nginx-configuratie en Python-wifi-broker als
-de Pi-image. Alleen hardwareaanroepen van de wifi-broker worden vervangen.
+de Pi-image. Hardwareaanroepen van de wifi-broker en externe handelingen van de
+publieke-toegangsbroker worden vervangen door simulaties.
 De API praat met de echte broker via `/run/arrowcast-network/control.sock`.
 De simulatie begint zonder Ethernet of opgeslagen wifi, dus in hotspotmodus.
 
@@ -69,14 +70,38 @@ docker compose exec pi simctl log updates "Testmelding updater"
 
 De updater draait niet in de simulatie. De updatepagina toont daarom dat
 updates uitgeschakeld zijn; het updatelog bevat een uitleg. Release-installatie,
-rollback, systemd-journalrechten, TLS/publieke toegang en de SD-kaartboot worden
-hier niet nagebootst. Ook echte wifi-authenticatie, radio, DHCP en de
+rollback, systemd-journalrechten, echte TLS/publieke bereikbaarheid en de SD-kaartboot
+worden hier niet uitgevoerd. Ook echte wifi-authenticatie, radio, DHCP en de
 bereikbaarheid vanaf telefoons moeten op een fysieke Pi worden gecontroleerd.
 Docker Desktop gebruikt een [virtueel containernetwerk](https://docs.docker.com/desktop/features/networking/).
 
+## Toegangsinstellingen en DDNS bekijken
+
+Open **Instellingen > Toegangsinstellingen**. Alle drie de keuzes zijn beschikbaar:
+alleen intern, extern zonder DDNS en extern met DDNS via dynv6. Een melding maakt
+duidelijk dat DDNS en HTTPS in Docker worden gesimuleerd.
+
+Kies de dynv6-optie en vul een testtoken zoals `demo-token`, bijvoorbeeld
+`scores.vereniging.nl` en een contact-e-mailadres in. Klik op **Opslaan** om
+de hostnaam te registreren en HTTPS in te stellen. De getoonde hostnaam en het
+CNAME-record zijn voorbeelden; je hoeft geen echt DNS-record aan te maken.
+De status en certificaatdatum worden nagebootst. Het publieke
+adres is niet bereikbaar; blijf de simulator via `http://localhost:8080` gebruiken.
+
+Er worden geen aanvragen naar dynv6, Let's Encrypt of de IP-detectieservice gedaan.
+Gebruik `invalid-token` om een geweigerd token te simuleren, of `simctl internet off`
+om een verbindingsfout te zien. De DDNS-hostnaam, instellingen en fictieve
+certificaatdatum blijven na een herstart bewaard. Gebruik geen echt API-token.
+
+Na een geslaagde wifi-verbinding of volledig ingestelde externe toegang verschijnt
+in de betreffende kaart een blok **Huidige instellingen** in plaats van het
+formulier. Klik op het blok om te bewerken. Bij DDNS blijft het CNAME-record in
+dit blok zichtbaar. Zolang de verbinding of certificaataanvraag niet geslaagd is,
+blijft het formulier beschikbaar. Wachtwoorden en API-tokens staan niet in het blok.
+
 ## Bewaren, stoppen en opnieuw beginnen
 
-Accounts, wedstrijden, JWT-geheim, wifi-profiel en simulatieschakelaars blijven
+Accounts, wedstrijden, JWT-geheim, wifi-profiel, toegangsinstellingen en simulatieschakelaars blijven
 in het Compose-volume bewaard. Proceslogs zijn tijdelijk en verdwijnen bij het
 opnieuw aanmaken van de container. Stoppen:
 
@@ -109,5 +134,6 @@ python deploy/sim/verify.py
 Dit bouwt een apart, tijdelijk Compose-project op een vrije lokale poort en
 controleert via nginx en de echte API: inloggen/wachtwoordwijziging, hotspot,
 wifi-validatie, fout wachtwoord, wifi-herstel, Ethernet-voorrang, offline/online,
-verbindingsverlies, proceslogs en behoud van account/wifi na herstart.
+verbindingsverlies, DDNS-registratie, HTTPS-status, uitschakelen van publieke toegang,
+proceslogs en behoud van account/wifi/toegangsinstellingen na herstart.
 Na afloop verwijdert het uitsluitend zijn eigen testcontainers en testvolume.

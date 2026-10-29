@@ -4,6 +4,9 @@ export interface PublicAccessSettings {
   enabled: boolean;
   domain: string;
   email: string;
+  accessMode?: 'public' | 'ddns';
+  ddnsToken?: string;
+  action?: 'prepare-ddns';
 }
 
 export class PublicAccessService {

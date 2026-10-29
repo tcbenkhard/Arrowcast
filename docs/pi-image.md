@@ -318,8 +318,9 @@ public PEM in `ARROWCAST_UPDATE_PUBLIC_KEY` through sudo alongside
 ## Public scoring with HTTPS
 
 Public scoring is disabled by default. Local administration continues at
-`http://arrowcast.local` (port 80). In **Settings > Public score entry**, an
-administrator can enter a public DNS hostname and contact email, then activate
+`http://arrowcast.local` (port 80). In **Settings > Access settings**, an
+administrator can choose internal access, external access without DDNS, or
+external access with dynv6 DDNS under **Access settings**, enter a public DNS hostname and contact email, then activate
 HTTPS. Activation accepts the [Let's Encrypt subscriber agreement](https://letsencrypt.org/repository/).
 
 The management listener rejects public and unknown hostnames with HTTP 404. It
@@ -348,6 +349,45 @@ Before activating:
    the public hostname. Keep the hostname intact when using another reverse proxy.
 4. Ensure inbound connections are supported by your ISP (ordinary IPv4 forwarding
    does not work behind CGNAT), and the Pi has working internet access and time.
+
+### External access with dynv6 DDNS
+
+Use a separate [dynv6 account](https://dynv6.com/) for the club and obtain a REST API
+token with permission to create and update zones. Choose **External with DDNS
+(dynv6)** and enter the token, the club's public hostname and contact email in the
+single form. Click **Save**. Arrowcast registers a random
+`arrowcast-<id>.dynv6.net` hostname and attempts to configure HTTPS. If the public
+hostname does not yet resolve to this installation, the form shows the CNAME
+record to create. Retrying Save reuses the saved hostname and token, including
+after a restart or an interrupted request.
+
+Enter the club's public hostname, for example `scores.club.nl`. The settings show
+the CNAME record to create at the club's existing DNS provider:
+
+```dns
+scores.club.nl. CNAME arrowcast-<id>.dynv6.net.
+```
+
+Remove conflicting A/AAAA records at that name, wait for DNS propagation, then
+click **Save** again. Arrowcast checks that the hostname
+resolves only to the current public IPv4 address before requesting the certificate
+for `scores.club.nl`. Port forwarding remains necessary as described above.
+
+The public-access broker checks the public IPv4 address at startup and every five
+minutes while DDNS access is enabled. It uses `https://api.ipify.org` for IPv4
+detection and the [dynv6 REST API](https://dynv6.github.io/api-spec/) for zone lookup,
+registration and updates. It only changes the A record when the address differs.
+This integration does not configure IPv6; do not add AAAA records to the generated
+hostname. Failures show a separate DDNS diagnostic and are retried on the next
+check; they do not disable an existing HTTPS configuration.
+
+The token is stored in `/var/lib/arrowcast-public/ddns.json`, readable only by root,
+outside release directories. It is never returned in status responses or saved in
+the browser. Leave the token field empty to reuse it; entering a new token replaces
+it. Selecting and applying internal access or external access without DDNS stops
+automatic updates. The dynv6 hostname is retained in the club's account for reuse.
+
+### Public listener boundaries
 
 The public HTTP listeners serve `/.well-known/acme-challenge/` and redirect score
 URLs to the fixed public HTTPS hostname on external port 443. Other HTTP paths,

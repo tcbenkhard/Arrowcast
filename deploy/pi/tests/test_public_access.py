@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[1] / 'stage-arrowcast/00-install/files/public-access.py'
@@ -128,6 +129,120 @@ class PublicAccessTests(unittest.TestCase):
             self.assertIn('server_name scores.club.nl', install.call_args.args[0])
             run.assert_not_called()
         self.assertEqual(public.config(), VALUE)
+
+    def test_ddns_registration_is_durable_and_does_not_enable_public_access(self):
+        def request(path, token, method='GET', body=None):
+            self.assertEqual(token, 'secret-token')
+            if method == 'GET':
+                return None
+            self.assertEqual(method, 'POST')
+            return {'id': 42, 'name': body['name'], 'ipv4address': '8.8.8.8'}
+
+        with patch.object(public, 'ddns_request', side_effect=request), \
+                patch.object(public, 'public_ipv4', return_value='8.8.8.8'), \
+                patch.object(public, 'install_site') as install:
+            public.apply(public.validate({**VALUE, 'enabled': False, 'accessMode': 'ddns',
+                                          'action': 'prepare-ddns', 'ddnsToken': 'secret-token'}))
+            install.assert_not_called()
+        saved = public.ddns_config()
+        self.assertRegex(saved['hostname'], r'^arrowcast-[a-f0-9]{20}\.dynv6\.net$')
+        self.assertFalse(public.config()['enabled'])
+        self.assertTrue(public.snapshot()['ddns']['ready'])
+        self.assertNotIn('secret-token', json.dumps(public.snapshot()))
+        self.assertEqual((public.STATE / 'ddns.json').stat().st_mode & 0o777, 0o600)
+        self.assertFalse(public.ATTEMPT.exists())
+
+    def test_ddns_retry_reuses_hostname_and_updates_only_a_changed_address(self):
+        public.save_ddns({'hostname': 'arrowcast-test.dynv6.net', 'token': 'secret-token'})
+        zone = {'id': 42, 'name': 'arrowcast-test.dynv6.net', 'ipv4address': '8.8.8.8'}
+        with patch.object(public, 'public_ipv4', return_value='8.8.8.8'), \
+                patch.object(public, 'ddns_request', return_value=zone) as request:
+            public.update_ddns()
+            self.assertEqual(request.call_count, 1)
+            public.update_ddns()
+            self.assertEqual(request.call_count, 2)
+        with patch.object(public, 'public_ipv4', return_value='1.1.1.1'), \
+                patch.object(public, 'ddns_request', return_value=zone) as request:
+            public.update_ddns()
+            request.assert_called_with('zones/42', 'secret-token', 'PATCH', {'ipv4address': '1.1.1.1'})
+        self.assertEqual(public.ddns_status()['address'], '1.1.1.1')
+
+    def test_ddns_failure_preserves_hostname_and_hides_provider_secrets(self):
+        with patch.object(public, 'public_ipv4', return_value='8.8.8.8'), \
+                patch.object(public, 'ddns_request', side_effect=RuntimeError('secret-token')):
+            with self.assertRaises(public.DdnsError):
+                public.update_ddns('secret-token')
+        hostname = public.ddns_config()['hostname']
+        self.assertNotIn('secret-token', json.dumps(public.snapshot()))
+        with patch.object(public, 'public_ipv4', return_value='8.8.8.8'), \
+                patch.object(public, 'ddns_request', return_value={'id': 42, 'name': hostname,
+                                                                  'ipv4address': '8.8.8.8'}):
+            public.update_ddns()
+        self.assertEqual(public.ddns_config()['hostname'], hostname)
+        self.assertEqual(public.ddns_status()['message'], '')
+
+    def test_ddns_checks_dns_before_certificate_and_never_persists_token_in_attempt(self):
+        old = {**VALUE, 'enabled': False}
+        public.CONFIG.write_text(json.dumps(old))
+        with patch.object(public, 'update_ddns', return_value={'hostname': 'a.dynv6.net', 'address': '8.8.8.8'}), \
+                patch.object(public.socket, 'getaddrinfo', side_effect=OSError('not resolved')), \
+                patch.object(public, 'install_site'), patch.object(public, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'CNAME'):
+                public.apply({**VALUE, 'accessMode': 'ddns', 'ddnsToken': 'secret-token'})
+            run.assert_not_called()
+        self.assertEqual(public.config(), old)
+        self.assertNotIn('secret-token', public.ATTEMPT.read_text())
+        self.assertNotIn('secret-token', json.dumps(public.snapshot()))
+        self.assertEqual(public.snapshot()['errorCode'], 'dns')
+
+    def test_ddns_refresh_only_runs_for_enabled_ddns_mode_and_keeps_tls_settings(self):
+        for value in [VALUE, {**VALUE, 'accessMode': 'ddns', 'enabled': False},
+                      {**VALUE, 'accessMode': 'ddns'}]:
+            public.CONFIG.write_text(json.dumps(value))
+            with patch.object(public, 'update_ddns') as update, patch.object(public, 'install_site') as install:
+                public.refresh_ddns()
+                self.assertEqual(update.call_count, int(value['enabled'] and value.get('accessMode') == 'ddns'))
+                install.assert_not_called()
+            self.assertEqual(public.config(), value)
+
+    def test_ddns_activation_and_renewal_keep_mode_and_reuse_stored_credentials(self):
+        value = {**VALUE, 'accessMode': 'ddns'}
+        with patch.object(public, 'update_ddns', return_value={'hostname': 'a.dynv6.net', 'address': '8.8.8.8'}) as update, \
+                patch.object(public.socket, 'getaddrinfo', return_value=[(None, None, None, None, ('8.8.8.8', 80))]), \
+                patch.object(public, 'certificate', return_value='expiry'), \
+                patch.object(public, 'install_site'), patch.object(public, 'run') as run:
+            public.apply({**value, 'ddnsToken': 'new-token'})
+            update.assert_called_with('new-token')
+            self.assertEqual(public.config(), value)
+            self.assertNotIn('new-token', json.dumps(public.snapshot()))
+            public.apply(renew=True)
+            update.assert_called_with(None)
+            run.assert_called_with(['certbot', 'renew', '--non-interactive', '--cert-name', VALUE['domain']])
+
+    def test_rejected_replacement_token_keeps_previous_credentials(self):
+        public.save_ddns({'hostname': 'a.dynv6.net', 'token': 'working-token', 'ready': True})
+        with patch.object(public, 'public_ipv4', return_value='8.8.8.8'), \
+                patch.object(public, 'ddns_request', side_effect=public.DdnsError('Token rejected.')):
+            with self.assertRaises(public.DdnsError):
+                public.update_ddns('invalid-token')
+        self.assertEqual(public.ddns_config()['token'], 'working-token')
+        self.assertNotIn('working-token', json.dumps(public.snapshot()))
+
+    def test_ddns_http_errors_are_safe_and_credentials_cannot_follow_redirects(self):
+        for status in [301, 401, 403, 422, 429, 500]:
+            with patch.object(public.urllib.request.OpenerDirector, 'open',
+                    side_effect=urllib.error.HTTPError('https://secret-token', status, 'secret-token', {}, None)):
+                with self.assertRaises(public.DdnsError) as raised:
+                    public.ddns_request('zones', 'secret-token', 'POST', {'name': 'a.dynv6.net'})
+                self.assertNotIn('secret-token', str(raised.exception))
+        self.assertIsNone(public.NoRedirect().redirect_request(None, None, 302, '', {}, 'https://example.com'))
+
+    def test_ddns_rejects_bad_tokens_and_actions(self):
+        for extra in [{'ddnsToken': 'token\nheader'}, {'ddnsToken': 'x' * 513},
+                      {'accessMode': 'unknown'}, {'action': 'arbitrary'},
+                      {'action': 'prepare-ddns', 'accessMode': 'ddns'}]:
+            with self.assertRaises(ValueError):
+                public.validate({**VALUE, **extra})
 
 
 if __name__ == '__main__':

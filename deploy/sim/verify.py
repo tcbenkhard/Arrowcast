@@ -90,6 +90,24 @@ def main():
         control('wifi-failure', 'off')
         api('admin/network', {'ssid': 'Test club', 'password': 'test-password'}, expected=202)
         wait_for(lambda: api('admin/network')['mode'] == 'wifi', 'saving credentials retries failed Wi-Fi')
+        access = api('admin/public-access')
+        assert access['available'] and access['simulation'] and not access['enabled']
+        settings = {'enabled': True, 'domain': 'scores.simulation.example.org',
+                    'email': 'admin@example.org', 'accessMode': 'ddns'}
+        api('admin/public-access', {**settings, 'enabled': False, 'action': 'prepare-ddns',
+                                   'ddnsToken': 'simulation-test-token'}, expected=202)
+        wait_for(lambda: api('admin/public-access')['ddns'].get('ready'), 'simulated dynv6 registration')
+        access = api('admin/public-access')
+        hostname = access['ddns']['hostname']
+        assert hostname.endswith('.dynv6.net') and not access['enabled']
+        assert 'simulation-test-token' not in json.dumps(access)
+        api('admin/public-access', settings, expected=202)
+        wait_for(lambda: api('admin/public-access')['active'], 'simulated DDNS HTTPS activation')
+        assert api('admin/public-access')['origin'] == 'https://scores.simulation.example.org'
+        api('admin/public-access', {**settings, 'enabled': False}, expected=202)
+        wait_for(lambda: not api('admin/public-access')['enabled'], 'internal access disables simulated HTTPS')
+        api('admin/public-access', settings, expected=202)
+        wait_for(lambda: api('admin/public-access')['active'], 'stored DDNS credentials can be reused')
         with urllib.request.urlopen(f'http://127.0.0.1:{port}/admin') as response:
             assert b'<html' in response.read()
         compose('exec', '-T', 'pi', 'python3', '-c',
@@ -110,6 +128,11 @@ def main():
         compose('up', '-d', '--wait', '--wait-timeout', '120')
         token = api('auth/login', {'username': 'admin', 'password': 'simulation-test-password'})['token']
         wait_for(lambda: api('admin/network')['mode'] == 'wifi', 'account and saved Wi-Fi survive restart')
+        access = api('admin/public-access')
+        assert access['active'] and access['accessMode'] == 'ddns'
+        assert access['ddns']['hostname'] == hostname
+        assert 'simulation-test-token' not in json.dumps(access)
+        print('PASS: DDNS hostname and public access settings survive restart', flush=True)
         print('All Pi simulation checks passed.', flush=True)
     except subprocess.CalledProcessError as error:
         print(error.stdout)

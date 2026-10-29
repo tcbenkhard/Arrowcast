@@ -2,7 +2,44 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildApp } from '../src/app.js';
 import { ScoringOriginService } from '../src/modules/public-access/scoring-origin-service.js';
+import { PublicAccessControlClient } from '../src/modules/public-access/control-client.js';
 import { loginAdmin } from './helpers.js';
+
+test('administrator can prepare dynv6 and activate DDNS through the local broker', async (t) => {
+  const app = buildApp({ jwtSecret: 'test-secret-with-at-least-thirty-two-bytes', databasePath: ':memory:' });
+  t.after(() => app.close());
+  const login = await loginAdmin(app);
+  const headers = { authorization: `Bearer ${login.json().token}` };
+  const command = t.mock.method(PublicAccessControlClient.prototype, 'command', async () => ({
+    code: 202,
+    body: { message: 'Applying' },
+  }));
+  const preparation = {
+    enabled: false,
+    domain: '',
+    email: '',
+    accessMode: 'ddns',
+    action: 'prepare-ddns',
+    ddnsToken: 'private-token',
+  };
+  const activation = { enabled: true, domain: 'scores.club.nl', email: 'admin@club.nl', accessMode: 'ddns' };
+  for (const payload of [preparation, activation]) {
+    const response = await app.inject({ method: 'POST', url: '/api/v1/admin/public-access', headers, payload });
+    assert.equal(response.statusCode, 202);
+    assert.deepEqual(command.mock.calls.at(-1)?.arguments[0], payload);
+    assert.equal(response.body.includes('private-token'), false);
+  }
+  for (const extra of [{ accessMode: 'unknown' }, { action: 'delete' }, { ddnsToken: 'x'.repeat(513) }]) {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/public-access',
+      headers,
+      payload: { ...activation, ...extra },
+    });
+    assert.equal(response.statusCode, 400);
+  }
+  assert.equal(command.mock.callCount(), 2);
+});
 
 test('hotspot QR address overrides public settings without consulting or changing them', async () => {
   const publicState = { code: 200, body: { origin: 'https://scores.club.nl' } };

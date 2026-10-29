@@ -14,7 +14,7 @@ export async function publicAccessRoutes(app: FastifyInstance) {
   const service = new PublicAccessService();
   app.get('/public-access', async (_request, reply) => {
     const result = await service.status();
-    return reply.code(result.code).send(result.body);
+    return reply.header('Cache-Control', 'no-store').code(result.code).send(result.body);
   });
   app.post<{ Body: PublicAccessSettings }>(
     '/public-access',
@@ -30,6 +30,9 @@ export async function publicAccessRoutes(app: FastifyInstance) {
             enabled: { type: 'boolean' },
             domain: { type: 'string', maxLength: 253 },
             email: { type: 'string', maxLength: 254 },
+            accessMode: { type: 'string', enum: ['public', 'ddns'] },
+            ddnsToken: { type: 'string', maxLength: 512 },
+            action: { type: 'string', enum: ['prepare-ddns'] },
           },
         },
       },

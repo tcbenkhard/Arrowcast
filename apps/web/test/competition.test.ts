@@ -26,7 +26,7 @@ test('competitions prioritize current activity before their calendar date', () =
   );
 });
 
-test('competitions with the same status sort by date, time, and finally stable identity', () => {
+test('competitions with the same status sort by newest date, ascending time, and finally stable identity', () => {
   const values = [
     competition('later-date', { date: '2026-10-27' }),
     competition('b'),
@@ -35,6 +35,6 @@ test('competitions with the same status sort by date, time, and finally stable i
   ];
   assert.deepEqual(
     values.sort(compareCompetitions).map((value) => value.id),
-    ['a', 'b', 'later-time', 'later-date'],
+    ['later-date', 'a', 'b', 'later-time'],
   );
 });

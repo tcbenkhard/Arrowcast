@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends nginx python3 s
 WORKDIR /opt/arrowcast/current
 COPY --from=build /opt/arrowcast/current ./
 COPY deploy/pi/stage-arrowcast/00-install/files/network.py /usr/local/lib/arrowcast/network.py
+COPY deploy/pi/stage-arrowcast/00-install/files/public-access.py /usr/local/lib/arrowcast/public-access.py
 COPY deploy/pi/stage-arrowcast/00-install/files/nginx.conf /etc/nginx/sites-enabled/default
 COPY deploy/sim /opt/sim
 RUN sed -i 's|error_log syslog:server=unix:/dev/log,tag=arrowcast_web warn;|error_log /var/log/arrowcast/frontend.log warn;|' /etc/nginx/sites-enabled/default \

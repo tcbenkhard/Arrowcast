@@ -1,9 +1,9 @@
-# Start de API met npm run dev:api en kies bij Run with de omgeving localhost.
-# apiToken staat in http-client.private.env.json (genegeerd door Git).
+# Kies bij Run with localhost (lokale API) of thuis (publieke HTTPS-API).
+# Start voor localhost de API met npm run dev:api.
+# baseUrl en apiToken staan in http-client.private.env.json (genegeerd door Git).
 # De testsleutel heet Local HTTP client in Instellingen > API Keys.
 # OpenAPI-specificatie voor de klant: docs/openapi.yaml.
 # De wedstrijdwaarden hieronder komen uit de lokale database; pas ze zo nodig aan.
-@baseUrl = http://{{hostname}}
 @clubNumber = 1241
 @competitionDate = 2026-10-22
 @competitionStarttime = 10:00
@@ -16,8 +16,8 @@ POST {{baseUrl}}/api/scores
 Authorization: Bearer {{apiToken}}
 
 {
-  "verenigingsnummer": {{clubNumber}},
-  "date": "2026-10-21",
+  "verenigingsnummer": 1241,
+  "date": "2026-10-29",
   "starttime": "10:00"
 }
 

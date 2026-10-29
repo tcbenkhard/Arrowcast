@@ -3,6 +3,7 @@ import { managementRequest } from '../../lib/http';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { SettingsCard } from './SettingsCard';
+import { AppliedSettings } from './AppliedSettings';
 
 interface NetworkState {
   mode: 'disabled' | 'starting' | 'ethernet' | 'wifi' | 'hotspot';
@@ -10,6 +11,14 @@ interface NetworkState {
   ssid: string | null;
   address: string | null;
   message: string;
+}
+
+function wifiApplied(state: NetworkState | null) {
+  return (
+    state?.mode === 'wifi' &&
+    !!state.ssid &&
+    (!state.message || state.message === 'Wi-Fi settings saved. Ethernet takes priority whenever a cable is connected.')
+  );
 }
 
 export function Network({ token, onUnauthorized }: { token: string; onUnauthorized: (message: string) => void }) {
@@ -20,6 +29,8 @@ export function Network({ token, onUnauthorized }: { token: string; onUnauthoriz
   const [statusError, setStatusError] = useState('');
   const [notice, setNotice] = useState('');
   const [pending, setPending] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const awaitingApply = useRef(false);
   const submitting = useRef(false);
   const initialized = useRef(false);
 
@@ -42,6 +53,13 @@ export function Network({ token, onUnauthorized }: { token: string; onUnauthoriz
         if (!controller.signal.aborted) {
           setState(result);
           setStatusError('');
+          if (awaitingApply.current && !result.busy) {
+            awaitingApply.current = false;
+            if (wifiApplied(result)) {
+              setEditing(false);
+              setNotice('');
+            }
+          }
           if (!initialized.current) {
             setSsid(result.ssid ?? '');
             initialized.current = true;
@@ -84,6 +102,7 @@ export function Network({ token, onUnauthorized }: { token: string; onUnauthoriz
       const result = (await response.json()) as NetworkState & { message: string };
       if (!response.ok) throw new Error(result.message || t('Network.could_not_save_wifi_settings'));
       setState(result);
+      awaitingApply.current = true;
       setPassword('');
       setNotice(t('Network.wifi_settings_accepted_if_disconnected_join_the_selected_network'));
     } catch (reason) {
@@ -98,57 +117,75 @@ export function Network({ token, onUnauthorized }: { token: string; onUnauthoriz
     }
   }
 
+  const showSummary = state && wifiApplied(state) && !state.busy && !pending && !editing && !error && !statusError;
+
   return (
     <SettingsCard id="network" icon="network" title={t('Network.network')}>
-      <p>{t('Network.ethernet_takes_priority_connecting_a_network_cable_disables_wifi')}</p>
+      {!showSummary && <p>{t('Network.ethernet_takes_priority_connecting_a_network_cable_disables_wifi')}</p>}
       <div role="status" aria-live="polite">
         {!state && !statusError && <p>{t('Network.reading_network_status')}</p>}
         {state?.mode === 'starting' && <p>{t('Network.starting_network_service')}</p>}
         {state?.mode === 'disabled' && <p>{t('network.disabled')}</p>}
         {state?.mode === 'ethernet' && <p>{t('Network.ethernet_cable_connected_wifi_is_disabled')}</p>}
-        {state?.mode === 'wifi' && (
+        {state?.mode === 'wifi' && !showSummary && (
           <p>
             {t('network.connected', { ssid: state.ssid })}
             {state.address && ` (${state.address})`}
           </p>
         )}
         {state?.mode === 'hotspot' && <p>{t('Network.arrowcast_hotspot_active_http104201')}</p>}
-        {state && state.mode !== 'disabled' && state.ssid && <p>{t('network.saved', { ssid: state.ssid })}</p>}
-        {state && state.mode !== 'disabled' && state.message && <p>{message(state.message)}</p>}
-        {notice && <p>{message(notice)}</p>}
+        {state && !showSummary && state.mode !== 'disabled' && state.ssid && (
+          <p>{t('network.saved', { ssid: state.ssid })}</p>
+        )}
+        {state && !showSummary && state.mode !== 'disabled' && state.message && <p>{message(state.message)}</p>}
+        {!showSummary && notice && <p>{message(notice)}</p>}
       </div>
-      {state && state.mode !== 'disabled' && (
-        <form
-          onSubmit={(event) => {
-            void connect(event);
+      {showSummary ? (
+        <AppliedSettings
+          onEdit={() => {
+            setEditing(true);
+            setSsid(state.ssid ?? '');
+            setPassword('');
           }}
         >
-          <p>{t('Network.enter_the_exact_network_name_including_hidden_networks_supports')}</p>
-          <label htmlFor="wifi-ssid">{t('Network.wifi_network_name_ssid')}</label>
-          <input
-            id="wifi-ssid"
-            value={ssid}
-            onChange={(event) => setSsid(event.target.value)}
-            required
-            maxLength={32}
-            autoComplete="off"
-            disabled={pending || state.busy}
-          />
-          <label htmlFor="wifi-password">{t('Network.wifi_password_leave_empty_for_an_open_network')}</label>
-          <input
-            id="wifi-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            maxLength={64}
-            autoComplete="new-password"
-            disabled={pending || state.busy}
-          />
-          <button type="submit" disabled={pending || state.busy || !ssid}>
-            {t('Network.save_wifi_settings')}
-          </button>
-          {state.busy && <p>{t('Network.applying_wifi_settings')}</p>}
-        </form>
+          <span>{t('network.connected', { ssid: state.ssid })}</span>
+          {state.address && <span>{state.address}</span>}
+        </AppliedSettings>
+      ) : (
+        state &&
+        state.mode !== 'disabled' && (
+          <form
+            onSubmit={(event) => {
+              void connect(event);
+            }}
+          >
+            <p>{t('Network.enter_the_exact_network_name_including_hidden_networks_supports')}</p>
+            <label htmlFor="wifi-ssid">{t('Network.wifi_network_name_ssid')}</label>
+            <input
+              id="wifi-ssid"
+              value={ssid}
+              onChange={(event) => setSsid(event.target.value)}
+              required
+              maxLength={32}
+              autoComplete="off"
+              disabled={pending || state.busy}
+            />
+            <label htmlFor="wifi-password">{t('Network.wifi_password_leave_empty_for_an_open_network')}</label>
+            <input
+              id="wifi-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              maxLength={64}
+              autoComplete="new-password"
+              disabled={pending || state.busy}
+            />
+            <button type="submit" disabled={pending || state.busy || !ssid}>
+              {t('Network.save_wifi_settings')}
+            </button>
+            {state.busy && <p>{t('Network.applying_wifi_settings')}</p>}
+          </form>
+        )
       )}
       {error && (
         <p className="error" role="alert">

@@ -5,12 +5,8 @@ info:
   description: |
     Dit request vraagt de resultaten op van een wedstrijd die begon op het opgevraagde datum/tijdstip. De score van de wedstrijd wordt teruggegeven mits de wedstrijd afgerond is.
 servers:
-  - url: https://{host}
-    description: Productie; vul de door de vereniging verstrekte hostnaam in
-    variables:
-      host:
-        default: arrowcast.example.com
-        description: Publieke hostnaam van deze Arrowcast-installatie
+  - url: https://scores.benkhard.com
+    description: Test
 security:
   - ApiKeyBearer: []
 tags:
@@ -37,9 +33,6 @@ paths:
       responses:
         '200':
           description: De wedstrijd is afgesloten; de uitslag is beschikbaar.
-          headers:
-            Cache-Control:
-              $ref: '#/components/headers/NoStore'
           content:
             application/json:
               schema:
@@ -62,8 +55,7 @@ paths:
         '400':
           description: |
             Verkeerde of niet ingestelde vereniging, ongeldige JSON, of een body
-            die niet aan het requestschema voldoet. Er vindt geen typeconversie plaats:
-            `verenigingsnummer` moet een JSON-getal zijn, geen string.
+            die niet aan het requestschema voldoet.
           content:
             application/json:
               schema:
@@ -82,12 +74,6 @@ paths:
                     message: "body must have required property 'starttime'"
         '401':
           description: De API-key ontbreekt, heeft een ongeldig formaat, is onbekend of is ingetrokken.
-          headers:
-            WWW-Authenticate:
-              description: Het vereiste authenticatieschema.
-              schema:
-                type: string
-                enum: [Bearer]
           content:
             application/json:
               schema:
