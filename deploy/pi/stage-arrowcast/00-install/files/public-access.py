@@ -63,7 +63,7 @@ def ddns_request(path, token, method='GET', body=None):
         if error.code in (401, 403):
             raise DdnsError('dynv6 rejected the API token. Check its permissions.') from None
         if error.code == 422:
-            raise DdnsError('dynv6 could not register the hostname. Check your account limits.') from None
+            raise DdnsError('dynv6 rejected the hostname or address. Check the hostname and account limits.') from None
         raise DdnsError('dynv6 request failed. Try again later.') from None
     except (OSError, ValueError):
         raise DdnsError('Could not contact dynv6. Check internet access and retry.') from None
@@ -88,8 +88,11 @@ def update_ddns(token=None):
         value['token'] = token
     if not value.get('token'):
         raise DdnsError('Enter a dynv6 REST API token first.')
-    if not value.get('hostname'):
-        value['hostname'] = 'arrowcast-' + uuid.uuid4().hex[:20] + '.dynv6.net'
+    # dynv6 limits the host part to 20 characters.
+    # Migrate rejected names from older versions without changing registered names.
+    if (not value.get('hostname') or (not value.get('ready')
+            and re.fullmatch(r'arrowcast-[a-f0-9]{20}\.dynv6\.net', value['hostname']))):
+        value['hostname'] = uuid.uuid4().hex[:20] + '.dynv6.net'
     save_ddns(value)
     try:
         address = public_ipv4()

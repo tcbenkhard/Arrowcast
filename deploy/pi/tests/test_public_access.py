@@ -145,12 +145,28 @@ class PublicAccessTests(unittest.TestCase):
                                           'action': 'prepare-ddns', 'ddnsToken': 'secret-token'}))
             install.assert_not_called()
         saved = public.ddns_config()
-        self.assertRegex(saved['hostname'], r'^arrowcast-[a-f0-9]{20}\.dynv6\.net$')
+        self.assertRegex(saved['hostname'], r'^[a-f0-9]{20}\.dynv6\.net$')
         self.assertFalse(public.config()['enabled'])
         self.assertTrue(public.snapshot()['ddns']['ready'])
         self.assertNotIn('secret-token', json.dumps(public.snapshot()))
         self.assertEqual((public.STATE / 'ddns.json').stat().st_mode & 0o777, 0o600)
         self.assertFalse(public.ATTEMPT.exists())
+
+    def test_ddns_migrates_only_unregistered_oversized_names(self):
+        old_name = 'arrowcast-' + 'a' * 20 + '.dynv6.net'
+        for ready in (False, True):
+            public.save_ddns({'hostname': old_name, 'token': 'secret-token', 'ready': ready})
+
+            def request(path, token, method='GET', body=None):
+                return {'id': 42, 'name': public.ddns_config()['hostname'], 'ipv4address': '8.8.8.8'}
+
+            with patch.object(public, 'public_ipv4', return_value='8.8.8.8'), \
+                    patch.object(public, 'ddns_request', side_effect=request):
+                result = public.update_ddns()
+            if ready:
+                self.assertEqual(result['hostname'], old_name)
+            else:
+                self.assertRegex(result['hostname'], r'^[a-f0-9]{20}\.dynv6\.net$')
 
     def test_ddns_retry_reuses_hostname_and_updates_only_a_changed_address(self):
         public.save_ddns({'hostname': 'arrowcast-test.dynv6.net', 'token': 'secret-token'})

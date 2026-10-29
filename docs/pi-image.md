@@ -356,7 +356,7 @@ Use a separate [dynv6 account](https://dynv6.com/) for the club and obtain a RES
 token with permission to create and update zones. Choose **External with DDNS
 (dynv6)** and enter the token, the club's public hostname and contact email in the
 single form. Click **Save**. Arrowcast registers a random
-`arrowcast-<id>.dynv6.net` hostname and attempts to configure HTTPS. If the public
+`<id>.dynv6.net` hostname and attempts to configure HTTPS. If the public
 hostname does not yet resolve to this installation, the form shows the CNAME
 record to create. Retrying Save reuses the saved hostname and token, including
 after a restart or an interrupted request.
@@ -365,7 +365,7 @@ Enter the club's public hostname, for example `scores.club.nl`. The settings sho
 the CNAME record to create at the club's existing DNS provider:
 
 ```dns
-scores.club.nl. CNAME arrowcast-<id>.dynv6.net.
+scores.club.nl. CNAME <id>.dynv6.net.
 ```
 
 Remove conflicting A/AAAA records at that name, wait for DNS propagation, then
