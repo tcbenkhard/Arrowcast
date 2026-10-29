@@ -247,7 +247,7 @@ test('editing the current range adds and removes lanes and persists distances', 
   }
 });
 
-test('create competitions, validate times, select lane distances and preserve chronological order after reload', async ({
+test('create competitions, validate times, select lane distances and preserve newest-date-first order after reload', async ({
   page,
 }) => {
   for (const [name, date, start] of [
@@ -273,12 +273,10 @@ test('create competitions, validate times, select lane distances and preserve ch
     await expect(page.getByRole('button', { name: 'Add', exact: true })).toBeFocused();
     await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText(rangeName);
   }
+  const expectedOrder = ['Later browser competition', 'Morning browser competition', 'Afternoon browser competition'];
+  await expect(page.locator('tbody tr th')).toHaveText(expectedOrder);
   await page.reload();
-  await expect(page.locator('tbody tr th')).toHaveText([
-    'Morning browser competition',
-    'Afternoon browser competition',
-    'Later browser competition',
-  ]);
+  await expect(page.locator('tbody tr th')).toHaveText(expectedOrder);
   await expect(page.getByRole('row', { name: /Morning browser competition/ })).toContainText(rangeName);
 });
 
