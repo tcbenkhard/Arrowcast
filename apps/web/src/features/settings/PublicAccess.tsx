@@ -2,9 +2,9 @@ import type { FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { t } from '../../i18n';
 import { managementRequest } from '../../lib/http';
+import { AppliedSettings } from './AppliedSettings';
 import { ArrowcastHostname } from './ArrowcastHostname';
 import { SettingsCard } from './SettingsCard';
-import { AppliedSettings } from './AppliedSettings';
 
 const failureMessages = {
   dns: 'PublicAccess.errorDns',
@@ -138,7 +138,26 @@ export function PublicAccess({ token, onUnauthorized }: { token: string; onUnaut
   async function copyDdnsHostname() {
     if (!state?.ddns?.hostname) return;
     try {
-      await navigator.clipboard.writeText(state.ddns.hostname);
+      try {
+        await navigator.clipboard.writeText(state.ddns.hostname);
+      } catch {
+        // Local HTTP management pages may not have access to the Clipboard API.
+        const previousFocus = document.activeElement;
+        const input = document.createElement('textarea');
+        input.value = state.ddns.hostname;
+        input.readOnly = true;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.append(input);
+        try {
+          input.focus();
+          input.select();
+          if (!document.execCommand('copy')) throw new Error('Copy failed');
+        } finally {
+          input.remove();
+          if (previousFocus instanceof HTMLElement) previousFocus.focus();
+        }
+      }
       setCopyStatus('copied');
     } catch {
       setCopyStatus('failed');

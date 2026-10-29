@@ -68,6 +68,18 @@ test('DDNS uses one compact form and Save registers the hostname and configures 
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('arrowcast-test.dynv6.net');
   await expect(form).toHaveCount(0);
   await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+  });
+  await page.getByRole('button', { name: 'Copy dynv6 hostname', exact: true }).click();
+  await expect(page.getByText('dynv6 hostname copied.', { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(async () => {
+      Reflect.deleteProperty(navigator, 'clipboard');
+      return navigator.clipboard.readText();
+    }),
+  ).toBe('arrowcast-test.dynv6.net');
+  await page.evaluate(() => {
+    document.execCommand = () => false;
     navigator.clipboard.writeText = async () => {
       throw new Error('Clipboard unavailable');
     };
