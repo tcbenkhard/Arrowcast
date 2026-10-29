@@ -1,0 +1,1 @@
+ALTER TABLE `competitions` ADD `scores_synced_at` integer;

@@ -108,10 +108,20 @@ def nginx(value, https):
     root /opt/arrowcast/current/apps/web/dist;
     access_log off;
     error_log syslog:server=unix:/dev/log,tag=arrowcast_web warn;
-    client_max_body_size 16k;
     add_header Referrer-Policy no-referrer always;
     if (-f /var/lib/arrowcast-update/maintenance) {{ return 503; }}
+    location = /api/scores {{
+        limit_except POST {{ deny all; }}
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host {domain};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }}
+    # Prevent nginx from redirecting the bare API prefix to the proxied location.
+    location = /api/v1/scoring {{ return 404; }}
     location ^~ /api/v1/scoring/ {{
+        client_max_body_size 16k;
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host {domain};

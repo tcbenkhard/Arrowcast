@@ -62,7 +62,7 @@ test('migrations run once and the admin seed never resets an existing account', 
     try {
       assert.equal(
         (client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count,
-        24,
+        27,
       );
       assert.equal((client.prepare('SELECT count(*) AS count FROM users').get() as { count: number }).count, 2);
       client.prepare('DELETE FROM users WHERE username = ?').run('another-admin');
@@ -88,8 +88,8 @@ test('data model simplification migrates existing scoring and logbook data', () 
     cpSync(migrationsFolder, legacyMigrations, { recursive: true });
     rmSync(join(legacyMigrations, '0023_simplify_data_model.sql'));
     const journalPath = join(legacyMigrations, 'meta', '_journal.json');
-    const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { entries: unknown[] };
-    journal.entries.pop();
+    const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { entries: { idx: number }[] };
+    journal.entries = journal.entries.filter((entry) => entry.idx < 23);
     writeFileSync(journalPath, `${JSON.stringify(journal, null, 2)}\n`);
 
     const client = new SQLite(path);
@@ -130,6 +130,9 @@ test('data model simplification migrates existing scoring and logbook data', () 
     const upgraded = new DatabaseConnection(path);
     try {
       const raw = upgraded.db.$client;
+      assert.deepEqual(raw.prepare('SELECT scores_synced_at FROM competitions WHERE id = ?').get('competition'), {
+        scores_synced_at: null,
+      });
       assert.deepEqual(raw.prepare('SELECT * FROM logbook_entries').get(), {
         id: 'entry',
         participant_id: 'person',

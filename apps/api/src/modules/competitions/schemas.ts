@@ -43,6 +43,7 @@ const detailProperties = {
   numberOfRounds,
   arrowsPerRound,
   scoringLocked: { type: 'boolean' },
+  scoresSyncedAt: { type: ['integer', 'null'] },
   range: {
     type: 'object',
     additionalProperties: false,

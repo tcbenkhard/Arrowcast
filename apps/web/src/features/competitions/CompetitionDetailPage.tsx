@@ -8,6 +8,7 @@ import { managementRequest } from '../../lib/http';
 import { competitionStatuses } from './status';
 import type { CompetitionStatus } from './status';
 import { CompetitionStatusBadge } from './CompetitionStatusBadge';
+import { CompetitionSyncStatus } from './CompetitionSyncStatus';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { CompetitionDetailsModal } from './CompetitionDetailsModal';
@@ -36,6 +37,7 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
   const [detailsAction, setDetailsAction] = useState<'edit' | 'remove' | null>(null);
   const [detailsNotice, setDetailsNotice] = useState('');
   const [configurationRevision, setConfigurationRevision] = useState(0);
+  const mutationRevision = useRef(0);
   const editButton = useRef<HTMLButtonElement>(null);
   const removeButton = useRef<HTMLButtonElement>(null);
   const restoreDetailsFocus = useRef<'edit' | 'remove' | null>(null);
@@ -85,12 +87,16 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    let pending = false;
     setCompetition(null);
     setDetailsAction(null);
     setDetailsNotice('');
     setQrCodes([]);
     setError('');
-    void (async () => {
+    async function load(background = false) {
+      if (pending) return;
+      pending = true;
+      const revision = mutationRevision.current;
       try {
         const response = await managementRequest(
           `/api/v1/admin/competitions/${encodeURIComponent(competitionId!)}`,
@@ -112,13 +118,32 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
         }
         if (!response.ok) throw new Error(t('CompetitionDetailPage.loading_failed'));
         const result = (await response.json()) as Competition;
-        if (!controller.signal.aborted) setCompetition(result);
-      } catch {
         if (!controller.signal.aborted)
+          setCompetition((current) => {
+            if (!background) return result;
+            if (
+              !current ||
+              current.id !== result.id ||
+              (result.scoresSyncedAt != null && current.status !== result.status) ||
+              mutationRevision.current !== revision
+            )
+              return current;
+            return { ...current, scoresSyncedAt: result.scoresSyncedAt ?? null };
+          });
+      } catch {
+        if (!controller.signal.aborted && !background)
           setError(t('CompetitionDetailPage.could_not_load_competition_details_please_try_again'));
+      } finally {
+        pending = false;
       }
-    })();
-    return () => controller.abort();
+    }
+    void load();
+    const refresh = () => void load(true);
+    window.addEventListener('focus', refresh);
+    return () => {
+      controller.abort();
+      window.removeEventListener('focus', refresh);
+    };
   }, [competitionId, token, onUnauthorized, retry]);
 
   const nextStatus = competition ? competitionStatuses[competitionStatuses.indexOf(competition.status) + 1] : undefined;
@@ -185,6 +210,7 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
         throw new Error(result.message ?? t('CompetitionDetailPage.could_not_update_status_please_try_again'));
       }
       const result = (await response.json()) as Competition & { qrCodes?: LaneQrCode[] };
+      mutationRevision.current++;
       setCompetition(result);
       if (result.qrCodes) setQrCodes(result.qrCodes);
       if (status !== 'Check-in' && status !== 'Active') setQrCodes([]);
@@ -355,6 +381,7 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
                 <dd>{competition.arrowsPerRound}</dd>
               </div>
             </dl>
+            <CompetitionSyncStatus syncedAt={competition.scoresSyncedAt} />
             {statusError && (
               <p className="error" role="alert">
                 {message(statusError)}
@@ -390,6 +417,7 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
               onUnauthorized={onUnauthorized}
               onClose={closeDetailsModal}
               onSaved={(updated) => {
+                mutationRevision.current++;
                 setLaneSnapshot(undefined);
                 setParticipantSnapshot(undefined);
                 setConfigurationRevision((value) => value + 1);

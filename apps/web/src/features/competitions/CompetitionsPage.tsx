@@ -7,6 +7,7 @@ import { useModal } from '../../hooks/useModal';
 import { message, t } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { CompetitionStatusBadge } from './CompetitionStatusBadge';
+import { CompetitionSyncStatus } from './CompetitionSyncStatus';
 import { compareCompetitions, type CompetitionSummary as Competition } from './competition';
 
 interface AuthProps {
@@ -44,9 +45,12 @@ export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    let pending = false;
     setLoading(true);
     setError('');
-    void (async () => {
+    async function load(background = false) {
+      if (pending) return;
+      pending = true;
       try {
         const response = await managementRequest('/api/v1/admin/competitions', token, {
           headers: { Authorization: `Bearer ${token}` },
@@ -60,15 +64,34 @@ export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
         }
         if (!response.ok) throw new Error(t('CompetitionDetailPage.loading_failed'));
         const result = (await response.json()) as Competition[];
-        if (!controller.signal.aborted) setCompetitions(result.sort(compareCompetitions));
+        if (!controller.signal.aborted) {
+          const synced = new Map(result.map((competition) => [competition.id, competition]));
+          setCompetitions((current) =>
+            background
+              ? current.map((competition) => {
+                  const refreshed = synced.get(competition.id);
+                  return refreshed && (refreshed.scoresSyncedAt == null || refreshed.status === competition.status)
+                    ? { ...competition, scoresSyncedAt: refreshed.scoresSyncedAt ?? null }
+                    : competition;
+                })
+              : result.sort(compareCompetitions),
+          );
+        }
       } catch {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted && !background)
           setError(t('CompetitionsPage.could_not_load_competitions_check_your_connection_and_try'));
       } finally {
+        pending = false;
         if (!controller.signal.aborted) setLoading(false);
       }
-    })();
-    return () => controller.abort();
+    }
+    void load();
+    const refresh = () => void load(true);
+    window.addEventListener('focus', refresh);
+    return () => {
+      controller.abort();
+      window.removeEventListener('focus', refresh);
+    };
   }, [token, onUnauthorized, retry]);
 
   function closeModal() {
@@ -125,6 +148,9 @@ export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
                 <th scope="col">{t('CompetitionsPage.time')}</th>
                 <th scope="col">{t('CompetitionDetailPage.range')}</th>
                 <th scope="col">{t('CompetitionDetailPage.status')}</th>
+                <th scope="col" className="competition-sync-column">
+                  <span className="visually-hidden">{t('CompetitionSyncStatus.synchronization')}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -142,6 +168,9 @@ export function CompetitionsPage({ token, onUnauthorized }: AuthProps) {
                   <td>{competition.range.name}</td>
                   <td>
                     <CompetitionStatusBadge status={competition.status} />
+                  </td>
+                  <td className="competition-sync-column">
+                    <CompetitionSyncStatus syncedAt={competition.scoresSyncedAt} compact />
                   </td>
                 </tr>
               ))}

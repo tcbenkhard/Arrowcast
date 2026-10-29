@@ -3,6 +3,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseContext } from './db/context.js';
 import type { AuthConfig } from './modules/auth/config.js';
+import { apiTokenRoutes } from './modules/api-tokens/routes.js';
 import { accountRoutes, authRoutes } from './modules/auth/routes.js';
 import { AuthenticationService } from './modules/auth/service.js';
 import { administratorOnly, authenticatedManagement, passwordChanged } from './modules/auth/policies.js';
@@ -44,6 +45,7 @@ export async function apiRoutes(app: FastifyInstance, config: AuthConfig & { con
         features.addHook('onRequest', passwordChanged(context));
         await features.register(async (settings) => {
           settings.addHook('onRequest', administratorOnly);
+          await settings.register(apiTokenRoutes, { context });
           await settings.register(clubSettingsRoutes, { context });
           await settings.register(userRoutes, { context });
           await settings.register(updateRoutes);

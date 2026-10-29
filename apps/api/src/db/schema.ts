@@ -26,6 +26,22 @@ export const users = sqliteTable('users', {
   sessionVersion: integer('session_version').notNull().default(0),
 });
 
+export const apiTokens = sqliteTable(
+  'api_tokens',
+  {
+    id: text('id').notNull().unique(),
+    name: text('naam').notNull(),
+    tokenHash: text('token_hash').primaryKey(),
+    createdDate: integer('created_date').notNull(),
+  },
+  (table) => [
+    check(
+      'api_tokens_name_valid',
+      sql`length(${table.name}) BETWEEN 1 AND 100 AND ${table.name} = trim(${table.name})`,
+    ),
+  ],
+);
+
 export const clubs = sqliteTable(
   'clubs',
   {
@@ -149,6 +165,7 @@ export const competitions = sqliteTable(
     arrowsPerRound: integer('arrows_per_round').notNull().default(3),
     defaultTargetType: text('default_target_type').references(() => targetTypes.name),
     scoringLocked: integer('scoring_locked', { mode: 'boolean' }).notNull().default(false),
+    scoresSyncedAt: integer('scores_synced_at'),
   },
   (table) => [
     unique('competitions_id_range_unique').on(table.id, table.rangeId),

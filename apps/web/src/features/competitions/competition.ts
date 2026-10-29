@@ -7,6 +7,7 @@ export interface CompetitionSummary {
   startingTime: string;
   endingTime: string;
   status: CompetitionStatus;
+  scoresSyncedAt?: number | null;
   range: { id: string; name: string };
 }
 

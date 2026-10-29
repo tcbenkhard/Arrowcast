@@ -354,10 +354,59 @@ URLs to the fixed public HTTPS hostname on external port 443. Other HTTP paths,
 including `/admin` and the login API, return 404. On port 80 the public virtual
 host matches only the configured public hostname, keeping local administration
 separate. HTTPS on 443 and 8443 serves `/scores`, `/scores/`, `/assets/` and
-`/api/v1/scoring/`; all other paths return 404. `/scoring/` only redirects existing
-printed QR links to `/scores/`, preserving the QR fragment and query parameters.
+`/api/v1/scoring/`, plus `POST /api/scores`; all other paths return 404.
+`/scoring/` only redirects existing printed QR links to `/scores/`, preserving the
+QR fragment and query parameters.
 The scoring API keeps its existing cookie path and QR authentication. The `/scores`
 landing page asks the visitor to scan a lane QR and contains no administration link.
+
+The integration endpoint `POST /api/scores` requires an API key in the
+`Authorization: Bearer <token>` header. Generate a named key in **Settings > API Keys**
+on the local management website. Copy it immediately: the token is displayed only
+when generated, and the database stores only its hash. Other methods on this exact
+path are rejected by nginx; key management remains available only through local administration.
+Use **Revoke** next to a key in **Settings > API Keys** to remove it. Requests using
+that key are rejected immediately; other keys remain valid.
+
+The standalone [OpenAPI specification](openapi.yaml) documents the integration
+contract for external clients. Use [api.http](../api.http) for local requests;
+select the `localhost` environment and store its `apiToken` in the ignored
+`http-client.private.env.json` file.
+
+```sh
+curl --request POST https://scores.yourclub.nl/api/scores \
+  --header "Content-Type: application/json" \
+  --header "Authorization: Bearer $ARROWCAST_API_TOKEN" \
+  --data '{"verenigingsnummer":1241,"date":"2026-10-05","starttime":"10:00"}'
+```
+
+`verenigingsnummer` must equal the club number selected in **Settings**. The
+endpoint selects the first competition matching `date` and `starttime` exactly.
+If several competitions match, the lowest competition ID is selected.
+It returns HTTP 400 with `{"message":"Verkeerde vereniging"}` for a different
+club or when no club is configured, HTTP 404 with `{"message":"Wedstrijd niet gevonden"}`
+when there is no matching competition, and HTTP 409 with
+`{"message":"De wedstrijd is nog niet afgesloten"}` until that competition is closed.
+A closed competition returns HTTP 200 with the total submitted score per present
+participant, preserving membership numbers as strings:
+
+```json
+{
+  "results": [
+    { "score": 276, "lidnummer": "100001", "boogtype": "C" },
+    { "score": 254, "lidnummer": "174855", "boogtype": "R" }
+  ]
+}
+```
+
+Bow type codes are `R` (Recurve), `C` (Compound), `BB` (Barebow), `LB` (Longbow)
+and `TR` (Traditional), using each participant's registration for that competition.
+An attendee with a missing or unsupported bow type causes HTTP 409 with their
+membership number in the message, so the registration can be corrected.
+
+A successful results request records the last synchronization time shown in the
+competition details and overview. Failed requests leave it unchanged. Reopening
+a competition clears the marker until its results are retrieved successfully again.
 
 The root-owned `arrowcast-public.service` accepts validated settings through a
 group-restricted Unix socket. Certbot uses HTTP-01 webroot validation. Settings

@@ -9,6 +9,7 @@ import { SettingsCard } from './SettingsCard';
 import { Updates } from './Updates';
 import { Users } from './Users';
 import { Club } from './Club';
+import { ApiKeys } from './ApiKeys';
 
 export function SettingsPage({ token, onUnauthorized }: { token: string; onUnauthorized: (message: string) => void }) {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export function SettingsPage({ token, onUnauthorized }: { token: string; onUnaut
         <Updates token={token} onUnauthorized={onUnauthorized} />
         <Network token={token} onUnauthorized={onUnauthorized} />
         <PublicAccess token={token} onUnauthorized={onUnauthorized} />
+        <ApiKeys token={token} onUnauthorized={onUnauthorized} />
         <ParticipantImport token={token} onUnauthorized={onUnauthorized} />
         <SettingsCard id="advanced" icon="settings" title={t('Logs.advanced')}>
           <button onClick={() => navigate('/admin/logs')}>{t('Logs.view')}</button>

@@ -1,0 +1,109 @@
+# Start de API met npm run dev:api en kies bij Run with de omgeving localhost.
+# apiToken staat in http-client.private.env.json (genegeerd door Git).
+# De testsleutel heet Local HTTP client in Instellingen > API Keys.
+# OpenAPI-specificatie voor de klant: docs/openapi.yaml.
+# De wedstrijdwaarden hieronder komen uit de lokale database; pas ze zo nodig aan.
+@baseUrl = http://{{hostname}}
+@clubNumber = 1241
+@competitionDate = 2026-10-22
+@competitionStarttime = 10:00
+@openCompetitionDate = 2026-10-21
+@openCompetitionStarttime = 10:00
+
+### 200 - Uitslag ophalen met alleen de API-key, zonder Content-Type
+# @no-cookie-jar
+POST {{baseUrl}}/api/scores
+Authorization: Bearer {{apiToken}}
+
+{
+  "verenigingsnummer": {{clubNumber}},
+  "date": "2026-10-21",
+  "starttime": "10:00"
+}
+
+> {%
+  client.test('Afgesloten wedstrijd geeft een uitslag', function () {
+    client.assert(response.status === 200, 'Verwacht HTTP 200');
+    client.assert(Array.isArray(response.body.results), 'results moet een array zijn');
+    response.body.results.forEach(function (result) {
+      client.assert(Number.isInteger(result.score) && result.score >= 0, 'score moet een positief geheel getal of nul zijn');
+      client.assert(typeof result.lidnummer === 'string', 'lidnummer moet een string zijn');
+      client.assert(['R', 'C', 'BB', 'LB', 'TR'].includes(result.boogtype), 'Onbekende boogcode');
+    });
+  });
+%}
+
+### 400 - Verkeerde vereniging
+# @no-cookie-jar
+POST {{baseUrl}}/api/scores
+Content-Type: application/json
+Authorization: Bearer {{apiToken}}
+
+{
+  "verenigingsnummer": 1242,
+  "date": "{{competitionDate}}",
+  "starttime": "{{competitionStarttime}}"
+}
+
+> {%
+  client.test('Verkeerde vereniging wordt afgewezen', function () {
+    client.assert(response.status === 400, 'Verwacht HTTP 400');
+    client.assert(response.body.message === 'Verkeerde vereniging', 'Verwacht de verenigingsmelding');
+  });
+%}
+
+### 404 - Geen wedstrijd op deze datum en starttijd
+# @no-cookie-jar
+POST {{baseUrl}}/api/scores
+Content-Type: application/json
+Authorization: Bearer {{apiToken}}
+
+{
+  "verenigingsnummer": {{clubNumber}},
+  "date": "2099-12-31",
+  "starttime": "23:59"
+}
+
+> {%
+  client.test('Ontbrekende wedstrijd geeft HTTP 404', function () {
+    client.assert(response.status === 404, 'Verwacht HTTP 404');
+    client.assert(response.body.message === 'Wedstrijd niet gevonden', 'Verwacht de wedstrijdmelding');
+  });
+%}
+
+### 409 - Wedstrijd is nog niet afgesloten
+# @no-cookie-jar
+POST {{baseUrl}}/api/scores
+Content-Type: application/json
+Authorization: Bearer {{apiToken}}
+
+{
+  "verenigingsnummer": {{clubNumber}},
+  "date": "{{openCompetitionDate}}",
+  "starttime": "{{openCompetitionStarttime}}"
+}
+
+> {%
+  client.test('Open wedstrijd geeft HTTP 409', function () {
+    client.assert(response.status === 409, 'Verwacht HTTP 409');
+    client.assert(response.body.message === 'De wedstrijd is nog niet afgesloten', 'Verwacht de statusmelding');
+  });
+%}
+
+### 401 - API-key ontbreekt
+# @no-cookie-jar
+POST {{baseUrl}}/api/scores
+Content-Type: application/json
+
+{
+  "verenigingsnummer": {{clubNumber}},
+  "date": "{{competitionDate}}",
+  "starttime": "{{competitionStarttime}}"
+}
+
+> {%
+  client.test('Zonder API-key wordt het request afgewezen', function () {
+    client.assert(response.status === 401, 'Verwacht HTTP 401');
+    client.assert(response.body.message === 'Invalid or missing API key.', 'Verwacht de API-keymelding');
+  });
+%}

@@ -169,6 +169,27 @@
       "when": 1793004738328,
       "tag": "0023_simplify_data_model",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1793258474386,
+      "tag": "0024_api_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1793258996761,
+      "tag": "0025_api_token_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1793260554906,
+      "tag": "0026_competition_scores_sync",
+      "breakpoints": true
     }
   ]
 }

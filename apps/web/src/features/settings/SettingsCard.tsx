@@ -10,6 +10,7 @@ export function SettingsCard({
   icon,
   defaultExpanded = false,
   forceExpanded = false,
+  onExpandedChange,
   children,
 }: {
   id: string;
@@ -17,6 +18,7 @@ export function SettingsCard({
   icon: IconName;
   defaultExpanded?: boolean;
   forceExpanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   children: ReactNode;
 }) {
   const [manuallyExpanded, setExpanded] = useState(defaultExpanded);
@@ -39,7 +41,10 @@ export function SettingsCard({
           aria-expanded={expanded}
           aria-controls={`${id}-content`}
           disabled={forceExpanded}
-          onClick={() => setExpanded((value) => !value)}
+          onClick={() => {
+            setExpanded(!expanded);
+            onExpandedChange?.(!expanded);
+          }}
         >
           <svg className="panel-caret" viewBox="0 0 24 24" aria-hidden="true">
             <path d="m9 5 7 7-7 7" />

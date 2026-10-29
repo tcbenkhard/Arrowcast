@@ -22,6 +22,19 @@ export class ScoringDatabaseClient extends DatabaseClient {
     return this.db.select().from(competitions).where(eq(competitions.id, id)).get();
   }
 
+  findCompetitionBySchedule(date: string, startingTime: string) {
+    return this.db
+      .select()
+      .from(competitions)
+      .where(and(eq(competitions.date, date), eq(competitions.startingTime, startingTime)))
+      .orderBy(competitions.id)
+      .get();
+  }
+
+  markScoresSynchronized(competitionId: string, scoresSyncedAt: number) {
+    this.db.update(competitions).set({ scoresSyncedAt }).where(eq(competitions.id, competitionId)).run();
+  }
+
   listCompetitionLanes(competitionId: string) {
     return this.db
       .select({ laneId: lanes.id, laneNumber: lanes.number })
@@ -345,6 +358,7 @@ export class ScoringDatabaseClient extends DatabaseClient {
       .select({
         participantId: participants.id,
         federationNumber: participants.federationNumber,
+        bowType: competitionParticipants.bowType,
         clubNumber: clubs.clubNumber,
         clubName: clubs.name,
       })

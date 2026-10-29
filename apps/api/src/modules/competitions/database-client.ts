@@ -29,6 +29,7 @@ const competitionFields = {
   numberOfRounds: competitions.numberOfRounds,
   arrowsPerRound: competitions.arrowsPerRound,
   scoringLocked: competitions.scoringLocked,
+  scoresSyncedAt: competitions.scoresSyncedAt,
   defaultTargetType: competitions.defaultTargetType,
   range: { id: ranges.id, name: ranges.name },
 };
@@ -94,7 +95,7 @@ export class CompetitionDatabaseClient extends DatabaseClient {
   ) {
     return this.db
       .update(competitions)
-      .set({ status })
+      .set({ status, scoresSyncedAt: null })
       .where(and(eq(competitions.id, id), eq(competitions.status, expectedStatus)))
       .returning()
       .get();

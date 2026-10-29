@@ -1,0 +1,205 @@
+openapi: 3.0.3
+info:
+  title: Arrowcast uitslagen-API
+  version: 1.0.0
+  description: |
+    Dit request vraagt de resultaten op van een wedstrijd die begon op het opgevraagde datum/tijdstip. De score van de wedstrijd wordt teruggegeven mits de wedstrijd afgerond is.
+servers:
+  - url: https://{host}
+    description: Productie; vul de door de vereniging verstrekte hostnaam in
+    variables:
+      host:
+        default: arrowcast.example.com
+        description: Publieke hostnaam van deze Arrowcast-installatie
+security:
+  - ApiKeyBearer: []
+tags:
+  - name: Uitslagen
+    description: Uitslagen van afgesloten wedstrijden ophalen
+paths:
+  /api/scores:
+    post:
+      tags: [Uitslagen]
+      operationId: getCompetitionResults
+      summary: Haal de uitslag van een afgesloten wedstrijd op
+      description: |
+        Dit request vraagt de resultaten op van een wedstrijd die begon op het opgevraagde datum/tijdstip. De score van de wedstrijd wordt teruggegeven mits de wedstrijd afgerond is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScoresRequest'
+            example:
+              verenigingsnummer: 1241
+              date: '2026-10-05'
+              starttime: '10:00'
+      responses:
+        '200':
+          description: De wedstrijd is afgesloten; de uitslag is beschikbaar.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoresResponse'
+              examples:
+                uitslag:
+                  summary: Uitslag met twee deelnemers
+                  value:
+                    results:
+                      - score: 276
+                        lidnummer: '100001'
+                        boogtype: C
+                      - score: 254
+                        lidnummer: '174855'
+                        boogtype: R
+                geenDeelnemers:
+                  summary: Geen aanwezige deelnemers
+                  value:
+                    results: []
+        '400':
+          description: |
+            Verkeerde of niet ingestelde vereniging, ongeldige JSON, of een body
+            die niet aan het requestschema voldoet. Er vindt geen typeconversie plaats:
+            `verenigingsnummer` moet een JSON-getal zijn, geen string.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/MessageError'
+                  - $ref: '#/components/schemas/HttpError'
+              examples:
+                verkeerdeVereniging:
+                  value:
+                    message: Verkeerde vereniging
+                ontbrekendVeld:
+                  value:
+                    statusCode: 400
+                    code: FST_ERR_VALIDATION
+                    error: Bad Request
+                    message: "body must have required property 'starttime'"
+        '401':
+          description: De API-key ontbreekt, heeft een ongeldig formaat, is onbekend of is ingetrokken.
+          headers:
+            WWW-Authenticate:
+              description: Het vereiste authenticatieschema.
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Invalid or missing API key.
+        '404':
+          description: Geen wedstrijd gevonden met de opgegeven datum en starttijd.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              example:
+                message: Wedstrijd niet gevonden
+        '409':
+          description: De gevonden wedstrijd is nog niet afgesloten.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageError'
+              examples:
+                nogNietAfgesloten:
+                  value:
+                    message: De wedstrijd is nog niet afgesloten
+components:
+  securitySchemes:
+    ApiKeyBearer:
+      type: http
+      scheme: bearer
+      description: |
+        Uitsluitend de API-key is nodig: `Authorization: Bearer <API_KEY>`.
+        Gebruik het volledige token van 43 tekens dat de vereniging verstrekt.
+        De key is geen JWT en hoeft niet via een login te worden uitgewisseld.
+        Intrekken van de key maakt deze direct ongeldig.
+  headers:
+    NoStore:
+      description: De response mag niet worden gecachet.
+      schema:
+        type: string
+        enum: [no-store]
+  schemas:
+    ScoresRequest:
+      type: object
+      additionalProperties: false
+      required: [verenigingsnummer, date, starttime]
+      properties:
+        verenigingsnummer:
+          type: integer
+          minimum: 1
+          description: Verenigingsnummer dat in deze Arrowcast-installatie is ingesteld.
+          example: 1241
+        date:
+          type: string
+          format: date
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          description: Wedstrijddatum zoals vastgelegd in Arrowcast, als YYYY-MM-DD.
+          example: '2026-10-05'
+        starttime:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Starttijd zoals vastgelegd in Arrowcast, als HH:mm in 24-uursnotatie, zonder seconden of tijdzone.
+          example: '10:00'
+    ScoresResponse:
+      type: object
+      additionalProperties: false
+      required: [results]
+      properties:
+        results:
+          type: array
+          description: Uitslag van alle aanwezige deelnemers; kan leeg zijn.
+          items:
+            $ref: '#/components/schemas/ScoreResult'
+    ScoreResult:
+      type: object
+      additionalProperties: false
+      required: [score, lidnummer, boogtype]
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          description: Totale score van de ingediende rondes; een misser telt als nul.
+          example: 276
+        lidnummer:
+          type: string
+          description: Bondsnummer van de deelnemer; behandel dit als string om voorloopnullen te behouden.
+          example: '001001'
+        boogtype:
+          type: string
+          enum: [R, C, BB, LB, TR]
+          description: 'R = Recurve, C = Compound, BB = Barebow, LB = Longbow, TR = Traditional.'
+          example: C
+    MessageError:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: Beschrijving van de fout.
+    HttpError:
+      type: object
+      required: [statusCode, error, message]
+      properties:
+        statusCode:
+          type: integer
+          description: HTTP-statuscode.
+        error:
+          type: string
+          description: HTTP-foutnaam.
+        message:
+          type: string
+          description: Foutdetails; de exacte tekst van technische validatiefouten kan wijzigen.
+        code:
+          type: string
+          description: Optionele technische foutcode.

@@ -1,3 +1,13 @@
+export interface ApiTokenSummary {
+  id: string;
+  name: string;
+  createdDate: number;
+}
+
+export interface CreatedApiToken extends ApiTokenSummary {
+  token: string;
+}
+
 export interface LaneQrCode {
   grantId: string;
   laneId: string;

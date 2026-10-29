@@ -4,6 +4,7 @@ import type { AuthConfig } from './modules/auth/config.js';
 import { apiRoutes } from './api.js';
 import { DatabaseConnection } from './db/index.js';
 import { AdminBootstrapService } from './modules/auth/bootstrap-service.js';
+import { apiScoringRoutes } from './modules/scoring/api-routes.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { applicationErrorHandler } from './shared/http-errors.js';
@@ -29,6 +30,7 @@ export function buildApp(config: AuthConfig = readAuthConfig()) {
   app.addHook('onClose', async () => database.close());
   app.register(async (api) => {
     await new AdminBootstrapService(database.context).initialize();
+    await api.register(apiScoringRoutes, { context: database.context, prefix: '/api' });
     await api.register(apiRoutes, { ...config, context: database.context, prefix: '/api/v1' });
   });
   return app;

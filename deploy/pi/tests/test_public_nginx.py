@@ -2,6 +2,7 @@
 import http.client
 import http.server
 import importlib.util
+import json
 from pathlib import Path
 import shutil
 import ssl
@@ -46,6 +47,7 @@ class PublicNginxTests(unittest.TestCase):
             local = (FILES / 'nginx.conf').read_text().replace('/opt/arrowcast/current/apps/web/dist', str(web))
             local = local.replace('listen 80', 'listen 18080').replace('[::]:80', '[::]:18080')
             conf = root / 'nginx.conf'
+            scoring_requests = []
 
             class API(http.server.BaseHTTPRequestHandler):
                 def do_GET(self):
@@ -54,6 +56,23 @@ class PublicNginxTests(unittest.TestCase):
                     self.wfile.write(self.path.encode())
 
                 def do_POST(self):
+                    if self.path.split('?')[0] == '/api/scores':
+                        scoring_requests.append({
+                            'path': self.path,
+                            'body': self.rfile.read(int(self.headers.get('Content-Length', '0'))),
+                            'authorization': self.headers.get('Authorization'),
+                            'content_type': self.headers.get('Content-Type'),
+                            'host': self.headers.get('Host'),
+                            'protocol': self.headers.get('X-Forwarded-Proto'),
+                            'address': self.headers.get('X-Forwarded-For'),
+                        })
+                        body = b'{"results":[{"score":276,"lidnummer":"100001","boogtype":"C"}]}'
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Content-Length', str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
                     self.do_GET()
 
                 def log_message(self, *_args):
@@ -105,8 +124,16 @@ class PublicNginxTests(unittest.TestCase):
                         self.assertEqual(response.getheader('Location'), 'https://scores.club.nl/scores')
                         response.read()
                         connection.close()
+                        connection = http.client.HTTPConnection('127.0.0.1', port)
+                        connection.request('POST', '/api/scores', headers={'Host': 'scores.club.nl'})
+                        response = connection.getresponse()
+                        self.assertEqual(response.status, 404)
+                        response.read()
+                        connection.close()
                     for path, expected in [('/', 404), ('/admin', 404), ('/admin/settings', 404),
                                            ('/api/v1/admin/me', 404), ('/api/v1/auth/login', 404),
+                                           ('/api/v1/admin/api-tokens', 404), ('/api/v1/scoring', 404),
+                                           ('/api/scores-other', 404), ('/api/scores/', 404),
                                            ('/scores', 200), ('/scores/competition/lane/grant', 200), ('/assets/app.css', 200),
                                            ('/api/v1/scoring/grant/context', 200)]:
                         with self.subTest(path=path):
@@ -125,13 +152,55 @@ class PublicNginxTests(unittest.TestCase):
                         self.assertEqual(response.getheader('Location'), 'https://scores.club.nl/scores/competition/lane/grant?lang=nl')
                         response.read()
                         connection.close()
-                        for path, status in [('/admin',404),('/api/v1/admin/me',404),('/scores',200)]:
+                        for path, status in [('/admin',404),('/api/v1/admin/me',404),
+                                             ('/api/v1/scoring',404),('/api/v1/scoring?source=integration',404),
+                                             ('/scores',200)]:
                             connection = http.client.HTTPSConnection('127.0.0.1', port, context=ssl._create_unverified_context())
                             connection.request('GET', path)
                             response = connection.getresponse()
                             self.assertEqual(response.status,status)
                             response.read()
                             connection.close()
+                        connection = http.client.HTTPSConnection('127.0.0.1', port, context=ssl._create_unverified_context())
+                        request_body = b'{"verenigingsnummer":1241,"date":"2026-10-05","starttime":"10:00"}'
+                        connection.request('POST', '/api/scores?source=integration', request_body, headers={
+                            'Authorization': 'Bearer generated-api-key',
+                            'Content-Type': 'application/json',
+                            'X-Forwarded-Proto': 'http',
+                            'X-Forwarded-For': '203.0.113.1',
+                        })
+                        response = connection.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(json.loads(response.read()), {
+                            'results': [{'score': 276, 'lidnummer': '100001', 'boogtype': 'C'}],
+                        })
+                        self.assertIsNone(response.getheader('Location'))
+                        connection.close()
+                        self.assertEqual(scoring_requests[-1], {
+                            'path': '/api/scores?source=integration',
+                            'body': request_body,
+                            'authorization': 'Bearer generated-api-key',
+                            'content_type': 'application/json',
+                            'host': 'scores.club.nl',
+                            'protocol': 'https',
+                            'address': '127.0.0.1',
+                        })
+                        for method in ('GET', 'HEAD', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'):
+                            with self.subTest(port=port, method=method):
+                                connection = http.client.HTTPSConnection('127.0.0.1', port, context=ssl._create_unverified_context())
+                                connection.request(method, '/api/scores')
+                                response = connection.getresponse()
+                                self.assertEqual(response.status, 403)
+                                response.read()
+                                connection.close()
+                        for method in ('GET', 'POST'):
+                            connection = http.client.HTTPSConnection('127.0.0.1', port, context=ssl._create_unverified_context())
+                            connection.request(method, '/api/v1/admin/api-tokens')
+                            response = connection.getresponse()
+                            self.assertEqual(response.status, 404)
+                            response.read()
+                            connection.close()
+                    self.assertEqual(len(scoring_requests), 2)
                     connection = http.client.HTTPSConnection('127.0.0.1', 18443,
                                                            context=ssl._create_unverified_context())
                     connection.request('POST', '/api/v1/scoring/grant/scores', '{}')

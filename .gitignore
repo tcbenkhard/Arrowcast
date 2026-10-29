@@ -15,3 +15,4 @@ data/
 .pi-build/
 __pycache__/
 *.pyc
+/http-client.private.env.json
