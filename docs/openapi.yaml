@@ -20,6 +20,10 @@ paths:
       summary: Haal de uitslag van een afgesloten wedstrijd op
       description: |
         Dit request vraagt de resultaten op van een wedstrijd die begon op het opgevraagde datum/tijdstip. De score van de wedstrijd wordt teruggegeven mits de wedstrijd afgerond is.
+        Elk verzoek wordt vastgelegd in de synchronisatiehistorie met het ontvangsttijdstip,
+        de datum en starttijd uit de body (indien beschikbaar) en de geselecteerde wedstrijd
+        (indien gevonden), de naam van de gebruikte API-key (indien herkend), de HTTP-status
+        en bij fouten de foutmelding. De geheime key zelf wordt niet opgeslagen. Beheerders kunnen deze historie onder Geavanceerd bij de logs bekijken.
       requestBody:
         required: true
         content:

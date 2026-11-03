@@ -20,6 +20,14 @@ export class ApiTokenDatabaseClient extends DatabaseClient {
     this.db.delete(apiTokens).where(eq(apiTokens.id, id)).run();
   }
 
+  find(tokenHash: string): ApiTokenSummary | undefined {
+    return this.db
+      .select({ id: apiTokens.id, name: apiTokens.name, createdDate: apiTokens.createdDate })
+      .from(apiTokens)
+      .where(eq(apiTokens.tokenHash, tokenHash))
+      .get();
+  }
+
   exists(tokenHash: string) {
     return Boolean(
       this.db

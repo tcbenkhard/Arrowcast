@@ -276,6 +276,32 @@ test('logbook protects personal scores, resumes drafts and aggregates only compl
   });
   const restored = await restarted.inject({ url: '/api/v1/admin/logbook', headers: admin });
   assert.equal(restored.json()[0].averageScore, 245);
+  for (const path of ['', '/a', '/export']) {
+    const empty = await restarted.inject({ url: `/api/v1/admin/logbook${path}?from=0&to=1`, headers: admin });
+    assert.equal(empty.statusCode, 200);
+    if (path !== '/export') assert.deepEqual(empty.json(), []);
+    else {
+      const book = read(empty.rawPayload, { type: 'buffer' });
+      assert.deepEqual(utils.sheet_to_json(book.Sheets[book.SheetNames[0]!]!, { header: 1 }), [exportHeaders]);
+    }
+    assert.equal(
+      (await restarted.inject({ url: `/api/v1/admin/logbook${path}?from=2&to=1`, headers: admin })).statusCode,
+      400,
+    );
+  }
+  const completed = fixture.db
+    .select()
+    .from(logbookEntries)
+    .all()
+    .find((entry) => entry.completedAt !== null)!;
+  const bounds = `from=${completed.completedAt}&to=${completed.completedAt! + 1}`;
+  const filtered = await restarted.inject({ url: `/api/v1/admin/logbook/a?${bounds}`, headers: admin });
+  assert.ok(filtered.json().some((entry: { id: string }) => entry.id === completed.id));
+  const excluded = await restarted.inject({
+    url: `/api/v1/admin/logbook/a?to=${completed.completedAt}`,
+    headers: admin,
+  });
+  assert.ok(!excluded.json().some((entry: { id: string }) => entry.id === completed.id));
   // Five newer completions replace both older scores in the averages, but not the personal best.
   for (let index = 1; index <= 6; index++) {
     const id = `recent-${index}`;

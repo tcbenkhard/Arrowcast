@@ -404,3 +404,16 @@ export const logbookEntries = sqliteTable(
   },
   (table) => [index('logbook_entries_participant_completed_index').on(table.participantId, table.completedAt)],
 );
+
+// Snapshots preserve synchronization history when a competition is renamed or deleted.
+export const synchronizationRequests = sqliteTable('synchronization_requests', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  requestedAt: integer('requested_at').notNull(),
+  requestDate: text('request_date'),
+  requestTime: text('request_time'),
+  competitionId: text('competition_id'),
+  competitionName: text('competition_name'),
+  apiKeyName: text('api_key_name'),
+  statusCode: integer('status_code'),
+  errorMessage: text('error_message'),
+});

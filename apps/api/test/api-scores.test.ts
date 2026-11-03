@@ -441,3 +441,45 @@ test('reopening a synchronized competition clears its marker while rejected tran
   assert.equal((await f.fetch()).statusCode, 409);
   assert.equal(f.db.select().from(competitions).where(eq(competitions.id, 'competition')).get()!.scoresSyncedAt, null);
 });
+
+test('synchronization history records failed and successful requests and survives restart', async (t) => {
+  const f = await setup(t);
+  f.competition();
+  const before = Date.now();
+  assert.equal((await f.fetch()).statusCode, 200);
+  f.db.update(competitions).set({ status: 'Active' }).where(eq(competitions.id, 'competition')).run();
+  assert.equal((await f.fetch()).statusCode, 409);
+  assert.equal((await f.fetch({ ...request, date: '2026-10-06' })).statusCode, 404);
+  assert.equal((await f.app.inject({ method: 'POST', url: scoresUrl, payload: {} })).statusCode, 401);
+  f.tokens.revoke(f.key.id);
+  await f.restart();
+  const login = await loginAdmin(f.app);
+  const url = '/api/v1/admin/logs/synchronizations';
+  assert.equal((await f.app.inject({ url })).statusCode, 401);
+  const response = await f.app.inject({ url, headers: { authorization: `Bearer ${login.json().token}` } });
+  assert.equal(response.statusCode, 200);
+  const { entries } = response.json();
+  assert.equal(entries.length, 4);
+  assert.deepEqual(
+    entries.map((entry: { statusCode: number }) => entry.statusCode),
+    [401, 404, 409, 200],
+  );
+  assert.equal(entries[0].apiKeyName, null);
+  assert.equal(entries[0].errorMessage, 'Invalid or missing API key.');
+  assert.equal(entries[1].errorMessage, 'Wedstrijd niet gevonden');
+  assert.equal(entries[2].errorMessage, 'De wedstrijd is nog niet afgesloten');
+  assert.equal(entries[3].errorMessage, null);
+  for (const entry of entries.slice(1)) assert.equal(entry.apiKeyName, 'Scores integration');
+  assert.ok(!response.body.includes(f.key.token));
+  assert.equal(entries[0].competitionId, null);
+  assert.equal(entries[0].requestDate, null);
+  assert.equal(entries[1].requestDate, '2026-10-06');
+  assert.equal(entries[1].competitionId, null);
+  for (const entry of entries.slice(2)) {
+    assert.equal(entry.requestDate, request.date);
+    assert.equal(entry.requestTime, request.starttime);
+    assert.equal(entry.competitionId, 'competition');
+    assert.equal(entry.competitionName, 'Requested competition');
+    assert.ok(entry.requestedAt >= before);
+  }
+});

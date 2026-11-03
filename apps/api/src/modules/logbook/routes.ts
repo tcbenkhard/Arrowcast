@@ -114,31 +114,56 @@ export async function logbookRoutes(app: FastifyInstance, { context }: { context
 
 export async function adminLogbookRoutes(app: FastifyInstance, { context }: { context: DatabaseContext }) {
   const logbook = new LogbookService(context);
-  app.get('/logbook', async () => logbook.summary());
-  app.get<{ Querystring: { language?: 'nl' | 'en' } }>(
+  const rangeProperties = {
+    from: { type: 'string', pattern: '^[0-9]{1,15}$' },
+    to: { type: 'string', pattern: '^[0-9]{1,15}$' },
+  };
+  type RangeQuery = { from?: string; to?: string; language?: 'nl' | 'en' };
+  const parseRange = (query: RangeQuery) => ({
+    ...(query.from === undefined ? {} : { from: Number(query.from) }),
+    ...(query.to === undefined ? {} : { to: Number(query.to) }),
+  });
+  const rangeSchema = { type: 'object', additionalProperties: false, properties: rangeProperties };
+  const validateRange = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { from, to } = request.query as RangeQuery;
+    if (from !== undefined && to !== undefined && Number(from) >= Number(to)) {
+      return reply.code(400).send({ message: 'from must be before to' });
+    }
+  };
+  app.get<{ Querystring: RangeQuery }>(
+    '/logbook',
+    { preValidation: validateRange, schema: { querystring: rangeSchema } },
+    async (request) => logbook.summary(parseRange(request.query)),
+  );
+  app.get<{ Querystring: RangeQuery }>(
     '/logbook/export',
     {
+      preValidation: validateRange,
       schema: {
         querystring: {
           type: 'object',
           additionalProperties: false,
-          properties: { language: { type: 'string', enum: ['nl', 'en'] } },
+          properties: { ...rangeProperties, language: { type: 'string', enum: ['nl', 'en'] } },
         },
       },
     },
     async (request, reply) => {
-      const buffer = exportLogbook(logbook.summary(), request.query.language ?? 'nl');
+      const buffer = exportLogbook(logbook.summary(parseRange(request.query)), request.query.language ?? 'nl');
       return reply
         .type('application/vnd.ms-excel')
         .header('Content-Disposition', 'attachment; filename="scorelogboek.xls"')
         .send(buffer);
     },
   );
-  app.get<{ Params: { participantId: string } }>(
+  app.get<{ Params: { participantId: string }; Querystring: RangeQuery }>(
     '/logbook/:participantId',
     {
-      schema: { params: { type: 'object', required: ['participantId'], properties: { participantId: idSchema } } },
+      preValidation: validateRange,
+      schema: {
+        querystring: rangeSchema,
+        params: { type: 'object', required: ['participantId'], properties: { participantId: idSchema } },
+      },
     },
-    async (request) => logbook.history(request.params.participantId),
+    async (request) => logbook.history(request.params.participantId, parseRange(request.query)),
   );
 }

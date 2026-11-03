@@ -12,3 +12,5 @@ export type LogbookMutation = {
   finish: boolean;
 };
 export type LogbookSession = { context: LogbookContext; token?: string };
+
+export type LogbookRange = { from?: number; to?: number };

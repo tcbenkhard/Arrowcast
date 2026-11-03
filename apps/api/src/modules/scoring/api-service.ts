@@ -21,7 +21,7 @@ const bowCodes = new Map([
 export class ApiScoringService {
   constructor(private readonly context: DatabaseContext) {}
 
-  results(input: ApiScoresRequest) {
+  results(input: ApiScoresRequest, onSelected?: (competition: { id: string; name: string }) => void) {
     return this.context.transaction((context) => {
       const club = new ClubSettingsDatabaseClient(context).selected();
       if (club?.clubNumber !== String(input.verenigingsnummer)) {
@@ -31,6 +31,7 @@ export class ApiScoringService {
       const client = new ScoringDatabaseClient(context);
       const competition = client.findCompetitionBySchedule(input.date, input.starttime);
       if (!competition) throw new ApplicationError('Wedstrijd niet gevonden', 404);
+      onSelected?.(competition);
       if (competition.status !== 'Closed') {
         throw new ApplicationError('De wedstrijd is nog niet afgesloten', 409);
       }

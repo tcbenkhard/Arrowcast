@@ -55,3 +55,57 @@ test('logs recover automatically after a read failure and show empty logs', asyn
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByRole('tabpanel')).toHaveText('No log entries yet.');
 });
+
+for (const width of [1280, 375]) {
+  test(`synchronizations display request details and competition names at ${width}px`, async ({ page }) => {
+    await page.route('**/api/v1/admin/logs/*', (route) =>
+      route.fulfill({
+        json: {
+          text: '',
+          entries: route.request().url().endsWith('/synchronizations')
+            ? [
+                {
+                  id: 2,
+                  requestedAt: 1793698000000,
+                  requestDate: '2026-11-03',
+                  requestTime: '10:00',
+                  competitionId: 'competition',
+                  competitionName: 'Autumn competition',
+                  apiKeyName: 'Club integration',
+                  statusCode: 200,
+                  errorMessage: null,
+                },
+                {
+                  id: 1,
+                  requestedAt: 1793697000000,
+                  requestDate: '2026-11-02',
+                  requestTime: '09:00',
+                  competitionId: null,
+                  competitionName: null,
+                  apiKeyName: 'Club integration',
+                  statusCode: 404,
+                  errorMessage: 'Wedstrijd niet gevonden',
+                },
+              ]
+            : [],
+        },
+      }),
+    );
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript((token) => sessionStorage.setItem('arrowcast.admin.jwt', token), testAdminToken());
+    await page.goto('/admin/logs');
+    await page.getByRole('tab', { name: 'Synchronizations', exact: true }).click();
+    const rows = page.getByRole('tabpanel').getByRole('row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(1)).toContainText('Autumn competition');
+    await expect(rows.nth(1)).toContainText('2026-11-03 10:00');
+    await expect(rows.nth(2)).toContainText('No competition selected');
+    await expect(rows.nth(1)).toContainText('Succeeded (200)');
+    await expect(rows.nth(1)).toContainText('Club integration');
+    await expect(rows.nth(2)).toContainText('Failed (404)');
+    await expect(rows.nth(2)).toContainText('Club integration');
+    await expect(rows.nth(2)).toContainText('Wedstrijd niet gevonden');
+    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+}

@@ -2,10 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import { t } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 
-const sources = ['frontend', 'backend', 'updates'] as const;
+const sources = ['frontend', 'backend', 'updates', 'synchronizations'] as const;
+
+interface SynchronizationEntry {
+  id: number;
+  requestedAt: number;
+  requestDate: string | null;
+  requestTime: string | null;
+  competitionId: string | null;
+  competitionName: string | null;
+  apiKeyName: string | null;
+  statusCode: number | null;
+  errorMessage: string | null;
+}
 
 export function LogsPage({ token, onUnauthorized }: { token: string; onUnauthorized: (message: string) => void }) {
   const [source, setSource] = useState<(typeof sources)[number]>('frontend');
+  const [entries, setEntries] = useState<SynchronizationEntry[]>([]);
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -26,9 +39,10 @@ export function LogsPage({ token, onUnauthorized }: { token: string; onUnauthori
           return;
         }
         if (!response.ok) throw new Error();
-        const result = (await response.json()) as { text: string };
+        const result = (await response.json()) as { text: string; entries?: SynchronizationEntry[] };
         if (controller.signal.aborted) return;
-        setText(result.text);
+        setText(result.text ?? '');
+        setEntries(result.entries ?? []);
         setError('');
       } catch {
         if (!controller.signal.aborted) setError(t('Logs.unavailable'));
@@ -67,6 +81,7 @@ export function LogsPage({ token, onUnauthorized }: { token: string; onUnauthori
               if (item === source) return;
               setSource(item);
               setText('');
+              setEntries([]);
               setError('');
               setLoading(true);
               setPaused(false);
@@ -93,15 +108,25 @@ export function LogsPage({ token, onUnauthorized }: { token: string; onUnauthori
           </button>
         ))}
       </div>
-      <p>{t(source === 'frontend' ? 'Logs.frontendHint' : 'Logs.hint')}</p>
+      <p>
+        {t(
+          source === 'synchronizations'
+            ? 'Logs.synchronizationsHint'
+            : source === 'frontend'
+              ? 'Logs.frontendHint'
+              : 'Logs.hint',
+        )}
+      </p>
       <div className="log-controls">
         <button className="secondary" onClick={() => setPaused((value) => !value)}>
           {t(paused ? 'Logs.resume' : 'Logs.pause')}
         </button>
-        <label className="log-follow">
-          <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />
-          {t('Logs.follow')}
-        </label>
+        {source !== 'synchronizations' && (
+          <label className="log-follow">
+            <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />
+            {t('Logs.follow')}
+          </label>
+        )}
         <span role="status">{t(paused ? 'Logs.paused' : 'Logs.live')}</span>
       </div>
       {error && (
@@ -109,17 +134,67 @@ export function LogsPage({ token, onUnauthorized }: { token: string; onUnauthori
           {error}
         </p>
       )}
-      <pre
-        ref={output}
-        id="log-output"
-        className="log-output"
-        role="tabpanel"
-        aria-labelledby={`log-tab-${source}`}
-        aria-busy={loading}
-        tabIndex={0}
-      >
-        {text || t(loading ? 'Logs.loading' : 'Logs.empty')}
-      </pre>
+      {source === 'synchronizations' ? (
+        <div
+          id="log-output"
+          role="tabpanel"
+          aria-labelledby="log-tab-synchronizations"
+          aria-busy={loading}
+          tabIndex={0}
+          style={{ overflowX: 'auto' }}
+        >
+          {entries.length ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('Logs.requestedAt')}</th>
+                  <th>{t('Logs.requestSchedule')}</th>
+                  <th>{t('Logs.competition')}</th>
+                  <th>{t('Logs.apiKey')}</th>
+                  <th>{t('Logs.outcome')}</th>
+                  <th>{t('Logs.failureReason')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{new Date(entry.requestedAt).toLocaleString()}</td>
+                    <td>{[entry.requestDate, entry.requestTime].filter(Boolean).join(' ') || '?'}</td>
+                    <td title={entry.competitionId ?? undefined}>
+                      {entry.competitionName || entry.competitionId || t('Logs.noCompetition')}
+                    </td>
+                    <td>{entry.apiKeyName ?? t('Logs.unknownApiKey')}</td>
+                    <td>
+                      {entry.statusCode == null
+                        ? t('Logs.unknownOutcome')
+                        : `${t(entry.statusCode < 400 ? 'Logs.succeeded' : 'Logs.failed')} (${entry.statusCode})`}
+                    </td>
+                    <td>
+                      {entry.statusCode != null && entry.statusCode < 400
+                        ? t('Logs.notApplicable')
+                        : entry.errorMessage || '?'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p>{t(loading ? 'Logs.loading' : 'Logs.empty')}</p>
+          )}
+        </div>
+      ) : (
+        <pre
+          ref={output}
+          id="log-output"
+          className="log-output"
+          role="tabpanel"
+          aria-labelledby={`log-tab-${source}`}
+          aria-busy={loading}
+          tabIndex={0}
+        >
+          {text || t(loading ? 'Logs.loading' : 'Logs.empty')}
+        </pre>
+      )}
     </section>
   );
 }

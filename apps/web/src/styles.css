@@ -1551,3 +1551,11 @@ input.check-in-checkbox {
   min-width: 2.75rem;
   min-height: 2.75rem;
 }
+
+.logbook-time-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin-block: 1rem;
+}

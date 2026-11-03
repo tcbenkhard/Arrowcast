@@ -3,8 +3,8 @@ import { t } from '@arrowcast/contracts/i18n';
 import { calculateRoundTotal, isValidRound } from '@arrowcast/scoring';
 import type { DatabaseContext } from '../../db/context.js';
 import { ApplicationError } from '../../shared/errors.js';
-import { hashPassword, verifyPassword } from '../auth/password.js';
 import { hashToken, newToken } from '../../shared/tokens.js';
+import { hashPassword, verifyPassword } from '../auth/password.js';
 import { LogbookDatabaseClient } from './database-client.js';
 import type {
   LogbookContext,
@@ -123,12 +123,12 @@ export class LogbookService {
     return query ? this.logbook.searchParticipants(query) : [];
   }
 
-  history(participantId: string) {
+  history(participantId: string, range: { from?: number; to?: number } = {}) {
     this.requireParticipant(participantId);
-    return this.logbook.history(participantId);
+    return this.logbook.history(participantId, range);
   }
 
-  summary() {
-    return this.logbook.summary();
+  summary(range: { from?: number; to?: number } = {}) {
+    return this.logbook.summary(range);
   }
 }

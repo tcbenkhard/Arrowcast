@@ -1,8 +1,8 @@
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, lt, sql } from 'drizzle-orm';
 import { DatabaseClient, type DatabaseContext } from '../../db/context.js';
 import { clubs, logbookEntries, logbookPins, participants } from '../../db/schema.js';
 import { ClubSettingsDatabaseClient } from '../clubs/database-client.js';
-import type { LogbookEntry } from './types.js';
+import type { LogbookEntry, LogbookRange } from './types.js';
 
 export class LogbookDatabaseClient extends DatabaseClient {
   private readonly clubSettings: ClubSettingsDatabaseClient;
@@ -70,16 +70,24 @@ export class LogbookDatabaseClient extends DatabaseClient {
       .all();
   }
 
-  history(participantId: string) {
+  private completedFilter(range: LogbookRange) {
+    return and(
+      isNotNull(logbookEntries.completedAt),
+      range.from === undefined ? undefined : gte(logbookEntries.completedAt, range.from),
+      range.to === undefined ? undefined : lt(logbookEntries.completedAt, range.to),
+    );
+  }
+
+  history(participantId: string, range: LogbookRange = {}) {
     return this.db
       .select({ id: logbookEntries.id, total: logbookEntries.total, completedAt: logbookEntries.completedAt })
       .from(logbookEntries)
-      .where(and(eq(logbookEntries.participantId, participantId), isNotNull(logbookEntries.completedAt)))
+      .where(and(eq(logbookEntries.participantId, participantId), this.completedFilter(range)))
       .orderBy(desc(logbookEntries.completedAt), logbookEntries.id)
       .all();
   }
 
-  summary() {
+  summary(range: LogbookRange = {}) {
     const completedEntries = this.db
       .select({
         participantId: logbookEntries.participantId,
@@ -89,7 +97,7 @@ export class LogbookDatabaseClient extends DatabaseClient {
         ),
       })
       .from(logbookEntries)
-      .where(isNotNull(logbookEntries.completedAt))
+      .where(this.completedFilter(range))
       .as('completed_entries');
     return this.db
       .select({

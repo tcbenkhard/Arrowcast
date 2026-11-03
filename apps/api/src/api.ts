@@ -49,7 +49,7 @@ export async function apiRoutes(app: FastifyInstance, config: AuthConfig & { con
           await settings.register(clubSettingsRoutes, { context });
           await settings.register(userRoutes, { context });
           await settings.register(updateRoutes);
-          await settings.register(logRoutes);
+          await settings.register(logRoutes, { context });
           await settings.register(networkRoutes);
           await settings.register(publicAccessRoutes);
           await settings.register(participantRoutes, { context });

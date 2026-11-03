@@ -17,7 +17,7 @@ Authorization: Bearer {{apiToken}}
 
 {
   "verenigingsnummer": 1241,
-  "date": "2026-10-29",
+  "date": "2026-10-18",
   "starttime": "10:00"
 }
 

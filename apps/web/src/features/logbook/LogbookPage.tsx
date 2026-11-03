@@ -5,8 +5,17 @@ import { getLanguage, message, t } from '../../i18n';
 import { managementRequest, requireJson } from '../../lib/http';
 import { getArrowcastHostname } from '../settings/hostnameStorage';
 import { LogbookHistory } from './LogbookHistory';
+import { logbookRange, type Period } from './time-range';
 
 export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauthorized: (message: string) => void }) {
+  const [period, setPeriod] = useState<Period>('all');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [range, setRange] = useState('');
+  const applied = new URLSearchParams(range);
+  const appliedFrom = applied.get('from');
+  const appliedTo = applied.get('to');
+  const validRange = period !== 'absolute' || Boolean(from && to && from <= to);
   const [rows, setRows] = useState<LogbookSummary[]>([]);
   const [selected, setSelected] = useState<LogbookSummary | null>(null);
   const [history, setHistory] = useState<LogbookHistoryEntry[] | null>(null);
@@ -22,7 +31,7 @@ export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauth
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    void managementRequest('/api/v1/admin/logbook', token, {
+    void managementRequest(`/api/v1/admin/logbook?${range}`, token, {
       signal: controller.signal,
       onUnauthorized: () => onUnauthorized(t('AdminPage.je_sessie_is_verlopen_log_opnieuw_in')),
     })
@@ -37,13 +46,13 @@ export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauth
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [token, onUnauthorized]);
+  }, [token, onUnauthorized, range]);
   useEffect(() => {
     if (!selected) return;
     const controller = new AbortController();
     setHistory(null);
     setHistoryError('');
-    void managementRequest(`/api/v1/admin/logbook/${encodeURIComponent(selected.participantId)}`, token, {
+    void managementRequest(`/api/v1/admin/logbook/${encodeURIComponent(selected.participantId)}?${range}`, token, {
       signal: controller.signal,
       onUnauthorized: () => onUnauthorized(t('AdminPage.je_sessie_is_verlopen_log_opnieuw_in')),
     })
@@ -55,7 +64,7 @@ export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauth
         if (!controller.signal.aborted) setHistoryError(t('logbook.loadError'));
       });
     return () => controller.abort();
-  }, [selected, token, onUnauthorized]);
+  }, [selected, token, onUnauthorized, range]);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
@@ -95,7 +104,10 @@ export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauth
     setExporting(true);
     setError('');
     try {
-      const response = await managementRequest(`/api/v1/admin/logbook/export?language=${getLanguage()}`, token);
+      const response = await managementRequest(
+        `/api/v1/admin/logbook/export?${range}&language=${getLanguage()}`,
+        token,
+      );
       if (response.status === 401) {
         onUnauthorized(t('AdminPage.je_sessie_is_verlopen_log_opnieuw_in'));
         return;
@@ -124,12 +136,65 @@ export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauth
           <h2>{t('logbook.title')}</h2>
           <button
             className="secondary"
-            disabled={loading || exporting || rows.length === 0}
+            disabled={loading || exporting || Boolean(error) || rows.length === 0}
             onClick={() => void downloadLogbook()}
           >
             {t('logbook.export')}
           </button>
         </div>
+        <form
+          className="logbook-time-filter"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!validRange) return;
+            setSelected(null);
+            setRange(logbookRange(period, from, to));
+          }}
+        >
+          <label>
+            {t('logbook.period')}
+            <select value={period} onChange={(event) => setPeriod(event.target.value as Period)}>
+              {(['all', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'absolute'] as const).map((value) => (
+                <option key={value} value={value}>
+                  {t(`logbook.${value}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {period === 'absolute' && (
+            <>
+              <label>
+                {t('logbook.from')}
+                <input
+                  type="date"
+                  required
+                  value={from}
+                  max={to || undefined}
+                  onChange={(event) => setFrom(event.target.value)}
+                />
+              </label>
+              <label>
+                {t('logbook.to')}
+                <input
+                  type="date"
+                  required
+                  value={to}
+                  min={from || undefined}
+                  onChange={(event) => setTo(event.target.value)}
+                />
+              </label>
+            </>
+          )}
+          <button type="submit" disabled={!validRange || exporting}>
+            {t('logbook.apply')}
+          </button>
+        </form>
+        <p className="muted">
+          {t('logbook.period')}:{' '}
+          {appliedFrom && appliedTo
+            ? `${new Date(Number(appliedFrom)).toLocaleDateString(getLanguage())} ? ${new Date(Number(appliedTo) - 1).toLocaleDateString(getLanguage())}`
+            : t('logbook.all')}
+        </p>
         <p>{t('logbook.overviewHelp')}</p>
         <p className="muted">{t('logbook.averageHelp')}</p>
         {error && (

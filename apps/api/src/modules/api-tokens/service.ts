@@ -22,6 +22,10 @@ export class ApiTokenService {
     return { ...summary, token };
   }
 
+  identify(token: string) {
+    return this.tokens.find(hashToken(token));
+  }
+
   valid(token: string) {
     return this.tokens.exists(hashToken(token));
   }
