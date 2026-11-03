@@ -1259,6 +1259,16 @@ input.check-in-checkbox {
 .standings-last-arrows > span + span {
   border-inline-start: 2px solid #cbd5e1;
 }
+.logbook-scoresheet.panel {
+  padding: 0;
+  overflow: hidden;
+}
+.logbook-scoresheet > .participant-scorecard {
+  margin-top: 0;
+}
+.logbook-scoresheet .participant-scorecard h3 {
+  padding-inline: 1.5rem;
+}
 .participant-scorecard {
   --table-row-height: 2.75rem;
   margin-top: 1rem;

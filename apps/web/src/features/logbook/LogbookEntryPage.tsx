@@ -398,6 +398,12 @@ export function LogbookEntryPage() {
                 </button>
               </div>
             )}
+          </>
+        )}
+      </section>
+      {context && (
+        <>
+          <section className="panel logbook-scoresheet">
             <ScoreSheet
               rounds={rounds.map((arrows, index) => ({
                 roundNumber: index + 1,
@@ -411,10 +417,14 @@ export function LogbookEntryPage() {
               disabled={busy || context.entry.completedAt !== null}
               onSelectRound={(number) => chooseRound(number - 1)}
             />
-            {context.history.length > 0 && <LogbookHistory entries={context.history} />}
-          </>
-        )}
-      </section>
+          </section>
+          {context.history.length > 0 && (
+            <section className="panel">
+              <LogbookHistory entries={context.history} />
+            </section>
+          )}
+        </>
+      )}
       <footer className="scoring-footer">
         <LanguageSelect flags />
       </footer>

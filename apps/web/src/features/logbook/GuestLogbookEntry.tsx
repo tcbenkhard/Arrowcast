@@ -80,6 +80,8 @@ export function GuestLogbookEntry({ onExit }: { onExit: () => void }) {
             </button>
           </div>
         )}
+      </section>
+      <section className="panel logbook-scoresheet">
         <ScoreSheet
           rounds={rounds.map((arrows, index) => ({
             roundNumber: index + 1,
