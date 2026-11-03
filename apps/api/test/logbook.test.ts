@@ -201,6 +201,10 @@ test('logbook protects personal scores, resumes drafts and aggregates only compl
   ]);
   const history = (await app.inject({ url: '/api/v1/admin/logbook/a', headers: admin })).json();
   assert.equal(history.length, 2);
+  assert.deepEqual(
+    history.find((entry: { total: number }) => entry.total === 300).rounds,
+    Array.from({ length: 10 }, () => ['10', '10', '10']),
+  );
   assert.deepEqual(history.map((entry: { total: number }) => entry.total).sort(), [190, 300]);
   assert.equal(fixture.db.select().from(logbookEntries).all().length, 2);
   for (const table of [competitions, competitionParticipants, scorecards])
@@ -302,7 +306,7 @@ test('logbook protects personal scores, resumes drafts and aggregates only compl
     headers: admin,
   });
   assert.ok(!excluded.json().some((entry: { id: string }) => entry.id === completed.id));
-  // Five newer completions replace both older scores in the averages, but not the personal best.
+  // All seven completed scores contribute to the averages; the unfinished score is excluded.
   for (let index = 1; index <= 6; index++) {
     const id = `recent-${index}`;
     fixture.db
@@ -321,13 +325,13 @@ test('logbook protects personal scores, resumes drafts and aggregates only compl
   }
   const recentSummary = await restarted.inject({ url: '/api/v1/admin/logbook', headers: admin });
   assert.deepEqual(recentSummary.json(), [
-    { participantId: 'a', name: 'Alice', averageScore: 90, averagePerArrow: 3, highestScore: 300 },
+    { participantId: 'a', name: 'Alice', averageScore: 940 / 7, averagePerArrow: 940 / 7 / 30, highestScore: 300 },
   ]);
   const exported = await restarted.inject({ url: '/api/v1/admin/logbook/export', headers: admin });
   const workbook = read(exported.rawPayload, { type: 'buffer' });
   assert.deepEqual(utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]!]!, { header: 1 }), [
     exportHeaders,
-    ['Alice', 90, 3, 300],
+    ['Alice', 940 / 7, 940 / 7 / 30, 300],
   ]);
 });
 

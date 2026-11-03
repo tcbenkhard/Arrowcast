@@ -80,7 +80,12 @@ export class LogbookDatabaseClient extends DatabaseClient {
 
   history(participantId: string, range: LogbookRange = {}) {
     return this.db
-      .select({ id: logbookEntries.id, total: logbookEntries.total, completedAt: logbookEntries.completedAt })
+      .select({
+        id: logbookEntries.id,
+        total: logbookEntries.total,
+        completedAt: logbookEntries.completedAt,
+        rounds: logbookEntries.rounds,
+      })
       .from(logbookEntries)
       .where(and(eq(logbookEntries.participantId, participantId), this.completedFilter(range)))
       .orderBy(desc(logbookEntries.completedAt), logbookEntries.id)
@@ -92,9 +97,6 @@ export class LogbookDatabaseClient extends DatabaseClient {
       .select({
         participantId: logbookEntries.participantId,
         total: logbookEntries.total,
-        rank: sql<number>`row_number() over (partition by ${logbookEntries.participantId} order by ${logbookEntries.completedAt} desc, ${logbookEntries.id} desc)`.as(
-          'rank',
-        ),
       })
       .from(logbookEntries)
       .where(this.completedFilter(range))
@@ -103,8 +105,8 @@ export class LogbookDatabaseClient extends DatabaseClient {
       .select({
         participantId: participants.id,
         name: participants.name,
-        averageScore: sql<number>`avg(case when ${completedEntries.rank} <= 5 then ${completedEntries.total} end)`,
-        averagePerArrow: sql<number>`avg(case when ${completedEntries.rank} <= 5 then ${completedEntries.total} end) / 30.0`,
+        averageScore: sql<number>`avg(${completedEntries.total})`,
+        averagePerArrow: sql<number>`avg(${completedEntries.total}) / 30.0`,
         highestScore: sql<number>`max(${completedEntries.total})`,
       })
       .from(completedEntries)

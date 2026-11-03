@@ -1560,6 +1560,17 @@ input.check-in-checkbox {
   margin-block: 1rem;
 }
 
+.logbook-period-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex-basis: 100%;
+}
+
+.logbook-history-row {
+  cursor: pointer;
+}
+
 .score-correction-modal {
   width: min(95vw, 70rem);
   max-width: 95vw;

@@ -8,10 +8,10 @@ import { LogbookHistory } from './LogbookHistory';
 import { logbookRange, type Period } from './time-range';
 
 export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauthorized: (message: string) => void }) {
-  const [period, setPeriod] = useState<Period>('all');
+  const [period, setPeriod] = useState<Period>('thisMonth');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [range, setRange] = useState('');
+  const [range, setRange] = useState(() => logbookRange('thisMonth', '', ''));
   const applied = new URLSearchParams(range);
   const appliedFrom = applied.get('from');
   const appliedTo = applied.get('to');
@@ -151,16 +151,26 @@ export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauth
             setRange(logbookRange(period, from, to));
           }}
         >
-          <label>
-            {t('logbook.period')}
-            <select value={period} onChange={(event) => setPeriod(event.target.value as Period)}>
-              {(['all', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'absolute'] as const).map((value) => (
-                <option key={value} value={value}>
-                  {t(`logbook.${value}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="logbook-period-buttons" role="group" aria-label={t('logbook.period')}>
+            {(['all', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'absolute'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={period === value ? undefined : 'secondary'}
+                aria-pressed={period === value}
+                disabled={exporting}
+                onClick={() => {
+                  setPeriod(value);
+                  if (value !== 'absolute') {
+                    setSelected(null);
+                    setRange(logbookRange(value, from, to));
+                  }
+                }}
+              >
+                {t(`logbook.${value}`)}
+              </button>
+            ))}
+          </div>
           {period === 'absolute' && (
             <>
               <label>
@@ -185,18 +195,19 @@ export function LogbookPage({ token, onUnauthorized }: { token: string; onUnauth
               </label>
             </>
           )}
-          <button type="submit" disabled={!validRange || exporting}>
-            {t('logbook.apply')}
-          </button>
+          {period === 'absolute' && (
+            <button type="submit" disabled={!validRange || exporting}>
+              {t('logbook.apply')}
+            </button>
+          )}
         </form>
         <p className="muted">
           {t('logbook.period')}:{' '}
           {appliedFrom && appliedTo
-            ? `${new Date(Number(appliedFrom)).toLocaleDateString(getLanguage())} ? ${new Date(Number(appliedTo) - 1).toLocaleDateString(getLanguage())}`
+            ? `${new Date(Number(appliedFrom)).toLocaleDateString(getLanguage())} – ${new Date(Number(appliedTo) - 1).toLocaleDateString(getLanguage())}`
             : t('logbook.all')}
         </p>
         <p>{t('logbook.overviewHelp')}</p>
-        <p className="muted">{t('logbook.averageHelp')}</p>
         {error && (
           <p className="error" role="alert">
             {message(error)}

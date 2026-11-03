@@ -70,6 +70,7 @@ export interface LogbookPerson {
 
 export interface LogbookHistoryEntry {
   id: string;
+  rounds: (string | null)[][];
   total: number;
   completedAt: number;
 }

@@ -651,7 +651,7 @@
   "logbook.title": "Score logbook",
   "logbook.export": "Export as XLS",
   "logbook.exportError": "Export failed. Please try again.",
-  "logbook.averageHelp": "Averages use the last 5 completed scoresheets within the selected period, or all completed scoresheets if there are fewer than 5.",
+  "logbook.averageHelp": "Averages use all completed scoresheets within the selected period.",
   "logbook.guest": "Guest",
   "logbook.guestHelp": "Enter scores without a name or PIN. Scores are not saved and disappear when you leave or reload this page.",
   "logbook.guestNextRound": "Next round",

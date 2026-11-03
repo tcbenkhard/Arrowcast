@@ -651,7 +651,7 @@
   "logbook.title": "Scorelogboek",
   "logbook.export": "Exporteren als XLS",
   "logbook.exportError": "Exporteren is niet gelukt. Probeer het opnieuw.",
-  "logbook.averageHelp": "Gemiddelden zijn berekend over de laatste 5 afgeronde scorelijsten binnen de geselecteerde periode, of alle afgeronde scorelijsten als er minder dan 5 zijn.",
+  "logbook.averageHelp": "Gemiddelden zijn berekend over alle afgeronde scorelijsten binnen de geselecteerde periode.",
   "logbook.guest": "Gast",
   "logbook.guestHelp": "Voer scores in zonder naam of pincode. Scores worden niet opgeslagen en verdwijnen zodra je deze pagina verlaat of vernieuwt.",
   "logbook.guestNextRound": "Volgende ronde",
