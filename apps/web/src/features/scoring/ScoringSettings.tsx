@@ -13,10 +13,12 @@ export function ScoringSettings({
   token,
   onUnauthorized,
   onChange,
+  onScoresCorrected,
 }: {
   competition: Settings & { id: string; status: string };
   token: string;
   onUnauthorized: (message: string) => void;
+  onScoresCorrected: () => void;
   onChange: (settings: Partial<Settings>) => void;
 }) {
   const [pending, setPending] = useState(false);
@@ -148,6 +150,8 @@ export function ScoringSettings({
         token={token}
         onUnauthorized={onUnauthorized}
         showAssignment={competition.status === 'Active'}
+        canCorrect={competition.status === 'Closed'}
+        onScoresCorrected={onScoresCorrected}
       />
       {fullscreenError && (
         <p className="error" role="alert">

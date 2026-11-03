@@ -435,6 +435,10 @@ export function CompetitionDetailPage({ token, onUnauthorized }: AuthProps) {
             competition={competition}
             token={token}
             onUnauthorized={onUnauthorized}
+            onScoresCorrected={() => {
+              mutationRevision.current++;
+              setCompetition((current) => (current ? { ...current, scoresSyncedAt: null } : current));
+            }}
             onChange={(settings) => setCompetition((current) => (current ? { ...current, ...settings } : current))}
           />
           {(competition.status === 'Check-in' || competition.status === 'Active') && (

@@ -752,5 +752,12 @@
   "Logs.unknownApiKey": "Missing or unknown key",
   "Logs.unknownOutcome": "Unknown",
   "Logs.succeeded": "Succeeded",
-  "Logs.failed": "Failed"
+  "Logs.failed": "Failed",
+  "ScoreCorrection.title": "Correct scores",
+  "ScoreCorrection.choose": "Choose a participant",
+  "ScoreCorrection.closed_only": "Score corrections require a closed competition.",
+  "ScoreCorrection.participant_not_found": "Participant not found.",
+  "ScoreCorrection.conflict": "Scores have changed. Reopen the scoresheet.",
+  "ScoreCorrection.invalid": "Enter every arrow in a round (M or 1?10), or leave the whole round empty.",
+  "ScoreCorrection.saved": "Scores saved."
 }

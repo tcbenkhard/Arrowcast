@@ -87,3 +87,8 @@ export interface LogbookSummary {
   averagePerArrow: number;
   highestScore: number;
 }
+
+export interface ScoreCorrectionSheet {
+  version: number;
+  rounds: (string | null)[][];
+}

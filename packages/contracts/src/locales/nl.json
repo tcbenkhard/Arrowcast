@@ -752,5 +752,12 @@
   "Logs.unknownApiKey": "Ontbrekende of onbekende key",
   "Logs.unknownOutcome": "Onbekend",
   "Logs.succeeded": "Geslaagd",
-  "Logs.failed": "Mislukt"
+  "Logs.failed": "Mislukt",
+  "ScoreCorrection.title": "Scores corrigeren",
+  "ScoreCorrection.choose": "Kies een deelnemer",
+  "ScoreCorrection.closed_only": "Scorecorrectie is alleen mogelijk bij afgesloten wedstrijden.",
+  "ScoreCorrection.participant_not_found": "Deelnemer niet gevonden.",
+  "ScoreCorrection.conflict": "De scores zijn intussen gewijzigd. Open de scoresheet opnieuw.",
+  "ScoreCorrection.invalid": "Vul per ronde alle pijlen in (M of 1 t/m 10), of laat de hele ronde leeg.",
+  "ScoreCorrection.saved": "Scores opgeslagen."
 }

@@ -1,3 +1,4 @@
+import { CorrectionModal } from './ScoreCorrection';
 import { t, message } from '../../i18n';
 import { managementRequest } from '../../lib/http';
 import { useEffect, useState } from 'react';
@@ -9,13 +10,19 @@ export function ScoringStandings({
   token,
   onUnauthorized,
   showAssignment = false,
+  canCorrect = false,
+  onScoresCorrected,
 }: {
   competitionId: string;
   token: string;
   onUnauthorized: (message: string) => void;
   showAssignment?: boolean;
+  canCorrect?: boolean;
+  onScoresCorrected?: () => void;
 }) {
   const [standings, setStandings] = useState<ScoringStanding[] | null>(null);
+  const [selected, setSelected] = useState<ScoringStanding | null>(null);
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -65,6 +72,27 @@ export function ScoringStandings({
   }, [competitionId, token, onUnauthorized, retry]);
   return (
     <>
+      {canCorrect && selected && (
+        <CorrectionModal
+          competitionId={competitionId}
+          token={token}
+          onUnauthorized={onUnauthorized}
+          participantId={selected.participantId}
+          name={selected.name}
+          onClose={() => setSelected(null)}
+          onSaved={() => {
+            setSelected(null);
+            setNotice(t('ScoreCorrection.saved'));
+            setRetry((value) => value + 1);
+            onScoresCorrected?.();
+          }}
+        />
+      )}
+      {notice && (
+        <p className="success" role="status">
+          {notice}
+        </p>
+      )}
       {error && (
         <div>
           <p className="error" role="alert">
@@ -98,7 +126,23 @@ export function ScoringStandings({
               <tbody>
                 {standings.map((person) => (
                   <tr key={person.participantId}>
-                    <th scope="row">{person.name}</th>
+                    <th scope="row">
+                      {canCorrect ? (
+                        <button
+                          type="button"
+                          className="score-correction-participant"
+                          onClick={() => {
+                            setNotice('');
+                            setSelected(person);
+                          }}
+                          title={t('ScoreCorrection.title')}
+                        >
+                          {person.name}
+                        </button>
+                      ) : (
+                        person.name
+                      )}
+                    </th>
                     {showAssignment && (
                       <td>
                         {person.laneNumber != null && person.targetLetter

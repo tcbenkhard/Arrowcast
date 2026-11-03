@@ -1,9 +1,12 @@
+import type { ScoreCorrectionSheet } from '@arrowcast/contracts';
 import { t } from '@arrowcast/contracts/i18n';
+import { isValidRound } from '@arrowcast/scoring';
 import type { DatabaseContext } from '../../db/context.js';
 import { ApplicationError } from '../../shared/errors.js';
 import { ScoringLifecycleService } from './competition-scoring.js';
 import { ScoringGrantService } from './grants.js';
 import { exportResults, resultsFilename } from './results-export.js';
+import { roundArrows } from './scorecards.js';
 import { ScoringDatabaseClient } from './scoring-database-client.js';
 import { scoringStandings } from './standings.js';
 import type { ScoringCompetition } from './types.js';
@@ -31,6 +34,54 @@ export class ScoringAdminService {
       this.client.listStandingParticipants(competition.id),
       this.client.listStandingScores(competition.id),
     );
+  }
+
+  getCorrectionSheet(competitionId: string, participantId: string): ScoreCorrectionSheet {
+    const competition = this.requireCompetition(competitionId);
+    if (competition.status !== 'Closed') throw new ApplicationError(t('ScoreCorrection.closed_only'), 409);
+    if (!this.client.listStandingParticipants(competitionId).some((person) => person.participantId === participantId))
+      throw new ApplicationError(t('ScoreCorrection.participant_not_found'), 404);
+    const card = this.client.findScorecard(competitionId, participantId);
+    const rounds = card ? this.client.listRounds(card.id) : [];
+    return {
+      version: card?.version ?? 0,
+      rounds: Array.from({ length: competition.numberOfRounds }, (_, index) => {
+        const round = rounds.find((round) => round.roundNumber === index + 1);
+        return roundArrows(round ? this.client.listArrows(round.id) : [], competition.arrowsPerRound);
+      }),
+    };
+  }
+
+  correctScores(competitionId: string, participantId: string, sheet: ScoreCorrectionSheet) {
+    return this.context.transaction((context) => {
+      const service = new ScoringAdminService(context);
+      const current = service.getCorrectionSheet(competitionId, participantId);
+      const competition = service.requireCompetition(competitionId);
+      if (current.version !== sheet.version) throw new ApplicationError(t('ScoreCorrection.conflict'), 409);
+      if (
+        sheet.rounds.length !== competition.numberOfRounds ||
+        sheet.rounds.some(
+          (arrows) =>
+            !isValidRound(arrows, competition.arrowsPerRound, false) ||
+            (arrows.some((arrow) => arrow !== null) && arrows.some((arrow) => arrow === null)),
+        )
+      )
+        throw new ApplicationError(t('ScoreCorrection.invalid'), 400);
+      const now = Date.now();
+      const card = service.client.ensureScorecard(competitionId, participantId, now);
+      sheet.rounds.forEach((arrows, index) => {
+        if (JSON.stringify(arrows) === JSON.stringify(current.rounds[index])) return;
+        const round = service.client.ensureRound(card.id, index + 1);
+        service.client.deleteRoundArrows(round.id);
+        arrows.forEach((symbol, arrowIndex) => {
+          if (symbol !== null) service.client.insertArrow(round.id, arrowIndex + 1, symbol);
+        });
+        service.client.setRoundSubmission(round.id, arrows.every((arrow) => arrow !== null) ? now : null);
+      });
+      service.client.updateScorecardVersion(card.id, card.version + 1, now);
+      service.client.clearScoresSynchronized(competitionId);
+      return service.getCorrectionSheet(competitionId, participantId);
+    });
   }
 
   listScoringCodes(competitionId: string) {

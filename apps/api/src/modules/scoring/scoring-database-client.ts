@@ -31,6 +31,14 @@ export class ScoringDatabaseClient extends DatabaseClient {
       .get();
   }
 
+  clearScoresSynchronized(competitionId: string) {
+    this.db.update(competitions).set({ scoresSyncedAt: null }).where(eq(competitions.id, competitionId)).run();
+  }
+
+  setRoundSubmission(roundId: string, submittedAt: number | null) {
+    this.db.update(roundScores).set({ submittedAt }).where(eq(roundScores.id, roundId)).run();
+  }
+
   markScoresSynchronized(competitionId: string, scoresSyncedAt: number) {
     this.db.update(competitions).set({ scoresSyncedAt }).where(eq(competitions.id, competitionId)).run();
   }

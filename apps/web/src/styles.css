@@ -1559,3 +1559,24 @@ input.check-in-checkbox {
   gap: 1rem;
   margin-block: 1rem;
 }
+
+.score-correction-modal {
+  width: min(95vw, 70rem);
+  max-width: 95vw;
+}
+.score-correction-modal input {
+  width: 3.5rem;
+  text-align: center;
+}
+
+.score-correction-participant {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}

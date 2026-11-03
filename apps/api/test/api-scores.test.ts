@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -482,4 +482,50 @@ test('synchronization history records failed and successful requests and survive
     assert.equal(entry.competitionName, 'Requested competition');
     assert.ok(entry.requestedAt >= before);
   }
+});
+
+test('admin corrects closed scores atomically and rejects stale or invalid corrections', async (t) => {
+  const f = await setup(t);
+  f.competition({ numberOfRounds: 2, scoresSyncedAt: 123 });
+  f.person('archer', 'Recurve');
+  f.scores('archer', [{ arrows: ['1', '2', '3'] }]);
+  const login = await loginAdmin(f.app);
+  const headers = { authorization: `Bearer ${login.json().token}` };
+  const url = '/api/v1/admin/competitions/competition/participants/archer/score-correction';
+  assert.equal((await f.app.inject({ url })).statusCode, 401);
+  const sheet = (await f.app.inject({ url, headers })).json();
+  assert.deepEqual(sheet.rounds, [
+    ['1', '2', '3'],
+    [null, null, null],
+  ]);
+  const invalid = await f.app.inject({
+    method: 'PUT',
+    url,
+    headers,
+    payload: {
+      ...sheet,
+      rounds: [
+        ['10', null, '3'],
+        ['M', 'M', 'M'],
+      ],
+    },
+  });
+  assert.equal(invalid.statusCode, 400);
+  assert.deepEqual((await f.app.inject({ url, headers })).json(), sheet);
+  const payload = {
+    ...sheet,
+    rounds: [
+      ['10', '9', '8'],
+      ['M', '1', '2'],
+    ],
+  };
+  assert.equal((await f.app.inject({ method: 'PUT', url, headers, payload })).statusCode, 200);
+  assert.equal((await f.app.inject({ method: 'PUT', url, headers, payload })).statusCode, 409);
+  assert.equal(f.db.select().from(competitions).get()?.scoresSyncedAt, null);
+  const result = await f.fetch();
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.json().results[0].score, 30);
+  f.db.update(competitions).set({ status: 'Active' }).run();
+  assert.equal((await f.app.inject({ url, headers })).statusCode, 409);
+  assert.equal((await f.app.inject({ method: 'PUT', url, headers, payload })).statusCode, 409);
 });

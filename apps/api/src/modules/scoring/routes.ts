@@ -1,11 +1,11 @@
+import type { ScoreCorrectionSheet, ScoringMutation } from '@arrowcast/contracts';
 import cookie from '@fastify/cookie';
 import type { FastifyInstance } from 'fastify';
-import type { ScoringMutation } from '@arrowcast/contracts';
 import type { DatabaseContext } from '../../db/context.js';
 import { protectScoringRequests, secureScoringCookie } from '../../shared/scoring-http.js';
+import { ScoringAdminService } from './admin-service.js';
 import { ScoringError } from './errors.js';
 import { ScoringSessionService } from './sessions.js';
-import { ScoringAdminService } from './admin-service.js';
 
 const grantParams = {
   type: 'object',
@@ -98,6 +98,52 @@ export async function scoringRoutes(app: FastifyInstance, { context }: { context
 
 export async function adminScoringRoutes(app: FastifyInstance, { context }: { context: DatabaseContext }) {
   const service = new ScoringAdminService(context);
+  const correctionPath = '/competitions/:competitionId/participants/:participantId/score-correction';
+  const correctionParams = {
+    type: 'object',
+    required: ['competitionId', 'participantId'],
+    properties: { competitionId: { type: 'string', minLength: 1 }, participantId: { type: 'string', minLength: 1 } },
+  };
+  app.get<{ Params: { competitionId: string; participantId: string } }>(
+    correctionPath,
+    { schema: { params: correctionParams } },
+    async (request) => service.getCorrectionSheet(request.params.competitionId, request.params.participantId),
+  );
+  app.put<{ Params: { competitionId: string; participantId: string }; Body: ScoreCorrectionSheet }>(
+    correctionPath,
+    {
+      bodyLimit: 262144,
+      schema: {
+        params: correctionParams,
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['version', 'rounds'],
+          properties: {
+            version: { type: 'integer', minimum: 0 },
+            rounds: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 1000,
+              items: {
+                type: 'array',
+                minItems: 1,
+                maxItems: 36,
+                items: {
+                  anyOf: [
+                    { type: 'null' },
+                    { type: 'string', enum: ['M', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request) => service.correctScores(request.params.competitionId, request.params.participantId, request.body),
+  );
+
   app.get<{ Params: { competitionId: string } }>(
     '/competitions/:competitionId/scoring-codes',
     { schema: { params: competitionParams } },

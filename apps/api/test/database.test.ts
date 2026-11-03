@@ -16,6 +16,11 @@ import { hashPassword, verifyPassword } from '../src/modules/auth/password.js';
 const jwtSecret = 'database-test-secret-with-at-least-32-bytes';
 
 test('migrations run once and the admin seed never resets an existing account', async (t) => {
+  const journal = JSON.parse(
+    readFileSync(new URL('../../../migrations/meta/_journal.json', import.meta.url), 'utf8'),
+  ) as {
+    entries: unknown[];
+  };
   const directory = mkdtempSync(join(tmpdir(), 'arrowcast-db-'));
   const path = join(directory, 'nested', 'test.sqlite');
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -62,7 +67,7 @@ test('migrations run once and the admin seed never resets an existing account', 
     try {
       assert.equal(
         (client.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get() as { count: number }).count,
-        27,
+        journal.entries.length,
       );
       assert.equal((client.prepare('SELECT count(*) AS count FROM users').get() as { count: number }).count, 2);
       client.prepare('DELETE FROM users WHERE username = ?').run('another-admin');
